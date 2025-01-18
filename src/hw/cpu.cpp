@@ -22,8 +22,12 @@ bool CPU::RunInstruction() {
 			return false;
 		}
 		break;
+	case 0x04: BEQ(opcode); break;
 	case 0x09: ADDIU(opcode); break;
+	case 0x0C: ANDI(opcode); break;
+	case 0x0F: LUI(opcode); break;
 	case 0x23: LW(opcode); break;
+	case 0x25: LHU(opcode); break;
 	case 0x2B: SW(opcode); break;
 	default:
 		spdlog::error("CPU: Unknown instruction opcode {:x} at {:x}", opcode, pc - 4);
@@ -33,7 +37,8 @@ bool CPU::RunInstruction() {
 }
 
 void CPU::SetPC(uint32_t addr) {
-	next_pc = addr;
+	pc = addr;
+	next_pc = addr + 4;
 }
 
 void CPU::UpdateRegs(std::array<uint32_t, 31> new_regs) {
@@ -56,8 +61,37 @@ void CPU::ADDIU(uint32_t opcode) {
 	SetRegister(RT(opcode), value);
 }
 
+void CPU::ANDI(uint32_t opcode) {
+	uint32_t value = GetRegister(RS(opcode)) & IMM16(opcode);
+	SetRegister(RT(opcode), value);
+}
+
+void CPU::BEQ(uint32_t opcode) {
+	if (GetRegister(RS(opcode)) == GetRegister(RT(opcode)))
+	{
+		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
+		next_pc = pc + offset;
+	}
+}
+
 void CPU::JR(uint32_t opcode) {
 	next_pc = GetRegister(RS(opcode));
+}
+
+void CPU::LHU(uint32_t opcode) {
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+	if (addr % 2 != 0) {
+		spdlog::error("CPU: Exception or smth, LHU");
+		return;
+	}
+
+	uint32_t value = PSP::GetInstance()->ReadMemory16(addr);
+	SetRegister(RT(opcode), value);
+}
+
+void CPU::LUI(uint32_t opcode) {
+	uint32_t value = IMM16(opcode) << 16;
+	SetRegister(RT(opcode), value);
 }
 
 void CPU::LW(uint32_t opcode) {

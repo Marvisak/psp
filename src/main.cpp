@@ -27,7 +27,8 @@ int main(int argc, char* argv[]) {
     spdlog::set_level(level);
     
     PSP psp;
-    psp.LoadExec(elf_path);
+    if (!psp.LoadExec(elf_path))
+        return 1;
     psp.Run();
 
     return 0;

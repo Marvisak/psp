@@ -6,7 +6,7 @@
 Module::Module(std::ifstream& file) : file(file) {}
 
 bool Module::Load() {
-	if (!elfio.load(file)) {
+	if (!elfio.load(file, true)) {
 		spdlog::error("ELFModule: cannot parse ELF file");
 		return false;
 	}

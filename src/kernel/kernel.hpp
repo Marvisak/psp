@@ -6,6 +6,7 @@
 #include "module.hpp"
 #include "thread.hpp"
 
+constexpr auto KERNEL_MEMORY_START = 0x08000000;
 constexpr auto USER_MEMORY_START = 0x08800000;
 constexpr auto USER_MEMORY_END = 0x09FFFFFF;
 

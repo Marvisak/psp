@@ -15,6 +15,7 @@ public:
 	bool LoadExec(std::string path);
 	void* VirtualToPhysical(uint32_t addr);
 	
+	uint16_t ReadMemory16(uint32_t addr);
 	uint32_t ReadMemory32(uint32_t addr);
 	void WriteMemory32(uint32_t addr, uint32_t value);
 

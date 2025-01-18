@@ -25,6 +25,8 @@ bool PSP::LoadExec(std::string path) {
 	}
 	auto elf_mod =  std::make_unique<Module>(file);
 	int module_index = kernel.LoadModule(elf_mod.get());
+	if (module_index == -1)
+		return false;
 	kernel.ExecModule(module_index);
 
 	return true;
@@ -37,6 +39,14 @@ void* PSP::VirtualToPhysical(uint32_t addr) {
 	spdlog::error("PSP: cannot convert {:x} to physical addr", addr);
 	return nullptr;
 }
+
+uint16_t PSP::ReadMemory16(uint32_t addr) {
+	uint16_t* ram_addr = reinterpret_cast<uint16_t*>(VirtualToPhysical(addr));
+	if (!ram_addr)
+		return 0;
+	return *ram_addr;
+}
+
 
 uint32_t PSP::ReadMemory32(uint32_t addr) {
 	uint32_t* ram_addr = reinterpret_cast<uint32_t*>(VirtualToPhysical(addr));

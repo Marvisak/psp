@@ -18,7 +18,11 @@ public:
 private:
 
 	void ADDIU(uint32_t opcode);
+	void ANDI(uint32_t opcode);
+	void BEQ(uint32_t opcode);
 	void JR(uint32_t opcode);
+	void LHU(uint32_t opcode);
+	void LUI(uint32_t opcode);
 	void LW(uint32_t opcode);
 	void OR(uint32_t opcode);
 	void SLL(uint32_t opcode);
