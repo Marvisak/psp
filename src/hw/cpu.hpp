@@ -16,16 +16,23 @@ public:
 	void SetPC(uint32_t addr);
 	void UpdateRegs(std::array<uint32_t, 31> regs);
 private:
-
 	void ADDIU(uint32_t opcode);
+	void ADDU(uint32_t opcode);
 	void ANDI(uint32_t opcode);
 	void BEQ(uint32_t opcode);
+	void BNE(uint32_t opcode);
+	void BNEL(uint32_t opcode);
+	void JAL(uint32_t opcode);
+	void JALR(uint32_t opcode);
 	void JR(uint32_t opcode);
+	void LBU(uint32_t opcode);
 	void LHU(uint32_t opcode);
 	void LUI(uint32_t opcode);
 	void LW(uint32_t opcode);
 	void OR(uint32_t opcode);
 	void SLL(uint32_t opcode);
+	void SLTU(uint32_t opcode);
+	void SUBU(uint32_t opcode);
 	void SW(uint32_t opcode);
 
 	void SetRegister(int index, uint32_t value);

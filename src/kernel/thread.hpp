@@ -10,7 +10,7 @@ constexpr auto STACK_SIZE = 0x40000; // Change this probably;
 
 class Thread {
 public:
-	Thread(uint32_t entrypoint);
+	Thread(uint32_t entrypoint, uint32_t stack_addr);
 	
 	void SetSavedRegister(int index, uint32_t value);
 	void SwitchTo();

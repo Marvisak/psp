@@ -40,6 +40,13 @@ void* PSP::VirtualToPhysical(uint32_t addr) {
 	return nullptr;
 }
 
+uint8_t PSP::ReadMemory8(uint32_t addr) {
+	uint8_t* ram_addr = reinterpret_cast<uint8_t*>(VirtualToPhysical(addr));
+	if (!ram_addr)
+		return 0;
+	return *ram_addr;
+}
+
 uint16_t PSP::ReadMemory16(uint32_t addr) {
 	uint16_t* ram_addr = reinterpret_cast<uint16_t*>(VirtualToPhysical(addr));
 	if (!ram_addr)

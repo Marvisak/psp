@@ -4,12 +4,7 @@
 
 #include "../psp.hpp"
 
-Thread::Thread(uint32_t entrypoint) : pc(entrypoint) {
-	auto& user_mem = PSP::GetInstance()->GetInstance()->GetKernel().GetUserMemory();
-	stack_addr = user_mem.AllocTop(STACK_SIZE);
-
-	saved_regs[28] = stack_addr;
-}
+Thread::Thread(uint32_t entrypoint, uint32_t stack_addr) : pc(entrypoint), stack_addr(stack_addr) {}
 
 void Thread::SetSavedRegister(int index, uint32_t value) {
 	if (index == 0) return;

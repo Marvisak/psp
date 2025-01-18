@@ -22,9 +22,16 @@ int Kernel::LoadModule(Module* module) {
 bool Kernel::ExecModule(int module_index) {
 	auto module = modules[module_index];
 	
-	// TODO: Change this bs
-	auto thread = Thread(module->GetEntrypoint());
+	auto name = module->GetName();
+	auto stack_addr = user_memory.AllocTop(STACK_SIZE);
+
+	auto thread = Thread(module->GetEntrypoint(), stack_addr);
+
+	uint32_t new_stack = stack_addr - (name.size() + 0xF) & ~0xF;
+	thread.SetSavedRegister(4, name.size());
+	thread.SetSavedRegister(5, new_stack);
 	thread.SetSavedRegister(28, module->GetGP());
+	thread.SetSavedRegister(29, new_stack - 64);
 	threads.push_back(thread);
 	thread.SwitchTo();
 
