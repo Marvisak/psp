@@ -1,0 +1,12 @@
+[submodule "vendors/ELFIO"]
+	path = vendors/ELFIO
+	url = https://github.com/serge1/ELFIO
+[submodule "vendors/CLI11"]
+	path = vendors/CLI11
+	url = https://github.com/CLIUtils/CLI11.git
+[submodule "vendors/spdlog"]
+	path = vendors/spdlog
+	url = https://github.com/gabime/spdlog.git
+[submodule "vendors/SDL"]
+	path = vendors/SDL
+	url = https://github.com/libsdl-org/SDL.git
