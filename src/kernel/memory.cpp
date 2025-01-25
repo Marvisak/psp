@@ -22,7 +22,7 @@ MemoryAllocator::~MemoryAllocator() {
 	}
 }
 
-uint32_t MemoryAllocator::Alloc(uint32_t size, uint32_t alignment) {
+uint32_t MemoryAllocator::Alloc(uint32_t size, std::string name, uint32_t alignment) {
 	if (alignment == -1)
 		alignment = default_alignment;
 	size = (size + alignment - 1) & ~(alignment - 1);
@@ -32,10 +32,10 @@ uint32_t MemoryAllocator::Alloc(uint32_t size, uint32_t alignment) {
 		return 0;
 	}
 
-	auto curr = first;
-	while (curr) {
+	for (auto curr = first; curr; curr = curr->next) {
 		if (curr->free) {
 			if (curr->size == size) {
+				curr->name = name;
 				curr->free = false;
 				return curr->start;
 			}
@@ -47,6 +47,7 @@ uint32_t MemoryAllocator::Alloc(uint32_t size, uint32_t alignment) {
 
 				curr->size = size;
 				curr->free = false;
+				curr->name = name;
 
 				block->next = curr->next;
 				curr->next = block;
@@ -55,7 +56,6 @@ uint32_t MemoryAllocator::Alloc(uint32_t size, uint32_t alignment) {
 				return curr->start;
 			}
 		}
-		curr = curr->next;
 	}
 
 	spdlog::error("MemoryAllocator: unable to allocate {} bytes", size);
@@ -63,7 +63,7 @@ uint32_t MemoryAllocator::Alloc(uint32_t size, uint32_t alignment) {
 	return 0;
 }
 
-uint32_t MemoryAllocator::AllocTop(uint32_t size, uint32_t alignment) {
+uint32_t MemoryAllocator::AllocTop(uint32_t size, std::string name, uint32_t alignment) {
 	if (alignment == -1)
 		alignment = default_alignment;
 
@@ -75,11 +75,12 @@ uint32_t MemoryAllocator::AllocTop(uint32_t size, uint32_t alignment) {
 	auto curr = first;
 	while (curr->next) curr = curr->next;
 
-	while (curr) {
+	for (; curr; curr = curr->prev) {
 		if (curr->free) {
 			uint32_t offset = (curr->start + curr->size - size) % alignment;
 			uint32_t needed = offset + size;
 			if (curr->size == needed) {
+				curr->name = name;
 				curr->free = false;
 				return curr->start;
 			}
@@ -88,6 +89,7 @@ uint32_t MemoryAllocator::AllocTop(uint32_t size, uint32_t alignment) {
 				block->size = needed;
 				block->start = curr->start + curr->size - needed;
 				block->free = false;
+				block->name = name;
 				curr->size -= needed;
 
 				block->next = curr->next;
@@ -97,7 +99,6 @@ uint32_t MemoryAllocator::AllocTop(uint32_t size, uint32_t alignment) {
 				return block->start;
 			}
 		}
-		curr = curr->prev;
 	}
 
 	spdlog::error("MemoryAllocator: unable to allocate {} bytes", size);
@@ -105,7 +106,7 @@ uint32_t MemoryAllocator::AllocTop(uint32_t size, uint32_t alignment) {
 	return 0;
 }
 
-uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, uint32_t alignment) {
+uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, std::string name, uint32_t alignment) {
 	if (alignment == -1)
 		alignment = default_alignment;
 	size = (size + alignment - 1) & ~(alignment - 1);
@@ -115,8 +116,7 @@ uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, uint32_t alignme
 		return 0;
 	}
 
-	auto curr = first;
-	while (curr) {
+	for (auto curr = first; curr; curr = curr->next) {
 		uint32_t end = curr->start + curr->size - 1;
 		if (curr->start <= addr && end >= addr) {
 			if (!curr->free) {
@@ -143,6 +143,7 @@ uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, uint32_t alignme
 				curr->size = size;
 				curr->next = block;
 				curr->free = false;
+				curr->name = name;
 			}
 			else {
 				auto block = new Block;
@@ -150,6 +151,7 @@ uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, uint32_t alignme
 				block->start = addr;
 				block->free = false;
 				block->prev = curr;
+				block->name = name;
 
 				if (remaining_size == size) {
 					block->next = curr->next;
@@ -170,8 +172,6 @@ uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, uint32_t alignme
 
 			return addr;
 		}
-
-		curr = curr->next;
 	}
 
 	spdlog::error("MemoryAllocator: unable to allocate {} bytes", size);
@@ -180,8 +180,7 @@ uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, uint32_t alignme
 }
 
 bool MemoryAllocator::Free(uint32_t addr) {
-	auto curr = first;
-	while (curr) {
+	for (auto curr = first; curr; curr = curr->next) {
 		if (curr->start == addr) {
 			if (curr->free) {
 				spdlog::error("MemoryAllocator: {:x} already freed", addr);
@@ -201,10 +200,18 @@ bool MemoryAllocator::Free(uint32_t addr) {
 				return true;
 			}
 		}
-		curr = curr->next;
 	}
 
 	spdlog::error("MemoryAllocator: invalid free address", addr);
 
 	return false;
+}
+
+uint32_t MemoryAllocator::GetLargestFreeBlock() {
+	int largest = 0;
+	for (auto curr = first; curr; curr = curr->next) {
+		if (curr->free && curr->size > largest)
+			largest = curr->size;
+	}
+	return largest;
 }

@@ -1,8 +1,13 @@
 #pragma once
 
 #include <unordered_map>
+#include <vector>
 
 #include <elfio/elfio.hpp>
+
+#include "kernel.hpp"
+#include "../hw/cpu.hpp"
+#include "../hle/hle.hpp"
 
 struct PSPModuleInfo {
 	uint16_t mod_attributes;
@@ -28,19 +33,23 @@ struct PSPLibStubEntry {
 	uint32_t extra;
 };
 
-class Module {
+class Module : public KernelObject {
 public:
-	Module(std::ifstream& file);
+	Module(std::string file_name);
 	bool Load();
 
-	uint32_t GetEntrypoint() { return entrypoint; }
-	uint32_t GetGP() { return gp; }
-	std::string GetName() { return name; }
+	uint32_t GetEntrypoint() const { return entrypoint; }
+	uint32_t GetGP() const { return gp; }
+	std::string GetFileName() const { return file_name; }
+
+	std::string GetName() const { return name; }
+	KernelObjectType GetType() override { return KernelObjectType::MODULE; }
+	static KernelObjectType GetStaticType() { return KernelObjectType::MODULE; }
 private:
-	std::ifstream& file;
+	std::string file_name;
+	std::string name;
 	ELFIO::elfio elfio;
 
-	std::string name;
 	uint32_t gp = 0;
 	uint32_t entrypoint = 0;
 	std::unordered_map<int, uint32_t> segments;

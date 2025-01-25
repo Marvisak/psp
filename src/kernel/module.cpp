@@ -2,11 +2,12 @@
 
 #include "../psp.hpp"
 #include "module.hpp"
+#include "../hle/hle.hpp"
 
-Module::Module(std::ifstream& file) : file(file) {}
+Module::Module(std::string file_name) : file_name(file_name) {}
 
 bool Module::Load() {
-	if (!elfio.load(file, true)) {
+	if (!elfio.load(file_name, true)) {
 		spdlog::error("ELFModule: cannot parse ELF file");
 		return false;
 	}
@@ -33,15 +34,18 @@ bool Module::Load() {
 	// TODO: Change this when module is relocatable
 	uint32_t base_addr = 0;
 	
-	entrypoint = elfio.get_entry();
 	gp = module_info->gp;
-
 	name = module_info->name;
+	entrypoint = elfio.get_entry();
+
+	std::string mod_name = "ELF/";
+	mod_name += module_info->name;
+
 	for (int i = 0; i < elfio.segments.size(); i++) {
 		auto segment = elfio.segments[i];
 		if (segment->get_type() == ELFIO::PT_LOAD) {
 			if (!relocatable) {
-				uint32_t addr = memory.AllocAt(segment->get_virtual_address(), segment->get_file_size());
+				uint32_t addr = memory.AllocAt(segment->get_virtual_address(), segment->get_file_size(), mod_name);
 				uint8_t* ram_addr = (uint8_t*)psp->VirtualToPhysical(addr);
 				
 				memcpy(ram_addr, segment->get_data(), segment->get_file_size());
@@ -57,6 +61,26 @@ bool Module::Load() {
 	while (current_pos < stub_end) {
 		auto entry = reinterpret_cast<PSPLibStubEntry*>(current_pos);
 		const char* module_name = reinterpret_cast<const char*>(psp->VirtualToPhysical(entry->name));
+		if (!hle_modules.contains(module_name)) {
+			spdlog::error("Missing {} HLE module", module_name);
+			return false;
+		}
+
+		uint32_t* nids = static_cast<uint32_t*>(psp->VirtualToPhysical(entry->nid_data));
+		auto& hle_module = hle_modules[module_name];
+		for (int i = 0; i < entry->num_funcs; i++) {
+			uint32_t nid = nids[i];
+			if (!hle_module.contains(nid)) {
+				spdlog::error("HLE module {} is missing {:x} NID function", module_name, nid);
+				return false;
+			}
+
+			int index = GetHLEIndex(module_name, nid);
+			uint32_t instr = index << 6 | 0xC;
+
+			uint32_t sym_addr = entry->first_sym_addr + i * 8;
+			psp->WriteMemory32(sym_addr + 4, instr);
+		}
 
 		current_pos += entry->size;
 	}

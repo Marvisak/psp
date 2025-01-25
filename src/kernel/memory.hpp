@@ -6,10 +6,12 @@ class MemoryAllocator {
 public:
 	MemoryAllocator(uint32_t start, uint32_t size, uint32_t default_alignment);
 	~MemoryAllocator();
-	uint32_t Alloc(uint32_t size, uint32_t alignment = -1);
-	uint32_t AllocTop(uint32_t size, uint32_t alignment = -1);
-	uint32_t AllocAt(uint32_t addr, uint32_t size, uint32_t alignment = -1);
+	uint32_t Alloc(uint32_t size, std::string name, uint32_t alignment = -1);
+	uint32_t AllocTop(uint32_t size, std::string name, uint32_t alignment = -1);
+	uint32_t AllocAt(uint32_t addr, uint32_t size, std::string name, uint32_t alignment = -1);
 	bool Free(uint32_t addr);
+
+	uint32_t GetLargestFreeBlock();
 private:
 	uint32_t default_alignment;
 	uint32_t start;
@@ -21,6 +23,7 @@ private:
 		Block* prev;
 		Block* next;
 		bool free;
+		std::string name;
 	};
 	Block* first;
 	

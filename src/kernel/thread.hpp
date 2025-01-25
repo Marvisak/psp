@@ -3,20 +3,36 @@
 #include <cstdint>
 #include <array>
 
-// At this point this is incredibly simple, will be expanded (with actual context switching)
-// once there are actually some user created threads
+#include "kernel.hpp"
+#include "module.hpp"
 
-constexpr auto STACK_SIZE = 0x40000; // Change this probably;
+enum class ThreadState {
+	READY,
+	DORMANT,
+	WAIT
+};
 
-class Thread {
+class Thread : public KernelObject {
 public:
-	Thread(uint32_t entrypoint, uint32_t stack_addr);
+	Thread(Module* module, uint32_t return_addr);
+	Thread(std::string name, uint32_t entry_addr, int priority, uint32_t stack_size, uint32_t return_addr);
 	
-	void SetSavedRegister(int index, uint32_t value);
-	void SwitchTo();
+	bool CreateStack(uint32_t stack_size);
+	void SwitchTo() const;
+	void SwitchFrom();
+
+	int GetPriority() const { return priority; }
+
+	void SetState(ThreadState state) { this->state = state; }
+	ThreadState GetState() const { return state; }
 private:
+	std::string name;
 	std::array<uint32_t, 31> saved_regs;
 
-	uint32_t stack_addr;
+	int priority;
+	ThreadState state = ThreadState::DORMANT;
+	uint32_t initial_stack;
 	uint32_t pc;
+	uint32_t hi;
+	uint32_t lo;
 };
