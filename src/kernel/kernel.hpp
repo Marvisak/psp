@@ -7,11 +7,6 @@
 
 #include "memory.hpp"
 
-constexpr auto RAM_SIZE = 0x2000000;
-constexpr auto KERNEL_MEMORY_START = 0x08000000;
-constexpr auto USER_MEMORY_START = 0x08800000;
-constexpr auto USER_MEMORY_END = KERNEL_MEMORY_START + RAM_SIZE;
-
 enum class KernelObjectType {
 	INVALID,
 	MODULE,
@@ -25,11 +20,13 @@ public:
 	static KernelObjectType GetStaticType() { return KernelObjectType::INVALID; }
 
 	void SetUID(int uid) { this->uid = uid; }
+	int GetUID() { return uid; }
 protected:
 	int uid;
 };
 
 class Thread;
+enum class WaitReason;
 class Kernel {
 public:
 	Kernel();
@@ -55,6 +52,11 @@ public:
 	void DeleteThread(int thid);
 	int StartThread(int thid);
 
+	void WakeUpThread(int thid, WaitReason reason);
+	void WaitCurrentThread(WaitReason reason);
+
+	void WakeUpVBlank();
+
 	void ExecHLEFunction(int import_index);
 
 	int GetCurrentThread() const { return current_thread; }
@@ -62,6 +64,7 @@ public:
 	MemoryAllocator& GetKernelMemory() { return kernel_memory; }
 private:
 	int current_thread = -1;
+	int next_uid = 0;
 
 	std::array<std::unique_ptr<KernelObject>, 4096> objects{};
 	std::array<std::queue<int>, 111> thread_ready_queue{};

@@ -2,6 +2,9 @@
 
 #include <spdlog/spdlog.h>
 
+#include "../kernel/thread.hpp"
+#include "defs.hpp"
+
 static int sceKernelCreateThread(const char* name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr, uint32_t opt_param_addr) {
 	return PSP::GetInstance()->GetKernel().CreateThread(name, entry, init_priority, stack_size, attr);
 }
@@ -9,6 +12,11 @@ static int sceKernelCreateThread(const char* name, uint32_t entry, int init_prio
 static int sceKernelStartThread(int thid, uint32_t arg_size, uint32_t arg_block_pointer) {
 	// TODO: Args
 	return PSP::GetInstance()->GetKernel().StartThread(thid);
+}
+
+static int sceKernelExitThread(int exit_status) {
+	spdlog::error("sceKernelExitThread({})", exit_status);
+	return 0;
 }
 
 static int sceKernelGetThreadId() {
@@ -32,13 +40,32 @@ static int sceKernelDeleteCallback(int thid) {
 }
 
 static int sceKernelSleepThreadCB() {
-	spdlog::error("sceKernelSleepThreadCB()");
+	PSP::GetInstance()->GetKernel().WaitCurrentThread(WaitReason::SLEEP);
 	return 0;
 }
 
 static int sceKernelDelayThread(uint32_t usec) {
-	spdlog::error("sceKernelDelayThread({})", usec);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto& kernel = psp->GetKernel();
+	psp->EatCycles(2000);
+
+	if (usec < 200) {
+		usec = 210;
+	}
+	else if (usec > 0x8000000000000000ULL) {
+		usec -= 0x8000000000000000ULL;
+	}
+
+	
+	int thid = kernel.GetCurrentThread();
+	kernel.WaitCurrentThread(WaitReason::DELAY);
+	auto func = [thid](uint64_t _) {
+		PSP::GetInstance()->GetKernel().WakeUpThread(thid, WaitReason::DELAY);
+	};
+
+	psp->Schedule(US_TO_CYCLES(usec), func);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelCreateSema(const char* name, uint32_t attr, int init_count, int max_count, uint32_t opt_param_addr) {
@@ -92,7 +119,7 @@ static int sceKernelReferMsgPipeStatus(int mppid, uint32_t info_addr) {
 }
 
 static int sceKernelCreateLwMutex(uint32_t work_addr, const char* name, uint32_t attr, int init_count, uint32_t opt_param_addr) {
-	spdlog::error("sceKernelCreateLwMutex({:x}, {}, {:x}, {}, {:x})", work_addr, name, attr, init_count, opt_param_addr);
+	spdlog::error("sceKernelCreateLwMutex({:x}, '{}', {:x}, {}, {:x})", work_addr, name, attr, init_count, opt_param_addr);
 	return 0;
 }
 
@@ -102,9 +129,23 @@ static int sceKernelDeleteLwMutex(uint32_t work_addr) {
 	return 0;
 }
 
+static int sceKernelCreateEventFlag(const char* name, uint32_t attr, uint32_t init_pattern, uint32_t opt_param_addr) {
+	spdlog::error("sceKernelCreateEventFlag('{}', {:x}, {:x}, {:x})", name, attr, init_pattern, opt_param_addr);
+	return 0;
+}
 
-func_map RegisterThreadManForUser() {
-	func_map funcs;
+static int sceKernelDeleteEventFlag(int evfid) {
+	spdlog::error("sceKernelDeleteEventFlag({})", evfid);
+	return 0;
+}
+
+static int sceKernelSetEventFlag(int evfid, uint32_t bit_pattern) {
+	spdlog::error("sceKernelSetEventFlag({}, {})", evfid, bit_pattern);
+	return 0;
+}
+
+FuncMap RegisterThreadManForUser() {
+	FuncMap funcs;
 	funcs[0x446D8DE6] = HLE_CUIUUU_R(sceKernelCreateThread);
 	funcs[0xF475845D] = HLE_IUU_R(sceKernelStartThread);
 	funcs[0x293B45B8] = HLE_R(sceKernelGetThreadId);
@@ -112,7 +153,7 @@ func_map RegisterThreadManForUser() {
 	funcs[0x9FA03CD3] = HLE_I_R(sceKernelDeleteCallback);
 	funcs[0x82826F70] = HLE_R(sceKernelSleepThreadCB);
 	funcs[0xCEADEB47] = HLE_U_R(sceKernelDelayThread);
-	funcs[0xD6DA4BA1] = HLE_U_R(sceKernelDelayThread);
+	funcs[0xD6DA4BA1] = HLE_CUIIU_R(sceKernelCreateSema);
 	funcs[0x28B6489C] = HLE_I_R(sceKernelDeleteSema);
 	funcs[0x3F53E640] = HLE_II_R(sceKernelSignalSema);
 	funcs[0x4E3A1105] = HLE_IIU_R(sceKernelWaitSema);
@@ -125,5 +166,9 @@ func_map RegisterThreadManForUser() {
 	funcs[0x17C1684E] = HLE_IU_R(sceKernelReferThreadStatus);
 	funcs[0x19CFF145] = HLE_UCUIU_R(sceKernelCreateLwMutex);
 	funcs[0x60107536] = HLE_U_R(sceKernelDeleteLwMutex);
+	funcs[0x55C20A00] = HLE_CUUU_R(sceKernelCreateEventFlag);
+	funcs[0xEF9E4C70] = HLE_I_R(sceKernelDeleteEventFlag);
+	funcs[0x1FB15A32] = HLE_IU_R(sceKernelSetEventFlag);
+	funcs[0xAA73C935] = HLE_I_R(sceKernelExitThread);
 	return funcs;
 }

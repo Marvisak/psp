@@ -26,8 +26,8 @@ static uint32_t sceKernelGetBlockHeadAddr(int mbid) {
 	return 0;
 }
 
-func_map RegisterSysMemUserForUser() {
-	func_map funcs;
+FuncMap RegisterSysMemUserForUser() {
+	FuncMap funcs;
 	funcs[0x13A5ABEF] = HLE_C(sceKernelPrintf);
 	funcs[0xA291F107] = HLE_R(sceKernelMaxFreeMemSize);
 	funcs[0x237DBD4F] = HLE_ICIUU_R(sceKernelAllocPartitionMemory);

@@ -22,11 +22,17 @@ int main(int argc, char* argv[]) {
         {"off", spdlog::level::off} };
     app.add_option("-l,--loglevel", level, "Log level")->transform(CLI::CheckedTransformer(levels, CLI::ignore_case));
 
+    RendererType renderer_type = RendererType::SOFTWARE;
+    std::map<std::string, RendererType> renderer_types{
+        {"software", RendererType::SOFTWARE}
+    };
+    app.add_option("-r,--renderer", renderer_type, "Renderer type")->transform(CLI::CheckedTransformer(renderer_types, CLI::ignore_case));
+
     CLI11_PARSE(app, argc, argv);
 
     spdlog::set_level(level);
     
-    PSP psp;
+    PSP psp(renderer_type);
     if (!psp.LoadExec(elf_path))
         return 1;
     psp.Run();

@@ -2,30 +2,56 @@
 
 #include <spdlog/spdlog.h>
 
+#include "renderer/software/renderer.hpp"
 #include "kernel/module.hpp"
 #include "hle/hle.hpp"
 
-PSP::PSP() {
+static void VBlankHandler(uint64_t cycles_late) {
+	auto psp = PSP::GetInstance();
+
+	psp->GetKernel().WakeUpVBlank();
+	psp->GetRenderer()->Frame();
+
+	uint64_t frame_cycles = MS_TO_CYCLES(1001.0 / static_cast<double>(REFRESH_RATE));
+	uint64_t cycles = frame_cycles - cycles_late;
+	psp->Schedule(cycles, VBlankHandler);
+}
+
+PSP::PSP(RendererType renderer_type) {
 	instance = this;
 	ram = std::make_unique<uint8_t[]>(USER_MEMORY_END - KERNEL_MEMORY_START);
+	vram = std::make_unique<uint8_t[]>(VRAM_END - VRAM_START);
 	RegisterHLE();
 	kernel.AllocateFakeSyscalls();
+
+	if (SDL_Init(SDL_INIT_VIDEO)) {
+		spdlog::error("PSP: SDL init error {}", SDL_GetError());
+		return;
+	}
+
+	switch (renderer_type) {
+	case RendererType::SOFTWARE:
+		renderer = std::make_unique<SoftwareRenderer>();
+		break;
+	}
+	VBlankHandler(0);
 }
 
 void PSP::Run() {
-	while (true) {
-		if (kernel.GetCurrentThread() == -1) {
-			kernel.Reschedule();
-		} else {
+	while (!close) {
+		GetEarliestEvent();
+		for (; cycles < earlisest_event_cycles; cycles++) {
+			if (kernel.GetCurrentThread() == -1) continue;
 			if (!cpu.RunInstruction()) {
+				close = true;
 				break;
 			}
 		}
+		ExecuteEvents();
 	}
 }
 
 bool PSP::LoadExec(std::string path) {
-
 	int uid = kernel.LoadModule(path);
 	if (uid == -1)
 		return false;
@@ -83,4 +109,33 @@ void PSP::WriteMemory32(uint32_t addr, uint32_t value) {
 	auto ram_addr = reinterpret_cast<uint32_t*>(VirtualToPhysical(addr));
 	if (ram_addr)
 		*ram_addr = value;
+}
+
+void PSP::Schedule(uint64_t cycles, SchedulerFunc func) {
+	ScheduledEvent event;
+	event.cycle_trigger = this->cycles + cycles;
+	event.func = func;
+	events.push_back(event);
+
+	GetEarliestEvent();
+}
+
+void PSP::GetEarliestEvent() {
+	earlisest_event_cycles = ULLONG_MAX;
+	for (auto& event : events) {
+		if (earlisest_event_cycles > event.cycle_trigger) {
+			earlisest_event_cycles = event.cycle_trigger;
+		}
+	}
+}
+
+void PSP::ExecuteEvents() {
+	for (int i = 0; i < events.size(); i++) {
+		auto& event = events[i];
+		if (event.cycle_trigger <= cycles) {
+			event.func(cycles - event.cycle_trigger);
+			events.erase(events.begin() + i);
+			i--;
+		}
+	}
 }

@@ -2,13 +2,13 @@
 
 #include <spdlog/spdlog.h>
 
-#include "../psp.hpp"
+#include "psp.hpp"
 
 bool CPU::RunInstruction() {
 	auto psp = PSP::GetInstance();
 	auto opcode = psp->ReadMemory32(pc);
 
-	uint32_t old_pc = pc;
+	uint32_t current_pc = pc;
 	pc = next_pc;
 	next_pc += 4;
 
@@ -19,11 +19,13 @@ bool CPU::RunInstruction() {
 		case 0x02: SRL(opcode); break;
 		case 0x03: SRA(opcode); break;
 		case 0x04: SLLV(opcode); break;
+		case 0x07: SRAV(opcode); break;
 		case 0x08: JR(opcode); break;
 		case 0x09: JALR(opcode); break;
 		case 0x0C: SYSCALL(opcode); break;
 		case 0x10: MFHI(opcode); break;
 		case 0x12: MFLO(opcode); break;
+		case 0x18: MULT(opcode); break;
 		case 0x19: MULTU(opcode); break;
 		case 0x21: ADDU(opcode); break;
 		case 0x23: SUBU(opcode); break;
@@ -34,7 +36,7 @@ bool CPU::RunInstruction() {
 		case 0x2B: SLTU(opcode); break;
 		case 0x2C: MAX(opcode); break;
 		default:
-			spdlog::error("CPU: Unknown instruction opcode {:x} at {:x}", opcode, old_pc);
+			spdlog::error("CPU: Unknown instruction opcode {:x} at {:x}", opcode, current_pc);
 			return false;
 		}
 		break;
@@ -51,6 +53,14 @@ bool CPU::RunInstruction() {
 	case 0x0C: ANDI(opcode); break;
 	case 0x0D: ORI(opcode); break;
 	case 0x0F: LUI(opcode); break;
+	case 0x11:
+		switch (opcode & 0x3F) {
+		case 0x06: FMOV(opcode); break;
+		default:
+			spdlog::error("CPU: Unknown COP1 instruction opcode {:x} at {:x}", opcode, current_pc);
+			return false;
+		}
+		break;
 	case 0x14: BEQL(opcode); break;
 	case 0x15: BNEL(opcode); break;
 	case 0x16: BLEZL(opcode); break;
@@ -62,8 +72,10 @@ bool CPU::RunInstruction() {
 	case 0x28: SB(opcode); break;
 	case 0x29: SH(opcode); break;
 	case 0x2B: SW(opcode); break;
+	case 0x31: LWC1(opcode); break;
+	case 0x39: SWC1(opcode); break;
 	default:
-		spdlog::error("CPU: Unknown instruction opcode {:x} at {:x}", opcode, old_pc);
+		spdlog::error("CPU: Unknown instruction opcode {:x} at {:x}", opcode, current_pc);
 		return false;
 	}
 	return true;
@@ -197,8 +209,18 @@ void CPU::MFLO(uint32_t opcode) {
 	SetRegister(RD(opcode), lo);
 }
 
+void CPU::MULT(uint32_t opcode) {
+	int32_t rs = GetRegister(RS(opcode));
+	int32_t rt = GetRegister(RT(opcode));
+	uint64_t result = static_cast<int64_t>(rs) * static_cast<int64_t>(rt);
+	hi = result >> 32;
+	lo = result;
+}
+
 void CPU::MULTU(uint32_t opcode) {
-	uint64_t result = static_cast<uint64_t>(GetRegister(RS(opcode))) * static_cast<uint64_t>(GetRegister(RT(opcode)));
+	uint32_t rs = GetRegister(RS(opcode));
+	uint32_t rt = GetRegister(RT(opcode));
+	uint64_t result = static_cast<uint64_t>(rs) * static_cast<uint64_t>(rt);
 	hi = result >> 32;
 	lo = result;
 }
@@ -246,6 +268,17 @@ void CPU::LW(uint32_t opcode) {
 
 	uint32_t value = PSP::GetInstance()->ReadMemory32(addr);
 	SetRegister(RT(opcode), value);
+}
+
+void CPU::LWC1(uint32_t opcode) {
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+	if (addr % 4 != 0) {
+		spdlog::error("CPU: Exception or smth, LW");
+		return;
+	}
+
+	uint32_t value = PSP::GetInstance()->ReadMemory32(addr);
+	fpu_regs[RT(opcode)] = *reinterpret_cast<float*>(&value);
 }
 
 void CPU::OR(uint32_t opcode) {
@@ -306,6 +339,11 @@ void CPU::SRA(uint32_t opcode) {
 	SetRegister(RD(opcode), value);
 }
 
+void CPU::SRAV(uint32_t opcode) {
+	uint32_t value = static_cast<int32_t>(GetRegister(RT(opcode))) >> (GetRegister(RS(opcode)) & 0x1F);
+	SetRegister(RD(opcode), value);
+}
+
 void CPU::SRL(uint32_t opcode) {
 	uint32_t value = GetRegister(RT(opcode)) >> IMM5(opcode);
 	SetRegister(RD(opcode), value);
@@ -324,6 +362,17 @@ void CPU::SW(uint32_t opcode) {
 	}
 
 	uint32_t value = GetRegister(RT(opcode));
+	PSP::GetInstance()->WriteMemory32(addr, value);
+}
+
+void CPU::SWC1(uint32_t opcode) {
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+	if (addr % 4 != 0) {
+		spdlog::error("CPU: Exception or smth, SWC1");
+		return;
+	}
+
+	uint32_t value = *reinterpret_cast<uint32_t*>(&fpu_regs[RT(opcode)]);
 	PSP::GetInstance()->WriteMemory32(addr, value);
 }
 
@@ -354,4 +403,8 @@ void CPU::BranchCond(uint32_t opcode)
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
 		next_pc = pc + offset;
 	}
+}
+
+void CPU::FMOV(uint32_t opcode) {
+	fpu_regs[FD(opcode)] = fpu_regs[FS(opcode)];
 }

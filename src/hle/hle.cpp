@@ -1,6 +1,6 @@
 #include "hle.hpp"
 
-std::unordered_map<std::string, func_map> hle_modules{};
+std::unordered_map<std::string, FuncMap> hle_modules{};
 std::vector<ImportData> hle_imports{
 	{"FakeSyscalls", 0x0},
 	{"FakeSyscalls", 0x1}

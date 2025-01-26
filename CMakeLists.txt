@@ -13,8 +13,10 @@ set(CMAKE_CXX_STANDARD 20)
 list(APPEND sources 
 	src/main.cpp
 	src/psp.cpp
+	src/cpu.cpp
 
-	src/hw/cpu.cpp
+	src/renderer/renderer.cpp
+	src/renderer/software/renderer.cpp
 
 	src/kernel/memory.cpp
 	src/kernel/kernel.cpp

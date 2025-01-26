@@ -6,17 +6,17 @@
 #include <cstdint>
 
 #include "..\psp.hpp"
-#include "..\hw\cpu.hpp"
+#include "..\cpu.hpp"
 
 struct ImportData {
 	std::string module;
 	uint32_t nid;
 };
 
-typedef std::function<void(CPU&)> wrapper_func;
-typedef std::unordered_map<uint32_t, wrapper_func> func_map;
+typedef std::function<void(CPU&)> WrapperFunc;
+typedef std::unordered_map<uint32_t, WrapperFunc> FuncMap;
 
-extern std::unordered_map<std::string, func_map> hle_modules;
+extern std::unordered_map<std::string, FuncMap> hle_modules;
 extern std::vector<ImportData> hle_imports;
 
 void ReturnFromModule(CPU& _);
@@ -25,17 +25,17 @@ void ReturnFromThread(CPU& _);
 void RegisterHLE();
 int GetHLEIndex(std::string module, uint32_t nid);
 
-func_map RegisterModuleMgrForUser();
-func_map RegisterSysMemUserForUser();
-func_map RegisterThreadManForUser();
-func_map RegisterLoadExecForUser();
-func_map RegisterSceDisplay();
-func_map RegisterSceGeUser();
-func_map RegisterSceUtility();
-func_map RegisterSceNetInet();
-func_map RegisterIoFileMgrForUser();
-func_map RegisterKernelLibrary();
-func_map RegisterStdioForUser();
+FuncMap RegisterModuleMgrForUser();
+FuncMap RegisterSysMemUserForUser();
+FuncMap RegisterThreadManForUser();
+FuncMap RegisterLoadExecForUser();
+FuncMap RegisterSceDisplay();
+FuncMap RegisterSceGeUser();
+FuncMap RegisterSceUtility();
+FuncMap RegisterSceNetInet();
+FuncMap RegisterIoFileMgrForUser();
+FuncMap RegisterKernelLibrary();
+FuncMap RegisterStdioForUser();
 
 #define HLE_V(func) [](CPU& cpu) { \
 		func(); \
@@ -156,6 +156,14 @@ func_map RegisterStdioForUser();
 		cpu.SetRegister(3, value >> 32); \
 	}
 
+#define HLE_CUUU_R(func) [](CPU& cpu) { \
+		cpu.SetRegister(2, func( \
+			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu.GetRegister(4))), \
+			cpu.GetRegister(5), \
+			cpu.GetRegister(6), \
+			cpu.GetRegister(7) \
+		)); \
+	}
 
 #define HLE_IUUI_R(func) [](CPU& cpu) { \
 		cpu.SetRegister(2, func( \
@@ -172,6 +180,15 @@ func_map RegisterStdioForUser();
 			static_cast<int32_t>(cpu.GetRegister(5)), \
 			static_cast<int32_t>(cpu.GetRegister(6)), \
 			static_cast<int32_t>(cpu.GetRegister(7)) \
+		)); \
+	}
+
+#define HLE_UUIU_R(func) [](CPU& cpu) { \
+		cpu.SetRegister(2, func( \
+			cpu.GetRegister(4), \
+			cpu.GetRegister(5), \
+			static_cast<int32_t>(cpu.GetRegister(6)), \
+			cpu.GetRegister(7) \
 		)); \
 	}
 
@@ -201,6 +218,16 @@ func_map RegisterStdioForUser();
 			static_cast<int32_t>(cpu.GetRegister(4)), \
 			cpu.GetRegister(5), \
 			cpu.GetRegister(6), \
+			static_cast<int32_t>(cpu.GetRegister(7)), \
+			cpu.GetRegister(8) \
+		)); \
+	}
+
+#define HLE_CUIIU_R(func)[](CPU& cpu) { \
+		cpu.SetRegister(2, func( \
+			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu.GetRegister(4))), \
+			cpu.GetRegister(5), \
+			static_cast<int32_t>(cpu.GetRegister(6)), \
 			static_cast<int32_t>(cpu.GetRegister(7)), \
 			cpu.GetRegister(8) \
 		)); \

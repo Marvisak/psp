@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <limits>
 
 #define IMM26(opcode) (opcode & 0x3FFFFFF)
 #define IMM16(opcode) (opcode & 0xFFFF)
@@ -9,6 +10,8 @@
 #define RT(opcode) (opcode >> 16 & 0x1F)
 #define RD(opcode) (opcode >> 11 & 0x1F)
 #define RS(opcode) (opcode >> 21 & 0x1F)
+#define FS(opcode) (opcode >> 11 & 0x1F)
+#define FD(opcode) (opcode >> 6 & 0x1F)
 
 class CPU {
 public:
@@ -19,6 +22,8 @@ public:
 
 	std::array<uint32_t, 31> GetRegs() const { return regs; };
 	void SetRegs(std::array<uint32_t, 31> regs) { this->regs = regs; }
+	std::array<float, 32> GetFPURegs() const { return fpu_regs; }
+	void GetFPURegs(std::array<float, 32> fpu_regs) { this->fpu_regs = fpu_regs; }
 
 	uint32_t GetHI() const { return hi; }
 	uint32_t GetLO() const { return lo; }
@@ -47,6 +52,7 @@ private:
 	void MAX(uint32_t opcode);
 	void MFHI(uint32_t opcode);
 	void MFLO(uint32_t opcode);
+	void MULT(uint32_t opcode);
 	void MULTU(uint32_t opcode);
 	void NOR(uint32_t opcode);
 	void LB(uint32_t opcode);
@@ -54,6 +60,7 @@ private:
 	void LHU(uint32_t opcode);
 	void LUI(uint32_t opcode);
 	void LW(uint32_t opcode);
+	void LWC1(uint32_t opcode);
 	void OR(uint32_t opcode);
 	void ORI(uint32_t opcode);
 	void SB(uint32_t opcode);
@@ -64,16 +71,23 @@ private:
 	void SLTIU(uint32_t opcode);
 	void SLTU(uint32_t opcode);
 	void SRA(uint32_t opcode);
+	void SRAV(uint32_t opcode);
 	void SRL(uint32_t opcode);
 	void SUBU(uint32_t opcode);
 	void SW(uint32_t opcode);
+	void SWC1(uint32_t opcode);
 	void SYSCALL(uint32_t opcode);
 	void XOR(uint32_t opcode);
 	void BranchCond(uint32_t opcode);
+
+	void FMOV(uint32_t opcode);
 
 	uint32_t pc = 0x0;
 	uint32_t next_pc = 0x0;
 	uint32_t hi = 0x0;
 	uint32_t lo = 0x0;
-	std::array<uint32_t, 31> regs;
+	std::array<uint32_t, 31> regs{0xDEADBEEF};
+
+	uint32_t fcr;
+	std::array<float, 32> fpu_regs{ std::numeric_limits<float>::quiet_NaN() };
 };

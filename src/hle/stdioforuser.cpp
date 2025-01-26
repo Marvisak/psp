@@ -2,23 +2,22 @@
 
 #include <spdlog/spdlog.h>
 
-int sceKernelStdin() {
-	spdlog::error("sceKernelStdin()");
-	return 0;
+#include "defs.hpp"
+
+static int sceKernelStdin() {
+	return STDIN;
 }
 
-int sceKernelStdout() {
-	spdlog::error("sceKernelStdout()");
-	return 0;
+static int sceKernelStdout() {
+	return STDOUT;
 }
 
-int sceKernelStderr() {
-	spdlog::error("sceKernelStderr()");
-	return 0;
+static int sceKernelStderr() {
+	return STDERR;
 }
 
-func_map RegisterStdioForUser() {
-	func_map funcs;
+FuncMap RegisterStdioForUser() {
+	FuncMap funcs;
 	funcs[0x172D316E] = HLE_R(sceKernelStdin);
 	funcs[0xA6BAB2E9] = HLE_R(sceKernelStdout);
 	funcs[0xF78BA90A] = HLE_R(sceKernelStderr);

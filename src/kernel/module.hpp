@@ -6,7 +6,7 @@
 #include <elfio/elfio.hpp>
 
 #include "kernel.hpp"
-#include "../hw/cpu.hpp"
+#include "../cpu.hpp"
 #include "../hle/hle.hpp"
 
 struct PSPModuleInfo {

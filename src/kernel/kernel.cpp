@@ -11,8 +11,6 @@ Kernel::Kernel() :
 	user_memory(USER_MEMORY_START, USER_MEMORY_END - USER_MEMORY_START, 0x100), 
 	kernel_memory(KERNEL_MEMORY_START, USER_MEMORY_START - KERNEL_MEMORY_START, 0x100)
 {
-
-
 	user_memory.AllocAt(USER_MEMORY_START, 0x4000, "usersystemlib");
 }
 
@@ -32,10 +30,11 @@ void Kernel::AllocateFakeSyscalls() {
 }
 
 int Kernel::AddKernelObject(std::unique_ptr<KernelObject> obj) {
-	for (int i = 0; i < objects.size(); i++) {
+	for (int i = next_uid; i < objects.size(); i++) {
 		if (!objects[i]) {
 			obj->SetUID(i);
 			objects[i] = std::move(obj);
+			++next_uid %= objects.size();
 			return i;
 		}
 	}
@@ -63,10 +62,17 @@ bool Kernel::ExecModule(int uid) {
 	return true;
 }
 
+// TODO: Maybe add some cycle counting to this?
 int Kernel::Reschedule() {
-	for (auto& ready_threads : thread_ready_queue) {
+	auto current_thread_obj = GetKernelObject<Thread>(current_thread);
+	bool current_thread_valid = current_thread_obj && current_thread_obj->GetState() == ThreadState::READY;
+	for (int priority = 0; priority < thread_ready_queue.size(); priority++) {
+		auto& ready_threads = thread_ready_queue[priority];
 		if (ready_threads.empty())
 			continue;
+
+		if (current_thread_valid && current_thread_obj->GetPriority() >= priority)
+			break;
 
 		int ready_thid = ready_threads.front();
 		ready_threads.pop();
@@ -77,12 +83,16 @@ int Kernel::Reschedule() {
 			continue;
 		}
 
-		auto current_thread_obj = GetKernelObject<Thread>(current_thread);
 		if (current_thread_obj)
 			current_thread_obj->SwitchFrom();
 		ready_thread->SwitchTo();
 		current_thread = ready_thid;
 		return ready_thid;
+	}
+
+	if (!current_thread_valid) {
+		if (current_thread_obj) current_thread_obj->SwitchFrom();
+		current_thread = -1;
 	}
 
 	return current_thread;
@@ -109,14 +119,16 @@ int Kernel::CreateThread(std::string name, uint32_t entry, int init_priority, ui
 		return SCE_KERNEL_ERROR_ILLEGAL_ENTRY;
 	}
 
+	PSP::GetInstance()->EatCycles(32000);
 	auto thread = std::make_unique<Thread>(name, entry, init_priority, stack_size, KERNEL_MEMORY_START + 8);
 	return AddKernelObject(std::move(thread));
 }
 
 void Kernel::DeleteThread(int thid) {
 	if (current_thread == thid) {
+		current_thread = -1;
 		if (Reschedule() == thid) {
-			current_thread = -1;
+			spdlog::error("Kernel: no thread to reschedule to");
 		}
 	}
 	objects[thid] = nullptr;
@@ -129,8 +141,35 @@ int Kernel::StartThread(int thid) {
 
 	thread->SetState(ThreadState::READY);
 	thread_ready_queue[thread->GetPriority()].push(thid);
+	Reschedule();
 
 	return SCE_KERNEL_ERROR_OK;
+}
+
+void Kernel::WakeUpThread(int thid, WaitReason reason) {
+	Thread* thread = GetKernelObject<Thread>(thid);
+	if (thread->GetState() != ThreadState::WAIT || thread->GetWaitReason() != reason) { return; }
+	thread->SetState(ThreadState::READY);
+	thread->SetWaitReason(WaitReason::NONE);
+
+	thread_ready_queue[thread->GetPriority()].push(thid);
+	Reschedule();
+}
+
+void Kernel::WaitCurrentThread(WaitReason reason) {
+	Thread* thread = GetKernelObject<Thread>(current_thread);
+	thread->SetState(ThreadState::WAIT);
+	thread->SetWaitReason(reason);
+	Reschedule();
+}
+
+void Kernel::WakeUpVBlank() {
+	for (auto& object : objects) {
+		if (object && object->GetType() == KernelObjectType::THREAD) {
+			auto thread = reinterpret_cast<Thread*>(object.get());
+			WakeUpThread(thread->GetUID(), WaitReason::VBLANK);
+		}
+	}
 }
 
 void Kernel::ExecHLEFunction(int import_index) {

@@ -6,6 +6,7 @@
 
 Thread::Thread(Module* module, uint32_t return_addr) : name("root"), priority(0x20) {
 	saved_regs.fill(0xDEADBEEF);
+	saved_fpu_regs.fill(std::numeric_limits<float>::quiet_NaN());
 
 	CreateStack(0x40000);
 	pc = module->GetEntrypoint();
@@ -22,8 +23,9 @@ Thread::Thread(Module* module, uint32_t return_addr) : name("root"), priority(0x
 	memcpy(PSP::GetInstance()->VirtualToPhysical(saved_regs[4]), file_name.data(), file_name_size);
 }
 
-Thread::Thread(std::string name, uint32_t entry_addr, int priority, uint32_t stack_size, uint32_t return_addr) : priority(priority) {
+Thread::Thread(std::string name, uint32_t entry_addr, int priority, uint32_t stack_size, uint32_t return_addr) : name(name), priority(priority) {
 	saved_regs.fill(0xDEADBEEF);
+	saved_fpu_regs.fill(std::numeric_limits<float>::quiet_NaN());
 
 	CreateStack(stack_size);
 	pc = entry_addr;
@@ -53,6 +55,7 @@ void Thread::SwitchTo() const {
 
 	cpu.SetPC(pc);
 	cpu.SetRegs(saved_regs);
+	cpu.GetFPURegs(saved_fpu_regs);
 	cpu.SetHI(hi);
 	cpu.SetLO(lo);
 }
@@ -62,6 +65,7 @@ void Thread::SwitchFrom() {
 
 	pc = cpu.GetPC();
 	saved_regs = cpu.GetRegs();
+	saved_fpu_regs = cpu.GetFPURegs();
 	hi = cpu.GetHI();
 	lo = cpu.GetLO();
 }

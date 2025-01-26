@@ -47,8 +47,8 @@ static int sceIoGetstat(const char* name, uint32_t buf_addr) {
 	return 0;
 }
 
-func_map RegisterIoFileMgrForUser() {
-	func_map funcs;
+FuncMap RegisterIoFileMgrForUser() {
+	FuncMap funcs;
 	funcs[0x810C4BC3] = HLE_I_R(sceIoClose);
 	funcs[0x6A638D83] = HLE_IUU_R(sceIoRead);
 	funcs[0x42EC03AC] = HLE_IUU_R(sceIoWrite);

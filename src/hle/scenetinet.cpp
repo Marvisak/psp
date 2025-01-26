@@ -23,8 +23,8 @@ int sceNetInetGetErrno() {
 }
 
 
-func_map RegisterSceNetInet() {
-	func_map funcs;
+FuncMap RegisterSceNetInet() {
+	FuncMap funcs;
 	funcs[0x8D7284EA] = HLE_I_R(sceNetInetClose);
 	funcs[0xCDA85C99] = HLE_IUUI_R(sceNetInetRecv);
 	funcs[0x7AA671BC] = HLE_IUUI_R(sceNetInetSend);

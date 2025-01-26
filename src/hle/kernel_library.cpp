@@ -12,8 +12,8 @@ static int sceKernelUnlockLwMutex(uint32_t work_ptr, int unlock_count) {
 	return 0;
 }
 
-func_map RegisterKernelLibrary() {
-	func_map funcs;
+FuncMap RegisterKernelLibrary() {
+	FuncMap funcs;
 	funcs[0xBEA46419] = HLE_UIU_R(sceKernelLockLwMutex);
 	funcs[0x15B6446B] = HLE_UI_R(sceKernelUnlockLwMutex);
 	return funcs;

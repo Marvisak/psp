@@ -7,8 +7,8 @@ uint32_t sceKernelSelfStopUnloadModule(uint32_t exit_code, uint32_t arg_size, ui
 	return 0;
 }
 
-func_map RegisterModuleMgrForUser() {
-	func_map funcs;
+FuncMap RegisterModuleMgrForUser() {
+	FuncMap funcs;
 	funcs[0xD675EBB8] = HLE_UUU_R(sceKernelSelfStopUnloadModule);
 	return funcs;
 }
