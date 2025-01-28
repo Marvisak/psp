@@ -1,15 +1,19 @@
 #include "hle.hpp"
 
+#include <spdlog/spdlog.h>
+
 std::unordered_map<std::string, FuncMap> hle_modules{};
 std::vector<ImportData> hle_imports{
 	{"FakeSyscalls", 0x0},
-	{"FakeSyscalls", 0x1}
+	{"FakeSyscalls", 0x1},
+	{"FakeSyscalls", 0x2},
 };
 
 void RegisterHLE() {
 	hle_modules["FakeSyscalls"] = {
 		{0x0, ReturnFromModule},
-		{0x1, ReturnFromThread}
+		{0x1, ReturnFromThread},
+		{0x2, ReturnFromCallback}
 	};
 
 	hle_modules["ModuleMgrForUser"] = RegisterModuleMgrForUser();
@@ -51,4 +55,10 @@ void ReturnFromThread(CPU& _) {
 	auto& kernel = PSP::GetInstance()->GetKernel();
 	int thid = kernel.GetCurrentThread();
 	kernel.DeleteThread(thid);
+}
+
+void ReturnFromCallback(CPU& _) {
+	auto& kernel = PSP::GetInstance()->GetKernel();
+	int cbid = kernel.GetCurrentCallback();
+	spdlog::error("Exiting callbacks not implemenented");
 }

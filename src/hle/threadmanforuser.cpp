@@ -29,9 +29,8 @@ static int sceKernelReferThreadStatus(int thid, uint32_t info_addr) {
 	return 0;
 }
 
-static int sceKernelCreateCallback(const char* name, uint32_t entry, uint32_t common_addr) {
-	spdlog::error("sceKernelCreateCallback({}, {:x}, {:x})", name, entry, common_addr);
-	return 0;
+static int sceKernelCreateCallback(const char* name, uint32_t entry, uint32_t common) {
+	return PSP::GetInstance()->GetKernel().CreateCallback(name, entry, common);
 }
 
 static int sceKernelDeleteCallback(int thid) {
@@ -40,7 +39,7 @@ static int sceKernelDeleteCallback(int thid) {
 }
 
 static int sceKernelSleepThreadCB() {
-	PSP::GetInstance()->GetKernel().WaitCurrentThread(WaitReason::SLEEP);
+	PSP::GetInstance()->GetKernel().WaitCurrentThread(WaitReason::SLEEP, true);
 	return 0;
 }
 
@@ -58,7 +57,7 @@ static int sceKernelDelayThread(uint32_t usec) {
 
 	
 	int thid = kernel.GetCurrentThread();
-	kernel.WaitCurrentThread(WaitReason::DELAY);
+	kernel.WaitCurrentThread(WaitReason::DELAY, false);
 	auto func = [thid](uint64_t _) {
 		PSP::GetInstance()->GetKernel().WakeUpThread(thid, WaitReason::DELAY);
 	};
@@ -122,7 +121,6 @@ static int sceKernelCreateLwMutex(uint32_t work_addr, const char* name, uint32_t
 	spdlog::error("sceKernelCreateLwMutex({:x}, '{}', {:x}, {}, {:x})", work_addr, name, attr, init_count, opt_param_addr);
 	return 0;
 }
-
 
 static int sceKernelDeleteLwMutex(uint32_t work_addr) {
 	spdlog::error("sceKernelDeleteLwMutex({:x})", work_addr);

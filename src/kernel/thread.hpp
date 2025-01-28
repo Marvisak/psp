@@ -24,8 +24,8 @@ public:
 	Thread(Module* module, uint32_t return_addr);
 	Thread(std::string name, uint32_t entry_addr, int priority, uint32_t stack_size, uint32_t return_addr);
 	
-	void SwitchTo() const;
-	void SwitchFrom();
+	void SwitchState() const;
+	void SaveState();
 
 	int GetPriority() const { return priority; }
 
@@ -34,6 +34,9 @@ public:
 
 	ThreadState GetState() const { return state; }
 	void SetState(ThreadState state) { this->state = state; }
+
+	bool GetAllowCallbacks() const { return allow_callbacks; }
+	void SetAllowCallbacks(bool allow_callbacks) { this->allow_callbacks = allow_callbacks; }
 
 	std::string GetName() const { return name; }
 	KernelObjectType GetType() override { return KernelObjectType::THREAD; }
@@ -47,6 +50,7 @@ private:
 
 	ThreadState state = ThreadState::DORMANT;
 	WaitReason wait_reason = WaitReason::NONE;
+	bool allow_callbacks = true;
 
 	int priority;
 	uint32_t initial_stack;

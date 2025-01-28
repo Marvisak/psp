@@ -7,10 +7,13 @@
 
 #include "memory.hpp"
 
+#undef CALLBACK
+
 enum class KernelObjectType {
 	INVALID,
 	MODULE,
-	THREAD
+	THREAD,
+	CALLBACK
 };
 
 class KernelObject {
@@ -20,9 +23,9 @@ public:
 	static KernelObjectType GetStaticType() { return KernelObjectType::INVALID; }
 
 	void SetUID(int uid) { this->uid = uid; }
-	int GetUID() { return uid; }
-protected:
-	int uid;
+	int GetUID() const { return uid; }
+private:
+	int uid = -1;
 };
 
 class Thread;
@@ -52,18 +55,23 @@ public:
 	void DeleteThread(int thid);
 	int StartThread(int thid);
 
+	int CreateCallback(std::string name, uint32_t entry, uint32_t common);
+	void ExecuteCallback(int cbid);
+
 	void WakeUpThread(int thid, WaitReason reason);
-	void WaitCurrentThread(WaitReason reason);
+	void WaitCurrentThread(WaitReason reason, bool allow_callbacks);
 
 	void WakeUpVBlank();
 
 	void ExecHLEFunction(int import_index);
 
 	int GetCurrentThread() const { return current_thread; }
+	int GetCurrentCallback() const { return current_callback; }
 	MemoryAllocator& GetUserMemory() { return user_memory; }
 	MemoryAllocator& GetKernelMemory() { return kernel_memory; }
 private:
 	int current_thread = -1;
+	int current_callback = -1;
 	int next_uid = 0;
 
 	std::array<std::unique_ptr<KernelObject>, 4096> objects{};

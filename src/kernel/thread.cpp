@@ -50,7 +50,7 @@ bool Thread::CreateStack(uint32_t stack_size) {
 	return true;
 }
 
-void Thread::SwitchTo() const {
+void Thread::SwitchState() const {
 	auto& cpu = PSP::GetInstance()->GetCPU();
 
 	cpu.SetPC(pc);
@@ -60,7 +60,7 @@ void Thread::SwitchTo() const {
 	cpu.SetLO(lo);
 }
 
-void Thread::SwitchFrom() {
+void Thread::SaveState() {
 	auto& cpu = PSP::GetInstance()->GetCPU();
 
 	pc = cpu.GetPC();

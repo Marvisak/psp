@@ -6,6 +6,7 @@
 #include "../psp.hpp"
 #include "module.hpp"
 #include "thread.hpp"
+#include "callback.hpp"
 
 Kernel::Kernel() : 
 	user_memory(USER_MEMORY_START, USER_MEMORY_END - USER_MEMORY_START, 0x100), 
@@ -38,6 +39,7 @@ int Kernel::AddKernelObject(std::unique_ptr<KernelObject> obj) {
 			return i;
 		}
 	}
+	spdlog::error("Kernel: unable to assing uid to object");
 	return -1;
 }
 
@@ -84,14 +86,14 @@ int Kernel::Reschedule() {
 		}
 
 		if (current_thread_obj)
-			current_thread_obj->SwitchFrom();
-		ready_thread->SwitchTo();
+			current_thread_obj->SaveState();
+		ready_thread->SwitchState();
 		current_thread = ready_thid;
 		return ready_thid;
 	}
 
 	if (!current_thread_valid) {
-		if (current_thread_obj) current_thread_obj->SwitchFrom();
+		if (current_thread_obj) current_thread_obj->SaveState();
 		current_thread = -1;
 	}
 
@@ -100,22 +102,22 @@ int Kernel::Reschedule() {
 
 int Kernel::CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr) {
 	if (stack_size < 0x200) {
-		spdlog::error("Kernel: invalid stack size {:x}", stack_size);
+		spdlog::warn("Kernel: invalid stack size {:x}", stack_size);
 		return SCE_KERNEL_ERROR_ILLEGAL_STACK_SIZE;
 	}
 
 	if (init_priority < 0x8 || init_priority > 0x77) {
-		spdlog::error("Kernel: invalid init priority {:x}", init_priority);
+		spdlog::warn("Kernel: invalid init priority {:x}", init_priority);
 		return SCE_KERNEL_ERROR_ILLEGAL_PRIORITY;
 	}
 
 	if (user_memory.GetLargestFreeBlock() < stack_size) {
-		spdlog::error("Kernel: not enough space for thread {:x}", stack_size);
+		spdlog::warn("Kernel: not enough space for thread {:x}", stack_size);
 		return SCE_KERNEL_ERROR_NO_MEMORY;
 	}
 
 	if (PSP::GetInstance()->VirtualToPhysical(entry) == 0) {
-		spdlog::error("Kernel: invalid entry {:x}", entry);
+		spdlog::warn("Kernel: invalid entry {:x}", entry);
 		return SCE_KERNEL_ERROR_ILLEGAL_ENTRY;
 	}
 
@@ -128,7 +130,7 @@ void Kernel::DeleteThread(int thid) {
 	if (current_thread == thid) {
 		current_thread = -1;
 		if (Reschedule() == thid) {
-			spdlog::error("Kernel: no thread to reschedule to");
+			spdlog::warn("Kernel: no thread to reschedule to");
 		}
 	}
 	objects[thid] = nullptr;
@@ -146,6 +148,27 @@ int Kernel::StartThread(int thid) {
 	return SCE_KERNEL_ERROR_OK;
 }
 
+int Kernel::CreateCallback(std::string name, uint32_t entry, uint32_t common) {
+	if (!PSP::GetInstance()->VirtualToPhysical(entry)) {
+		return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
+	}
+
+	auto callback = std::make_unique<Callback>(GetCurrentThread(), name, entry, common);
+	int cbid = AddKernelObject(std::move(callback));
+	return cbid;
+}
+
+void Kernel::ExecuteCallback(int cbid) {
+	auto callback = GetKernelObject<Callback>(cbid);
+	if (!callback) {
+		spdlog::warn("Kernel: attempted to execute invalid callback {}", cbid);
+		return;
+	}
+
+	current_callback = cbid;
+	callback->Execute();
+}
+
 void Kernel::WakeUpThread(int thid, WaitReason reason) {
 	Thread* thread = GetKernelObject<Thread>(thid);
 	if (thread->GetState() != ThreadState::WAIT || thread->GetWaitReason() != reason) { return; }
@@ -156,10 +179,11 @@ void Kernel::WakeUpThread(int thid, WaitReason reason) {
 	Reschedule();
 }
 
-void Kernel::WaitCurrentThread(WaitReason reason) {
+void Kernel::WaitCurrentThread(WaitReason reason, bool allow_callbacks) {
 	Thread* thread = GetKernelObject<Thread>(current_thread);
 	thread->SetState(ThreadState::WAIT);
 	thread->SetWaitReason(reason);
+	thread->SetAllowCallbacks(allow_callbacks);
 	Reschedule();
 }
 

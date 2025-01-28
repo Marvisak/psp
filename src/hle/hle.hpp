@@ -21,6 +21,7 @@ extern std::vector<ImportData> hle_imports;
 
 void ReturnFromModule(CPU& _);
 void ReturnFromThread(CPU& _);
+void ReturnFromCallback(CPU& _);
 
 void RegisterHLE();
 int GetHLEIndex(std::string module, uint32_t nid);

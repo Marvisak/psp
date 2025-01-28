@@ -71,6 +71,19 @@ void* PSP::VirtualToPhysical(uint32_t addr) {
 	return nullptr;
 }
 
+void PSP::Exit() {
+	if (exit_callback != -1) {
+		kernel.ExecuteCallback(exit_callback);
+	} else {
+		ForceExit();
+	}
+}
+
+void PSP::ForceExit() {
+	close = true;
+	earlisest_event_cycles = 0;
+}
+
 uint8_t PSP::ReadMemory8(uint32_t addr) {
 	auto ram_addr = reinterpret_cast<uint8_t*>(VirtualToPhysical(addr));
 	if (!ram_addr)

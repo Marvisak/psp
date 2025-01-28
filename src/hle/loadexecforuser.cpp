@@ -2,13 +2,22 @@
 
 #include <spdlog/spdlog.h>
 
+#include "defs.hpp"
+#include "../kernel/callback.hpp"
+
 static void sceKernelExitGame() {
-	spdlog::error("sceKernelExitGame()");
+	PSP::GetInstance()->ForceExit();
 }
 
 static int sceKernelRegisterExitCallback(int uid) {
-	spdlog::error("sceKernelRegisterExitCallback({})", uid);
-	return 0;
+	auto callback = PSP::GetInstance()->GetKernel().GetKernelObject<Callback>(uid);
+	if (!callback) {
+		spdlog::warn("sceKernelRegisterExitCallback: tried to register invalid callback {}", uid);
+		return SCE_KERNEL_ERROR_ERROR;
+	}
+	PSP::GetInstance()->SetExitCallback(uid);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 FuncMap RegisterLoadExecForUser() {

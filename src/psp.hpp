@@ -30,6 +30,10 @@ public:
 
 	bool LoadExec(std::string path);
 	void* VirtualToPhysical(uint32_t addr);
+
+	void Exit();
+	void ForceExit();
+	void SetExitCallback(int cbid) { exit_callback = cbid; }
 	
 	uint8_t ReadMemory8(uint32_t addr);
 	uint16_t ReadMemory16(uint32_t addr);
@@ -53,6 +57,7 @@ private:
 	Kernel kernel;
 	CPU cpu;
 
+	int exit_callback = 0;
 	bool close = false;
 
 	struct ScheduledEvent {
