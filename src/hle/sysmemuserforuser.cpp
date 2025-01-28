@@ -3,12 +3,11 @@
 #include <spdlog/spdlog.h>
 
 static void sceKernelPrintf(const char* format) {
-	spdlog::error("sceKernelPrinf({})", format);
+	spdlog::error("sceKernelPrinf('{}')", format);
 }
 
 static int sceKernelMaxFreeMemSize() {
-	spdlog::error("sceKernelMaxFreeMemSize()");
-	return 0;
+	return PSP::GetInstance()->GetKernel().GetUserMemory().GetLargestFreeBlockSize();
 }
 
 static int sceKernelAllocPartitionMemory(int mpid, const char* block_name, int type, uint32_t size, uint32_t pos_addr) {

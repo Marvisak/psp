@@ -111,7 +111,7 @@ int Kernel::CreateThread(std::string name, uint32_t entry, int init_priority, ui
 		return SCE_KERNEL_ERROR_ILLEGAL_PRIORITY;
 	}
 
-	if (user_memory.GetLargestFreeBlock() < stack_size) {
+	if (user_memory.GetLargestFreeBlockSize() < stack_size) {
 		spdlog::warn("Kernel: not enough space for thread {:x}", stack_size);
 		return SCE_KERNEL_ERROR_NO_MEMORY;
 	}

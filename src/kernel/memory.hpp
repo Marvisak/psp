@@ -11,7 +11,8 @@ public:
 	uint32_t AllocAt(uint32_t addr, uint32_t size, std::string name, uint32_t alignment = -1);
 	bool Free(uint32_t addr);
 
-	uint32_t GetLargestFreeBlock();
+	uint32_t GetLargestFreeBlockSize();
+	uint32_t GetFreeMemSize();
 private:
 	uint32_t default_alignment;
 	uint32_t start;

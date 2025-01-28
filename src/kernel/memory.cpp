@@ -207,11 +207,20 @@ bool MemoryAllocator::Free(uint32_t addr) {
 	return false;
 }
 
-uint32_t MemoryAllocator::GetLargestFreeBlock() {
+uint32_t MemoryAllocator::GetLargestFreeBlockSize() {
 	int largest = 0;
 	for (auto curr = first; curr; curr = curr->next) {
 		if (curr->free && curr->size > largest)
 			largest = curr->size;
 	}
 	return largest;
+}
+
+uint32_t MemoryAllocator::GetFreeMemSize() {
+	int size = 0;
+	for (auto curr = first; curr; curr = curr->next) {
+		if (curr->free)
+			size += curr->size;
+	}
+	return size;
 }
