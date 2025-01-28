@@ -27,6 +27,7 @@ void RegisterHLE() {
 	hle_modules["IoFileMgrForUser"] = RegisterIoFileMgrForUser();
 	hle_modules["Kernel_Library"] = RegisterKernelLibrary();
 	hle_modules["StdioForUser"] = RegisterStdioForUser();
+	hle_modules["sceCtrl"] = RegisterSceCtrl();
 }
 
 int GetHLEIndex(std::string module, uint32_t nid) {

@@ -10,6 +10,7 @@
 #define RT(opcode) (opcode >> 16 & 0x1F)
 #define RD(opcode) (opcode >> 11 & 0x1F)
 #define RS(opcode) (opcode >> 21 & 0x1F)
+#define FT(opcode) (opcode >> 16 & 0x1F)
 #define FS(opcode) (opcode >> 11 & 0x1F)
 #define FD(opcode) (opcode >> 6 & 0x1F)
 
@@ -44,6 +45,7 @@ private:
 	void BLEZ(uint32_t opcode);
 	void BLEZL(uint32_t opcode);
 	void BGTZ(uint32_t opcode);
+	void DIVU(uint32_t opcode);
 	void EXT(uint32_t opcode);
 	void J(uint32_t opcode);
 	void JAL(uint32_t opcode);
@@ -52,6 +54,9 @@ private:
 	void MAX(uint32_t opcode);
 	void MFHI(uint32_t opcode);
 	void MFLO(uint32_t opcode);
+	void MIN(uint32_t opcode);
+	void MOVN(uint32_t opcode);
+	void MOVZ(uint32_t opcode);
 	void MULT(uint32_t opcode);
 	void MULTU(uint32_t opcode);
 	void NOR(uint32_t opcode);
@@ -67,20 +72,34 @@ private:
 	void SH(uint32_t opcode);
 	void SLL(uint32_t opcode);
 	void SLLV(uint32_t opcode);
+	void SLT(uint32_t opcode);
 	void SLTI(uint32_t opcode);
 	void SLTIU(uint32_t opcode);
 	void SLTU(uint32_t opcode);
 	void SRA(uint32_t opcode);
 	void SRAV(uint32_t opcode);
 	void SRL(uint32_t opcode);
+	void SRLV(uint32_t opcode);
 	void SUBU(uint32_t opcode);
 	void SW(uint32_t opcode);
 	void SWC1(uint32_t opcode);
 	void SYSCALL(uint32_t opcode);
 	void XOR(uint32_t opcode);
+	void XORI(uint32_t opcode);
 	void BranchCond(uint32_t opcode);
 
-	void FMOV(uint32_t opcode);
+	void ABSS(uint32_t opcode);
+	void ADDS(uint32_t opcode);
+	void BC1T(uint32_t opcode);
+	void CCONDS(uint32_t opcode);
+	void CTC1(uint32_t opcode);
+	void CVTWS(uint32_t opcode);
+	void DIVS(uint32_t opcode);
+	void MOVS(uint32_t opcode);
+	void MULS(uint32_t opcode);
+	void NEGS(uint32_t opcode);
+	void SQRTS(uint32_t opcode);
+	void SUBS(uint32_t opcode);
 
 	uint32_t pc = 0x0;
 	uint32_t next_pc = 0x0;
@@ -88,6 +107,10 @@ private:
 	uint32_t lo = 0x0;
 	std::array<uint32_t, 31> regs{0xDEADBEEF};
 
-	uint32_t fcr;
+
+	struct {
+		bool cc;
+		uint8_t rm;
+	} fcr31;
 	std::array<float, 32> fpu_regs{ std::numeric_limits<float>::quiet_NaN() };
 };

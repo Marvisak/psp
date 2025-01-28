@@ -34,6 +34,9 @@ public:
 	void Exit();
 	void ForceExit();
 	void SetExitCallback(int cbid) { exit_callback = cbid; }
+
+	bool IsVBlank() { return vblank; }
+	void SetVBlank(bool vblank) { this->vblank = vblank; }
 	
 	uint8_t ReadMemory8(uint32_t addr);
 	uint16_t ReadMemory16(uint32_t addr);
@@ -58,6 +61,7 @@ private:
 	CPU cpu;
 
 	int exit_callback = 0;
+	bool vblank = false;
 	bool close = false;
 
 	struct ScheduledEvent {

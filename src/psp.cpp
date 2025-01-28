@@ -6,16 +6,24 @@
 #include "kernel/module.hpp"
 #include "hle/hle.hpp"
 
+static void VBlankEndHandler(uint64_t cycles_late) {
+	PSP::GetInstance()->SetVBlank(false);
+}
+
 static void VBlankHandler(uint64_t cycles_late) {
 	auto psp = PSP::GetInstance();
 
 	psp->GetKernel().WakeUpVBlank();
 	psp->GetRenderer()->Frame();
+	psp->SetVBlank(true);
 
 	uint64_t frame_cycles = MS_TO_CYCLES(1001.0 / static_cast<double>(REFRESH_RATE));
 	uint64_t cycles = frame_cycles - cycles_late;
 	psp->Schedule(cycles, VBlankHandler);
+	psp->Schedule(MS_TO_CYCLES(0.7315), VBlankEndHandler);
 }
+
+
 
 PSP::PSP(RendererType renderer_type) {
 	instance = this;

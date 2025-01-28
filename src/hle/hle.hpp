@@ -37,6 +37,7 @@ FuncMap RegisterSceNetInet();
 FuncMap RegisterIoFileMgrForUser();
 FuncMap RegisterKernelLibrary();
 FuncMap RegisterStdioForUser();
+FuncMap RegisterSceCtrl();
 
 #define HLE_V(func) [](CPU& cpu) { \
 		func(); \

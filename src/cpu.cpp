@@ -19,22 +19,28 @@ bool CPU::RunInstruction() {
 		case 0x02: SRL(opcode); break;
 		case 0x03: SRA(opcode); break;
 		case 0x04: SLLV(opcode); break;
+		case 0x06: SRLV(opcode); break;
 		case 0x07: SRAV(opcode); break;
 		case 0x08: JR(opcode); break;
 		case 0x09: JALR(opcode); break;
+		case 0x0A: MOVZ(opcode); break;
+		case 0x0B: MOVN(opcode); break;
 		case 0x0C: SYSCALL(opcode); break;
 		case 0x10: MFHI(opcode); break;
 		case 0x12: MFLO(opcode); break;
 		case 0x18: MULT(opcode); break;
 		case 0x19: MULTU(opcode); break;
+		case 0x1B: DIVU(opcode); break;
 		case 0x21: ADDU(opcode); break;
 		case 0x23: SUBU(opcode); break;
 		case 0x24: AND(opcode); break;
 		case 0x25: OR(opcode); break;
 		case 0x26: XOR(opcode); break;
 		case 0x27: NOR(opcode); break;
+		case 0x2A: SLT(opcode); break;
 		case 0x2B: SLTU(opcode); break;
 		case 0x2C: MAX(opcode); break;
+		case 0x2D: MIN(opcode); break;
 		default:
 			spdlog::error("CPU: Unknown instruction opcode {:x} at {:x}", opcode, current_pc);
 			return false;
@@ -52,13 +58,32 @@ bool CPU::RunInstruction() {
 	case 0x0B: SLTIU(opcode); break;
 	case 0x0C: ANDI(opcode); break;
 	case 0x0D: ORI(opcode); break;
+	case 0x0E: XORI(opcode); break;
 	case 0x0F: LUI(opcode); break;
 	case 0x11:
-		switch (opcode & 0x3F) {
-		case 0x06: FMOV(opcode); break;
-		default:
-			spdlog::error("CPU: Unknown COP1 instruction opcode {:x} at {:x}", opcode, current_pc);
-			return false;
+		// The decoding here is very fun, it seems to follow absolutelly no convention
+		if ((opcode >> 4 & 0x7F) == 3) { CCONDS(opcode); }
+		else {
+			switch (opcode >> 21 & 0x1F) {
+			case 0x06: CTC1(opcode); break;
+			case 0x08: BC1T(opcode); break;
+			default:
+				switch (opcode & 0x3F) {
+				case 0x00: ADDS(opcode); break;
+				case 0x01: SUBS(opcode); break;
+				case 0x02: MULS(opcode); break;
+				case 0x03: DIVS(opcode); break;
+				case 0x04: SQRTS(opcode); break;
+				case 0x05: ABSS(opcode); break;
+				case 0x06: MOVS(opcode); break;
+				case 0x07: NEGS(opcode); break;
+				case 0x24: CVTWS(opcode); break;
+				default:
+					spdlog::error("CPU: Unknown COP1 instruction opcode {:x} at {:x}", opcode, current_pc);
+					//return false;
+				}
+			}
+
 		}
 		break;
 	case 0x14: BEQL(opcode); break;
@@ -171,6 +196,22 @@ void CPU::BGTZ(uint32_t opcode)
 	}
 }
 
+void CPU::DIVU(uint32_t opcode) {
+	uint32_t n = GetRegister(RS(opcode));
+	uint32_t d = GetRegister(RT(opcode));
+
+	if (d == 0)
+	{
+		hi = n;
+		lo = 0xFFFFFFFF;
+	}
+	else
+	{
+		hi = n % d;
+		lo = n / d;
+	}
+}
+
 void CPU::EXT(uint32_t opcode) {
 	uint32_t mask = (1 << MSBD(opcode)) - 1;
 	SetRegister(RT(opcode), (GetRegister(RS(opcode)) >> IMM5(opcode)) & mask);
@@ -207,6 +248,21 @@ void CPU::MFHI(uint32_t opcode) {
 
 void CPU::MFLO(uint32_t opcode) {
 	SetRegister(RD(opcode), lo);
+}
+
+void CPU::MIN(uint32_t opcode) {
+	uint32_t value = std::min(GetRegister(RS(opcode)), GetRegister(RT(opcode)));
+	SetRegister(RD(opcode), value);
+}
+
+void CPU::MOVN(uint32_t opcode) {
+	if (GetRegister(RT(opcode)) != 0)
+		SetRegister(RD(opcode), GetRegister(RS(opcode)));
+}
+
+void CPU::MOVZ(uint32_t opcode) {
+	if (GetRegister(RT(opcode)) == 0)
+		SetRegister(RD(opcode), GetRegister(RS(opcode)));
 }
 
 void CPU::MULT(uint32_t opcode) {
@@ -319,6 +375,11 @@ void CPU::SLLV(uint32_t opcode) {
 	SetRegister(RD(opcode), value);
 }
 
+void CPU::SLT(uint32_t opcode) {
+	bool value = static_cast<int32_t>(GetRegister(RS(opcode))) < static_cast<int32_t>(GetRegister(RT(opcode)));
+	SetRegister(RD(opcode), value);
+}
+
 void CPU::SLTI(uint32_t opcode) {
 	bool value = static_cast<int32_t>(GetRegister(RS(opcode))) < static_cast<int16_t>(IMM16(opcode));
 	SetRegister(RT(opcode), value);
@@ -348,6 +409,12 @@ void CPU::SRL(uint32_t opcode) {
 	uint32_t value = GetRegister(RT(opcode)) >> IMM5(opcode);
 	SetRegister(RD(opcode), value);
 }
+
+void CPU::SRLV(uint32_t opcode) {
+	uint32_t value = GetRegister(RT(opcode)) >> (GetRegister(RS(opcode)) & 0x1F);
+	SetRegister(RD(opcode), value);
+}
+
 
 void CPU::SUBU(uint32_t opcode) {
 	uint32_t value = GetRegister(RS(opcode)) - GetRegister(RT(opcode));
@@ -386,6 +453,11 @@ void CPU::XOR(uint32_t opcode) {
 	SetRegister(RD(opcode), value);
 }
 
+void CPU::XORI(uint32_t opcode) {
+	uint32_t value = GetRegister(RS(opcode)) ^ IMM16(opcode);
+	SetRegister(RT(opcode), value);
+}
+
 void CPU::BranchCond(uint32_t opcode)
 {
 	bool bgez = RT(opcode) & 1;
@@ -405,6 +477,73 @@ void CPU::BranchCond(uint32_t opcode)
 	}
 }
 
-void CPU::FMOV(uint32_t opcode) {
+void CPU::ABSS(uint32_t opcode) {
+	fpu_regs[FD(opcode)] = fabsf(fpu_regs[FS(opcode)]);
+}
+
+void CPU::ADDS(uint32_t opcode) {
+	fpu_regs[FD(opcode)] = fpu_regs[FS(opcode)] + fpu_regs[FT(opcode)];
+}
+
+void CPU::BC1T(uint32_t opcode) {
+	if (fcr31.cc) {
+		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
+		next_pc = pc + offset;
+	}
+}
+
+void CPU::CCONDS(uint32_t opcode) {
+	uint32_t cond = opcode & 0xF;
+	float fs = fpu_regs[FS(opcode)];
+	float ft = fpu_regs[FT(opcode)];
+
+	if (std::isnan(fs) || std::isnan(ft)) {
+		fcr31.cc = (cond & 1) != 0;
+	} else {
+		bool equal = ((cond & 2) != 0) && (fs == ft);
+		bool less = ((cond & 4) != 0) && (fs < ft);
+		fcr31.cc = less || equal;
+	}
+}
+
+void CPU::CTC1(uint32_t opcode) {
+	uint32_t value = GetRegister(RT(opcode));
+	fcr31.rm = value & 3;
+	fcr31.cc = ((value >> 23) & 1) != 0;
+}
+
+void CPU::CVTWS(uint32_t opcode) {
+
+	int value = 0;
+	switch (fcr31.rm) {
+	case 0: value = static_cast<int>(rintf(fpu_regs[FS(opcode)])); break;
+	case 1: value = static_cast<int>(fpu_regs[FS(opcode)]); break;
+	case 2: value = static_cast<int>(ceilf(fpu_regs[FS(opcode)])); break;
+	case 3: value = static_cast<int>(floorf(fpu_regs[FS(opcode)])); break;
+	}
+	fpu_regs[FD(opcode)] = *reinterpret_cast<float*>(&value);
+}
+
+void CPU::DIVS(uint32_t opcode) {
+	fpu_regs[FD(opcode)] = fpu_regs[FS(opcode)] / fpu_regs[FT(opcode)];
+}
+
+void CPU::MOVS(uint32_t opcode) {
 	fpu_regs[FD(opcode)] = fpu_regs[FS(opcode)];
+}
+
+void CPU::MULS(uint32_t opcode) {
+	fpu_regs[FD(opcode)] = fpu_regs[FS(opcode)] * fpu_regs[FT(opcode)];
+}
+
+void CPU::NEGS(uint32_t opcode) {
+	fpu_regs[FD(opcode)] = -fpu_regs[FS(opcode)];
+}
+
+void CPU::SQRTS(uint32_t opcode) {
+	fpu_regs[FD(opcode)] = sqrtf(fpu_regs[FS(opcode)]);
+}
+
+void CPU::SUBS(uint32_t opcode) {
+	fpu_regs[FD(opcode)] = fpu_regs[FS(opcode)] - fpu_regs[FT(opcode)];
 }

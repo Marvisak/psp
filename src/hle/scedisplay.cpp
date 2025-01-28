@@ -46,10 +46,24 @@ static int sceDisplayWaitVblankStart() {
 	return 0;
 }
 
+static int sceDisplayWaitVblank() {
+	auto psp = PSP::GetInstance();
+	if (!psp->IsVBlank()) {
+		psp->GetKernel().WaitCurrentThread(WaitReason::VBLANK, false);
+		return 0;
+	}
+	else {
+		psp->EatCycles(1110);
+		psp->GetKernel().Reschedule();
+		return 1;
+	}
+}
+
 FuncMap RegisterSceDisplay() {
 	FuncMap funcs;
 	funcs[0xE20F177] = HLE_III_R(sceDisplaySetMode);
 	funcs[0x289D82FE] = HLE_UIII_R(sceDisplaySetFrameBuf);
+	funcs[0x36CDFADE] = HLE_R(sceDisplayWaitVblank);
 	funcs[0x984C27E7] = HLE_R(sceDisplayWaitVblankStart);
 	return funcs;
 }

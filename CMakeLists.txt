@@ -36,6 +36,7 @@ list(APPEND sources
 	src/hle/iofilemgrforuser.cpp
 	src/hle/kernel_library.cpp
 	src/hle/stdioforuser.cpp
+	src/hle/scectrl.cpp
 )
 
 add_executable(psp ${sources})
