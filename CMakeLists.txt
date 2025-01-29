@@ -23,6 +23,7 @@ list(APPEND sources
 	src/kernel/module.cpp
 	src/kernel/thread.cpp
 	src/kernel/callback.cpp
+	src/kernel/memory_block.cpp
 
 	src/hle/hle.cpp
 	src/hle/modulemgrforuser.cpp

@@ -45,6 +45,7 @@ private:
 	void BLEZ(uint32_t opcode);
 	void BLEZL(uint32_t opcode);
 	void BGTZ(uint32_t opcode);
+	void CLZ(uint32_t opcode);
 	void DIVU(uint32_t opcode);
 	void EXT(uint32_t opcode);
 	void INS(uint32_t opcode);

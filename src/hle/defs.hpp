@@ -1,5 +1,13 @@
 #pragma once
 
+enum PspSysMemBlockTypes {
+	PSP_SMEM_Low = 0,
+	PSP_SMEM_High = 1,
+	PSP_SMEM_Addr = 2,
+	PSP_SMEM_LowAligned = 3,
+	PSP_SMEM_HighAligned = 4,
+};
+
 constexpr auto STDIN = 0;
 constexpr auto STDOUT = 1;
 constexpr auto STDERR = 2;
@@ -13,6 +21,8 @@ constexpr auto SCE_ERROR_INVALID_MODE = 0x80000107;
 constexpr auto SCE_KERNEL_ERROR_OK = 0x0;
 constexpr auto SCE_KERNEL_ERROR_ERROR = 0x80020001;
 constexpr auto SCE_KERNEL_ERROR_ILLEGAL_ADDR = 0x8002006A;
+constexpr auto SCE_KERNEL_ERROR_ILLEGAL_PARTITION = 0x800200D6;
+constexpr auto SCE_KERNEL_ERROR_ILLEGAL_MEMBLOCKTYPE = 0x800200D8;
 constexpr auto SCE_KERNEL_ERROR_NO_MEMORY = 0x80020190;
 constexpr auto SCE_KERNEL_ERROR_ILLEGAL_ENTRY = 0x80020192;
 constexpr auto SCE_KERNEL_ERROR_ILLEGAL_PRIORITY = 0x80020193;

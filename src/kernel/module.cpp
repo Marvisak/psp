@@ -73,13 +73,13 @@ bool Module::Load() {
 				uint32_t opcode = psp->ReadMemory32(addr);
 				
 				switch (rel.r_info & 0xF) {
-				case 2:
+				case R_MIPS_32:
 					opcode += base_addr;
 					break;
-				case 4:
+				case R_MIPS_26:
 					opcode = (opcode & 0xFC000000) | (((opcode & 0x03FFFFFF) + (base_addr >> 2)) & 0x03FFFFFF);
 					break;
-				case 5: {
+				case R_MIPS_HI16: {
 					for (int k = j + 1; k < num_relocs; k++) {
 						int lo_type = rels[k].r_info & 0xF;
 						if (lo_type != 6 && lo_type != 1)
@@ -94,10 +94,10 @@ bool Module::Load() {
 
 					break;
 				}
-				case 6:
+				case R_MIPS_LO16:
 					opcode = (opcode & 0xFFFF0000) | ((base_addr + opcode & 0xFFFF) & 0xFFFF);
 					break;
-				case 7:
+				case R_MIPS_GPREL16:
 					break;
 				default:
 					spdlog::error("Unknown relocation type: {}", rel.r_info & 0xF);

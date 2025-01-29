@@ -13,7 +13,8 @@ enum class KernelObjectType {
 	INVALID,
 	MODULE,
 	THREAD,
-	CALLBACK
+	CALLBACK,
+	MEMORY_BLOCK
 };
 
 class KernelObject {

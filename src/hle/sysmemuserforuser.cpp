@@ -2,6 +2,10 @@
 
 #include <spdlog/spdlog.h>
 
+#include "../kernel/memory_block.hpp"
+#include "defs.hpp"
+
+
 static void sceKernelPrintf(const char* format) {
 	spdlog::error("sceKernelPrinf('{}')", format);
 }
@@ -14,9 +18,24 @@ static int sceKernelMaxFreeMemSize() {
 	return PSP::GetInstance()->GetKernel().GetUserMemory().GetLargestFreeBlockSize();
 }
 
-static int sceKernelAllocPartitionMemory(int mpid, const char* block_name, int type, uint32_t size, uint32_t pos_addr) {
-	spdlog::error("sceKernelAllocPartitionMemory({}, {}, {}, {}, {:x})", mpid, block_name, type, size, pos_addr);
-	return 0;
+static int sceKernelAllocPartitionMemory(int partition, const char* name, int type, uint32_t size, uint32_t addr) {
+	if (type < PSP_SMEM_Low || type > PSP_SMEM_HighAligned) {
+		return SCE_KERNEL_ERROR_ILLEGAL_MEMBLOCKTYPE;
+	}
+
+	auto& kernel = PSP::GetInstance()->GetKernel();
+
+	std::unique_ptr<MemoryBlock> block;
+	switch (partition) {
+	case 2: block = std::make_unique<MemoryBlock>(kernel.GetUserMemory(), name, size, type, addr);
+	}
+
+	if (!block) {
+		spdlog::warn("sceKernelAllocPartitionMemory: invalid partition");
+		return SCE_KERNEL_ERROR_ILLEGAL_PARTITION;
+	}
+
+	return kernel.AddKernelObject(std::move(block));
 }
 
 static int sceKernelFreePartitionMemory(int mbid) {
@@ -25,7 +44,12 @@ static int sceKernelFreePartitionMemory(int mbid) {
 }
 
 static uint32_t sceKernelGetBlockHeadAddr(int mbid) {
-	spdlog::error("sceKernelGetBlockHeadAddr({})", mbid);
+	MemoryBlock* block = PSP::GetInstance()->GetKernel().GetKernelObject<MemoryBlock>(mbid);
+	if (block) {
+		return block->GetAddress();
+	} else {
+		return 0;
+	}
 	return 0;
 }
 

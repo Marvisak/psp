@@ -30,6 +30,7 @@ bool CPU::RunInstruction() {
 		case 0x11: MTHI(opcode); break;
 		case 0x12: MFLO(opcode); break;
 		case 0x13: MTLO(opcode); break;
+		case 0x16: CLZ(opcode); break;
 		case 0x18: MULT(opcode); break;
 		case 0x19: MULTU(opcode); break;
 		case 0x1B: DIVU(opcode); break;
@@ -224,6 +225,10 @@ void CPU::BGTZ(uint32_t opcode)
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
 		next_pc = pc + offset;
 	}
+}
+
+void CPU::CLZ(uint32_t opcode) {
+	SetRegister(RD(opcode), std::countl_zero(GetRegister(RS(opcode))));
 }
 
 void CPU::DIVU(uint32_t opcode) {
