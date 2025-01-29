@@ -89,8 +89,18 @@ bool CPU::RunInstruction() {
 	case 0x14: BEQL(opcode); break;
 	case 0x15: BNEL(opcode); break;
 	case 0x16: BLEZL(opcode); break;
+	case 0x1C: 
+		switch (opcode & 0xFF) {
+		case 0x24: MFIC(opcode); break;
+		case 0x26: MTIC(opcode); break;
+		default:
+			spdlog::error("CPU: Unknown instruction opcode {:x} at {:x}", opcode, current_pc);
+			return false;
+		}
+		break;
 	case 0x1F: EXT(opcode); break;
 	case 0x20: LB(opcode); break;
+	case 0x21: LH(opcode); break;
 	case 0x23: LW(opcode); break;
 	case 0x24: LBU(opcode); break;
 	case 0x25: LHU(opcode); break;
@@ -242,6 +252,10 @@ void CPU::MAX(uint32_t opcode) {
 	SetRegister(RD(opcode), value);
 }
 
+void CPU::MFIC(uint32_t opcode) {
+	SetRegister(RT(opcode), interrupts_enabled);
+}
+
 void CPU::MFHI(uint32_t opcode) {
 	SetRegister(RD(opcode), hi);
 }
@@ -263,6 +277,10 @@ void CPU::MOVN(uint32_t opcode) {
 void CPU::MOVZ(uint32_t opcode) {
 	if (GetRegister(RT(opcode)) == 0)
 		SetRegister(RD(opcode), GetRegister(RS(opcode)));
+}
+
+void CPU::MTIC(uint32_t opcode) {
+	interrupts_enabled = GetRegister(RT(opcode)) != 0;
 }
 
 void CPU::MULT(uint32_t opcode) {
@@ -296,6 +314,17 @@ void CPU::LB(uint32_t opcode) {
 void CPU::LBU(uint32_t opcode) {
 	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
 	uint32_t value = PSP::GetInstance()->ReadMemory8(addr);
+	SetRegister(RT(opcode), value);
+}
+
+void CPU::LH(uint32_t opcode) {
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+	if (addr % 2 != 0) {
+		spdlog::error("CPU: Exception or smth, LHU");
+		return;
+	}
+
+	uint32_t value = static_cast<int32_t>(PSP::GetInstance()->ReadMemory16(addr));
 	SetRegister(RT(opcode), value);
 }
 

@@ -52,16 +52,19 @@ private:
 	void JALR(uint32_t opcode);
 	void JR(uint32_t opcode);
 	void MAX(uint32_t opcode);
+	void MFIC(uint32_t opcode);
 	void MFHI(uint32_t opcode);
 	void MFLO(uint32_t opcode);
 	void MIN(uint32_t opcode);
 	void MOVN(uint32_t opcode);
 	void MOVZ(uint32_t opcode);
+	void MTIC(uint32_t opcode);
 	void MULT(uint32_t opcode);
 	void MULTU(uint32_t opcode);
 	void NOR(uint32_t opcode);
 	void LB(uint32_t opcode);
 	void LBU(uint32_t opcode);
+	void LH(uint32_t opcode);
 	void LHU(uint32_t opcode);
 	void LUI(uint32_t opcode);
 	void LW(uint32_t opcode);
@@ -101,6 +104,7 @@ private:
 	void SQRTS(uint32_t opcode);
 	void SUBS(uint32_t opcode);
 
+	bool interrupts_enabled = false;
 	uint32_t pc = 0x0;
 	uint32_t next_pc = 0x0;
 	uint32_t hi = 0x0;

@@ -2,6 +2,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include "defs.hpp"
+
 static int sceIoOpen(const char* file_name, int flags, int mode) {
 	spdlog::error("sceIoOpen({}, {}, {})", file_name, flags, mode);
 	return 0;
@@ -52,9 +54,33 @@ static int sceIoGetstat(const char* name, uint32_t buf_addr) {
 	return 0;
 }
 
-static int sceIoDevctl(const char* devname, int cmd, uint32_t arg_ptr, int arg_len, uint32_t buf_addr, int buf_len) {
-	spdlog::error("sceIoDevctl('{}', {}, {:x}, {}, {:x}, {})", devname, cmd, arg_ptr, arg_len, buf_addr, buf_len);
-	return 0;
+static int sceIoDevctl(const char* devname, int cmd, uint32_t arg_addr, int arg_len, uint32_t buf_addr, int buf_len) {
+	auto psp = PSP::GetInstance();
+	if (!strcmp(devname, "kemulator:") || !strcmp(devname, "emulator:")) {
+		switch (cmd) {
+		case 1:
+			if (buf_addr)
+				psp->WriteMemory32(buf_addr, 1);
+			return 0;
+		case 2:
+			if (arg_addr) {
+				std::string data(reinterpret_cast<const char*>(psp->VirtualToPhysical(arg_addr)), arg_len);
+				spdlog::info(data);
+			}
+			return 0;
+		case 3:
+			if (buf_addr)
+				psp->WriteMemory32(buf_addr, 1);
+			return 0;
+		default:
+			spdlog::error("sceIoDevctl: unknown emulator command {}", cmd);
+		}
+	}
+	else {
+		spdlog::error("sceIoDevCtl: unknown device {}", devname);
+	}
+
+	return SCE_KERNEL_ERROR_UNSUP;
 }
 
 FuncMap RegisterIoFileMgrForUser() {
