@@ -53,6 +53,12 @@ FuncMap RegisterSceCtrl();
 		cpu.SetRegister(2, func()); \
 	}
 
+#define HLE_64R(func) [](CPU& cpu) { \
+		uint64_t value = func(); \
+		cpu.SetRegister(2, value & 0xFFFFFFFF); \
+		cpu.SetRegister(3, value >> 32); \
+	}
+
 #define HLE_U_R(func) [](CPU& cpu) { \
 		cpu.SetRegister(2, func( \
 			cpu.GetRegister(4) \

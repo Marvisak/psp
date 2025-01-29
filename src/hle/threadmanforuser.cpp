@@ -19,6 +19,18 @@ static int sceKernelExitThread(int exit_status) {
 	return 0;
 }
 
+static int sceKernelTerminateThread(int thid) {
+	spdlog::error("sceKernelTerminateThread({})", thid);
+	return 0;
+}
+
+static int sceKernelGetThreadCurrentPriority() {
+	auto& kernel = PSP::GetInstance()->GetKernel();
+	int current_thread = kernel.GetCurrentThread();
+	auto thread = kernel.GetKernelObject<Thread>(current_thread);
+	return thread->GetPriority();
+}
+
 static int sceKernelGetThreadId() {
 	spdlog::error("sceKernelGetThreadId()");
 	return 0;
@@ -147,10 +159,17 @@ static int sceKernelSetEventFlag(int evfid, uint32_t bit_pattern) {
 	return 0;
 }
 
+static uint64_t sceKernelGetSystemTimeWide() {
+	spdlog::error("sceKernelGetSystemTimeWide()");
+	return 0;
+}
+
 FuncMap RegisterThreadManForUser() {
 	FuncMap funcs;
 	funcs[0x446D8DE6] = HLE_CUIUUU_R(sceKernelCreateThread);
 	funcs[0xF475845D] = HLE_IUU_R(sceKernelStartThread);
+	funcs[0x616403BA] = HLE_I_R(sceKernelTerminateThread);
+	funcs[0x94AA61EE] = HLE_R(sceKernelGetThreadCurrentPriority);
 	funcs[0x293B45B8] = HLE_R(sceKernelGetThreadId);
 	funcs[0xE81CAF8F] = HLE_CUU_R(sceKernelCreateCallback);
 	funcs[0x9FA03CD3] = HLE_I_R(sceKernelDeleteCallback);
@@ -174,5 +193,6 @@ FuncMap RegisterThreadManForUser() {
 	funcs[0xEF9E4C70] = HLE_I_R(sceKernelDeleteEventFlag);
 	funcs[0x1FB15A32] = HLE_IU_R(sceKernelSetEventFlag);
 	funcs[0xAA73C935] = HLE_I_R(sceKernelExitThread);
+	funcs[0x82BC5777] = HLE_64R(sceKernelGetSystemTimeWide);
 	return funcs;
 }

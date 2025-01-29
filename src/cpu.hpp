@@ -47,10 +47,13 @@ private:
 	void BGTZ(uint32_t opcode);
 	void DIVU(uint32_t opcode);
 	void EXT(uint32_t opcode);
+	void INS(uint32_t opcode);
 	void J(uint32_t opcode);
 	void JAL(uint32_t opcode);
 	void JALR(uint32_t opcode);
 	void JR(uint32_t opcode);
+	void MADD(uint32_t opcode);
+	void MADDU(uint32_t opcode);
 	void MAX(uint32_t opcode);
 	void MFIC(uint32_t opcode);
 	void MFHI(uint32_t opcode);
@@ -59,6 +62,8 @@ private:
 	void MOVN(uint32_t opcode);
 	void MOVZ(uint32_t opcode);
 	void MTIC(uint32_t opcode);
+	void MTHI(uint32_t opcode);
+	void MTLO(uint32_t opcode);
 	void MULT(uint32_t opcode);
 	void MULTU(uint32_t opcode);
 	void NOR(uint32_t opcode);
@@ -72,6 +77,8 @@ private:
 	void OR(uint32_t opcode);
 	void ORI(uint32_t opcode);
 	void SB(uint32_t opcode);
+	void SEB(uint32_t opcode);
+	void SEH(uint32_t opcode);
 	void SH(uint32_t opcode);
 	void SLL(uint32_t opcode);
 	void SLLV(uint32_t opcode);

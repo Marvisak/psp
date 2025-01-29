@@ -27,10 +27,14 @@ bool CPU::RunInstruction() {
 		case 0x0B: MOVN(opcode); break;
 		case 0x0C: SYSCALL(opcode); break;
 		case 0x10: MFHI(opcode); break;
+		case 0x11: MTHI(opcode); break;
 		case 0x12: MFLO(opcode); break;
+		case 0x13: MTLO(opcode); break;
 		case 0x18: MULT(opcode); break;
 		case 0x19: MULTU(opcode); break;
 		case 0x1B: DIVU(opcode); break;
+		case 0x1C: MADD(opcode); break;
+		case 0x1D: MADDU(opcode); break;
 		case 0x21: ADDU(opcode); break;
 		case 0x23: SUBU(opcode); break;
 		case 0x24: AND(opcode); break;
@@ -80,7 +84,7 @@ bool CPU::RunInstruction() {
 				case 0x24: CVTWS(opcode); break;
 				default:
 					spdlog::error("CPU: Unknown COP1 instruction opcode {:x} at {:x}", opcode, current_pc);
-					//return false;
+					return false;
 				}
 			}
 
@@ -98,7 +102,23 @@ bool CPU::RunInstruction() {
 			return false;
 		}
 		break;
-	case 0x1F: EXT(opcode); break;
+	case 0x1F: {
+		if ((opcode & 0x20) == 0x20) {
+			if ((opcode & 0x80) == 0) {
+				if ((opcode & 0x100) == 0) {
+					if ((opcode & 0x200) == 0) { SEB(opcode); break; }
+					SEH(opcode); break;
+				}
+				spdlog::error("BITREV"); return false;
+			}
+			if ((opcode & 0x40) == 0) {
+				spdlog::error("WSBH"); return false;
+			}
+			spdlog::error("WSBW"); return false;
+		}
+		if ((opcode & 0x4) == 0) { EXT(opcode); break; }
+		INS(opcode); break;
+	}
 	case 0x20: LB(opcode); break;
 	case 0x21: LH(opcode); break;
 	case 0x23: LW(opcode); break;
@@ -223,8 +243,17 @@ void CPU::DIVU(uint32_t opcode) {
 }
 
 void CPU::EXT(uint32_t opcode) {
-	uint32_t mask = (1 << MSBD(opcode)) - 1;
+	int size = MSBD(opcode) + 1;
+	uint32_t mask = 0xFFFFFFFFUL >> (32 - size);
 	SetRegister(RT(opcode), (GetRegister(RS(opcode)) >> IMM5(opcode)) & mask);
+}
+
+void CPU::INS(uint32_t opcode) {
+	int size = (MSBD(opcode) + 1) - IMM5(opcode);
+	uint32_t source_mask = 0xFFFFFFFFUL >> (32 - size);
+	uint32_t dest_mask = source_mask << IMM5(opcode);
+	uint32_t value = (GetRegister(RT(opcode)) & ~dest_mask) | ((GetRegister(RS(opcode)) & source_mask) << IMM5(opcode));
+	SetRegister(RT(opcode), value);
 }
 
 void CPU::J(uint32_t opcode) {
@@ -248,7 +277,7 @@ void CPU::JR(uint32_t opcode) {
 }
 
 void CPU::MAX(uint32_t opcode) {
-	uint32_t value = std::max(GetRegister(RS(opcode)), GetRegister(RT(opcode)));
+	uint32_t value = std::max(static_cast<int32_t>(GetRegister(RS(opcode))), static_cast<int32_t>(GetRegister(RT(opcode))));
 	SetRegister(RD(opcode), value);
 }
 
@@ -265,7 +294,7 @@ void CPU::MFLO(uint32_t opcode) {
 }
 
 void CPU::MIN(uint32_t opcode) {
-	uint32_t value = std::min(GetRegister(RS(opcode)), GetRegister(RT(opcode)));
+	uint32_t value = std::min(static_cast<int32_t>(GetRegister(RS(opcode))), static_cast<int32_t>(GetRegister(RT(opcode))));
 	SetRegister(RD(opcode), value);
 }
 
@@ -281,6 +310,32 @@ void CPU::MOVZ(uint32_t opcode) {
 
 void CPU::MTIC(uint32_t opcode) {
 	interrupts_enabled = GetRegister(RT(opcode)) != 0;
+}
+
+void CPU::MTHI(uint32_t opcode) {
+	hi = GetRegister(RS(opcode));
+}
+
+void CPU::MTLO(uint32_t opcode) {
+	lo = GetRegister(RS(opcode));
+}
+
+void CPU::MADD(uint32_t opcode) {
+	int32_t rs = GetRegister(RS(opcode));
+	int32_t rt = GetRegister(RT(opcode));
+	uint64_t milo = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
+	int64_t result = static_cast<int64_t>(milo) + static_cast<int64_t>(rs) * static_cast<int64_t>(rt);
+	hi = result >> 32;
+	lo = result;
+}
+
+void CPU::MADDU(uint32_t opcode) {
+	uint32_t rs = GetRegister(RS(opcode));
+	uint32_t rt = GetRegister(RT(opcode));
+	uint64_t milo = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
+	uint64_t result = milo + static_cast<uint64_t>(rs) * static_cast<uint64_t>(rt);
+	hi = result >> 32;
+	lo = result;
 }
 
 void CPU::MULT(uint32_t opcode) {
@@ -380,6 +435,16 @@ void CPU::SB(uint32_t opcode) {
 	uint32_t addr = static_cast<int16_t>(IMM16(opcode)) + GetRegister(RS(opcode));
 	uint32_t value = GetRegister(RT(opcode)) & 0xFF;
 	PSP::GetInstance()->WriteMemory8(addr, value);
+}
+
+void CPU::SEB(uint32_t opcode) {
+	int32_t value = static_cast<int8_t>(GetRegister(RT(opcode)));
+	SetRegister(RD(opcode), value);
+}
+
+void CPU::SEH(uint32_t opcode) {
+	int32_t value = static_cast<int16_t>(GetRegister(RT(opcode)));
+	SetRegister(RD(opcode), value);
 }
 
 void CPU::SH(uint32_t opcode) {
