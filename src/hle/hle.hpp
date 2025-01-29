@@ -139,6 +139,14 @@ FuncMap RegisterSceCtrl();
 		)); \
 	}
 
+#define HLE_CII_R(func) [](CPU& cpu) { \
+		cpu.SetRegister(2, func( \
+			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu.GetRegister(4))), \
+			static_cast<int32_t>(cpu.GetRegister(5)), \
+			static_cast<int32_t>(cpu.GetRegister(6)) \
+		)); \
+	}
+
 #define HLE_CUU_R(func) [](CPU& cpu) { \
 		cpu.SetRegister(2, func( \
 			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu.GetRegister(4))), \
@@ -158,6 +166,15 @@ FuncMap RegisterSceCtrl();
 		cpu.SetRegister(3, value >> 32); \
 	}
 
+#define HLE_CIUU_R(func) [](CPU& cpu) { \
+		cpu.SetRegister(2, func( \
+			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu.GetRegister(4))), \
+			static_cast<int32_t>(cpu.GetRegister(5)), \
+			cpu.GetRegister(6), \
+			cpu.GetRegister(7) \
+		)); \
+	}
+
 #define HLE_CUUU_R(func) [](CPU& cpu) { \
 		cpu.SetRegister(2, func( \
 			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu.GetRegister(4))), \
@@ -170,6 +187,15 @@ FuncMap RegisterSceCtrl();
 #define HLE_IUUI_R(func) [](CPU& cpu) { \
 		cpu.SetRegister(2, func( \
 			static_cast<int32_t>(cpu.GetRegister(4)), \
+			cpu.GetRegister(5), \
+			cpu.GetRegister(6), \
+			static_cast<int32_t>(cpu.GetRegister(7)) \
+		)); \
+	}
+
+#define HLE_UUUI_R(func) [](CPU& cpu) { \
+		cpu.SetRegister(2, func( \
+			cpu.GetRegister(4), \
 			cpu.GetRegister(5), \
 			cpu.GetRegister(6), \
 			static_cast<int32_t>(cpu.GetRegister(7)) \
@@ -225,6 +251,16 @@ FuncMap RegisterSceCtrl();
 		)); \
 	}
 
+#define HLE_IIIUU_R(func)[](CPU& cpu) { \
+		cpu.SetRegister(2, func( \
+			static_cast<int32_t>(cpu.GetRegister(4)), \
+			static_cast<int32_t>(cpu.GetRegister(5)), \
+			static_cast<int32_t>(cpu.GetRegister(6)), \
+			cpu.GetRegister(7), \
+			cpu.GetRegister(8) \
+		)); \
+	}
+
 #define HLE_CUIIU_R(func)[](CPU& cpu) { \
 		cpu.SetRegister(2, func( \
 			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu.GetRegister(4))), \
@@ -232,6 +268,27 @@ FuncMap RegisterSceCtrl();
 			static_cast<int32_t>(cpu.GetRegister(6)), \
 			static_cast<int32_t>(cpu.GetRegister(7)), \
 			cpu.GetRegister(8) \
+		)); \
+	}
+
+#define HLE_CIUIU_R(func)[](CPU& cpu) { \
+		cpu.SetRegister(2, func( \
+			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu.GetRegister(4))), \
+			static_cast<int32_t>(cpu.GetRegister(5)), \
+			cpu.GetRegister(6), \
+			static_cast<int32_t>(cpu.GetRegister(7)), \
+			cpu.GetRegister(8) \
+		)); \
+	}
+
+#define HLE_CIUIUI(func)[](CPU& cpu) { \
+		cpu.SetRegister(2, func( \
+			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu.GetRegister(4))), \
+			static_cast<int32_t>(cpu.GetRegister(5)), \
+			cpu.GetRegister(6), \
+			static_cast<int32_t>(cpu.GetRegister(7)), \
+			cpu.GetRegister(8), \
+			static_cast<int32_t>(cpu.GetRegister(9)) \
 		)); \
 	}
 
@@ -245,6 +302,7 @@ FuncMap RegisterSceCtrl();
 			cpu.GetRegister(9) \
 		)); \
 	}
+
 
 #define HLE_IUUIUU_R(func)[](CPU& cpu) { \
 		cpu.SetRegister(2, func( \

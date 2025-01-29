@@ -8,7 +8,7 @@ Module::Module(std::string file_name) : file_name(file_name) {}
 
 bool Module::Load() {
 	if (!elfio.load(file_name, true)) {
-		spdlog::error("ELFModule: cannot parse ELF file");
+		spdlog::error("Module: cannot parse ELF file");
 		return false;
 	}
 
@@ -27,42 +27,95 @@ bool Module::Load() {
 	}
 
 	if (!module_info) {
-		spdlog::error("ELFModule: cannot find sceModuleInfo");
+		spdlog::error("Module: cannot find sceModuleInfo");
 		return false;
 	}
-
-	// TODO: Change this when module is relocatable
-	uint32_t base_addr = 0;
-	
-	gp = module_info->gp;
-	name = module_info->name;
-	entrypoint = elfio.get_entry();
 
 	std::string mod_name = "ELF/";
 	mod_name += module_info->name;
 
+	uint32_t base_addr = 0;
 	for (int i = 0; i < elfio.segments.size(); i++) {
 		auto segment = elfio.segments[i];
 		if (segment->get_type() == ELFIO::PT_LOAD) {
 			if (!relocatable) {
 				uint32_t addr = memory.AllocAt(segment->get_virtual_address(), segment->get_file_size(), mod_name);
-				uint8_t* ram_addr = (uint8_t*)psp->VirtualToPhysical(addr);
-				
+				void* ram_addr = psp->VirtualToPhysical(addr);
+
 				memcpy(ram_addr, segment->get_data(), segment->get_file_size());
 
 				segments[i] = addr;
 			}
+			else {
+				base_addr = memory.Alloc(segment->get_file_size(), mod_name);
+				void* ram_addr = psp->VirtualToPhysical(base_addr);
+
+				memcpy(ram_addr, segment->get_data(), segment->get_file_size());
+
+				segments[i] = base_addr;
+			}
 		}
 	}
 
-	uint32_t* stub_start = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(module_info->lib_stub));
-	uint32_t* stub_end = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(module_info->lib_stub_end));
+	gp = base_addr + module_info->gp;
+	name = module_info->name;
+	entrypoint = base_addr + elfio.get_entry();
+
+	for (int i = 0; i < elfio.sections.size(); i++) {
+		auto section = elfio.sections[i];
+		if (section->get_type() == 0x700000A0) {
+			int num_relocs = section->get_size() / sizeof(ELFIO::Elf32_Rel);
+
+			auto rels = reinterpret_cast<const ELFIO::Elf32_Rel*>(section->get_data());
+			for (int j = 0; j < num_relocs; j++) {
+				auto rel = rels[j];
+				uint32_t addr = rel.r_offset + base_addr;
+				uint32_t opcode = psp->ReadMemory32(addr);
+				
+				switch (rel.r_info & 0xF) {
+				case 2:
+					opcode += base_addr;
+					break;
+				case 4:
+					opcode = (opcode & 0xFC000000) | (((opcode & 0x03FFFFFF) + (base_addr >> 2)) & 0x03FFFFFF);
+					break;
+				case 5: {
+					for (int k = j + 1; k < num_relocs; k++) {
+						int lo_type = rels[k].r_info & 0xF;
+						if (lo_type != 6 && lo_type != 1)
+							continue;
+
+						int16_t lo = static_cast<int16_t>(psp->ReadMemory16(rels[k].r_offset + base_addr));
+
+						uint32_t value = ((opcode & 0xFFFF) << 16) + lo + base_addr;
+						opcode = (opcode & 0xFFFF0000) | ((value - static_cast<int16_t>(value & 0xFFFF)) >> 16);
+						break;
+					}
+
+					break;
+				}
+				case 6:
+					opcode = (opcode & 0xFFFF0000) | ((base_addr + opcode & 0xFFFF) & 0xFFFF);
+					break;
+				case 7:
+					break;
+				default:
+					spdlog::error("Unknown relocation type: {}", rel.r_info & 0xF);
+					return false;
+				}
+				psp->WriteMemory32(addr, opcode);
+			}
+		}
+	}
+
+	uint32_t* stub_start = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(base_addr + module_info->lib_stub));
+	uint32_t* stub_end = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(base_addr + module_info->lib_stub_end));
 	uint32_t* current_pos = stub_start;
 	while (current_pos < stub_end) {
 		auto entry = reinterpret_cast<PSPLibStubEntry*>(current_pos);
 		const char* module_name = reinterpret_cast<const char*>(psp->VirtualToPhysical(entry->name));
 		if (!hle_modules.contains(module_name)) {
-			spdlog::error("Missing {} HLE module", module_name);
+			spdlog::error("Module: Missing {} HLE module", module_name);
 			return false;
 		}
 
@@ -71,7 +124,7 @@ bool Module::Load() {
 		for (int i = 0; i < entry->num_funcs; i++) {
 			uint32_t nid = nids[i];
 			if (!hle_module.contains(nid)) {
-				spdlog::error("HLE module {} is missing {:x} NID function", module_name, nid);
+				spdlog::error("Module: HLE module {} is missing {:x} NID function", module_name, nid);
 				return false;
 			}
 

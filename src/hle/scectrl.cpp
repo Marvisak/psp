@@ -3,7 +3,7 @@
 #include <spdlog/spdlog.h>
 
 static int sceCtrlReadBufferPositive(uint32_t data_addr, int bufs) {
-	//spdlog::error("sceCtrlReadBufferPositive({:x}, {})", data_addr, bufs);
+	spdlog::error("sceCtrlReadBufferPositive({:x}, {})", data_addr, bufs);
 	return 0;
 }
 

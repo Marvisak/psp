@@ -2,6 +2,11 @@
 
 #include <spdlog/spdlog.h>
 
+static int sceIoOpen(const char* file_name, int flags, int mode) {
+	spdlog::error("sceIoOpen({}, {}, {})", file_name, flags, mode);
+	return 0;
+}
+
 static int sceIoClose(int fd) {
 	spdlog::error("sceIoClose({})", fd);
 	return 0;
@@ -47,8 +52,14 @@ static int sceIoGetstat(const char* name, uint32_t buf_addr) {
 	return 0;
 }
 
+static int sceIoDevctl(const char* devname, int cmd, uint32_t arg_ptr, int arg_len, uint32_t buf_addr, int buf_len) {
+	spdlog::error("sceIoDevctl('{}', {}, {:x}, {}, {:x}, {})", devname, cmd, arg_ptr, arg_len, buf_addr, buf_len);
+	return 0;
+}
+
 FuncMap RegisterIoFileMgrForUser() {
 	FuncMap funcs;
+	funcs[0x109F50BC] = HLE_CII_R(sceIoOpen);
 	funcs[0x810C4BC3] = HLE_I_R(sceIoClose);
 	funcs[0x6A638D83] = HLE_IUU_R(sceIoRead);
 	funcs[0x42EC03AC] = HLE_IUU_R(sceIoWrite);
@@ -58,5 +69,6 @@ FuncMap RegisterIoFileMgrForUser() {
 	funcs[0xEB092469] = HLE_I_R(sceIoDclose);
 	funcs[0x55F4717D] = HLE_C_R(sceIoChdir);
 	funcs[0xACE946E8] = HLE_CU_R(sceIoGetstat);
+	funcs[0x54F5FB11] = HLE_CIUIUI(sceIoDevctl);
 	return funcs;
 }

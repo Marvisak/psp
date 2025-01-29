@@ -18,6 +18,11 @@ static int sceDisplaySetMode(int mode, int display_width, int display_height) {
 	return 0;
 }
 
+static int sceDisplayGetFrameBuf(uint32_t frame_buffer_addr, uint32_t frame_width_addr, uint32_t pixel_format_addr, int mode) {
+	spdlog::error("sceDisplayGetFrameBuf({:x}, {:x}, {:x}, {})", frame_buffer_addr, frame_width_addr, pixel_format_addr, mode);
+	return 0;
+}
+
 static int sceDisplaySetFrameBuf(uint32_t frame_buffer_address, int frame_width, int pixel_format, int mode) {
 	auto psp = PSP::GetInstance();
 
@@ -61,7 +66,8 @@ static int sceDisplayWaitVblank() {
 
 FuncMap RegisterSceDisplay() {
 	FuncMap funcs;
-	funcs[0xE20F177] = HLE_III_R(sceDisplaySetMode);
+	funcs[0x0E20F177] = HLE_III_R(sceDisplaySetMode);
+	funcs[0xEEDA2E54] = HLE_UUUI_R(sceDisplayGetFrameBuf);
 	funcs[0x289D82FE] = HLE_UIII_R(sceDisplaySetFrameBuf);
 	funcs[0x36CDFADE] = HLE_R(sceDisplayWaitVblank);
 	funcs[0x984C27E7] = HLE_R(sceDisplayWaitVblankStart);

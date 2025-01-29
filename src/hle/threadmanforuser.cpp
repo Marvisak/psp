@@ -87,6 +87,11 @@ static int sceKernelWaitSema(int semid, int need_count, uint32_t timeout_addr) {
 	return 0;
 }
 
+static int sceKernelCreateMsgPipe(const char* name, int mpid, uint32_t attr, int buf_size, uint32_t opt_param_addr) {
+	spdlog::error("sceKernelCreateMsgPipe({}, {}, {:x}, {}, {:x})", name, mpid, attr, buf_size, opt_param_addr);
+	return 0;
+}
+
 static int sceKernelDeleteMsgPipe(int mppid) {
 	spdlog::error("sceKernelDeleteMsgPipe({})", mppid);
 	return 0;
@@ -155,6 +160,7 @@ FuncMap RegisterThreadManForUser() {
 	funcs[0x28B6489C] = HLE_I_R(sceKernelDeleteSema);
 	funcs[0x3F53E640] = HLE_II_R(sceKernelSignalSema);
 	funcs[0x4E3A1105] = HLE_IIU_R(sceKernelWaitSema);
+	funcs[0x7C0DC2A0] = HLE_CIUIU_R(sceKernelCreateMsgPipe);
 	funcs[0xF0B7DA1C] = HLE_I_R(sceKernelDeleteMsgPipe);
 	funcs[0x876DBFAD] = HLE_IUUIUU_R(sceKernelSendMsgPipe);
 	funcs[0x884C9F90] = HLE_IUUIU_R(sceKernelTrySendMsgPipe);
