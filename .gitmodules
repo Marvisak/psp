@@ -10,3 +10,6 @@
 [submodule "vendors/SDL"]
 	path = vendors/SDL
 	url = https://github.com/libsdl-org/SDL.git
+[submodule "vendors/sockpp"]
+	path = vendors/sockpp
+	url = https://github.com/fpagliughi/sockpp.git

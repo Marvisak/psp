@@ -2,6 +2,7 @@
 #include <spdlog/spdlog.h>
 #include <elfio/elfio.hpp>
 
+#include "debugger/debugger.hpp"
 #include "psp.hpp"
 
 int main(int argc, char* argv[]) {
@@ -28,6 +29,12 @@ int main(int argc, char* argv[]) {
     };
     app.add_option("-r,--renderer", renderer_type, "Renderer type")->transform(CLI::CheckedTransformer(renderer_types, CLI::ignore_case));
 
+    bool enable_debugger = false;
+    app.add_flag("-g,--gdb", enable_debugger, "Enable GDB Stub");
+
+    int gdb_port = 5678;
+    app.add_option("-p,--port", gdb_port, "Port used by GDB Stub");
+
     CLI11_PARSE(app, argc, argv);
 
     spdlog::set_level(level);
@@ -35,7 +42,15 @@ int main(int argc, char* argv[]) {
     PSP psp(renderer_type);
     if (!psp.LoadExec(elf_path))
         return 1;
-    psp.Run();
+
+    if (enable_debugger) {
+       Debugger debugger(gdb_port);
+
+       debugger.Run();
+    }
+    else {
+        psp.Run();
+    }
 
     return 0;
 }

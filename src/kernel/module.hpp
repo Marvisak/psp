@@ -54,6 +54,7 @@ public:
 	Module(std::string file_name);
 	bool Load();
 
+	uint32_t GetOffset() const { return offset; }
 	uint32_t GetEntrypoint() const { return entrypoint; }
 	uint32_t GetGP() const { return gp; }
 	std::string GetFileName() const { return file_name; }
@@ -66,6 +67,7 @@ private:
 	std::string name;
 	ELFIO::elfio elfio;
 
+	uint32_t offset = 0;
 	uint32_t gp = 0;
 	uint32_t entrypoint = 0;
 	std::unordered_map<int, uint32_t> segments;

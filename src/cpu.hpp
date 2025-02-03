@@ -113,13 +113,13 @@ private:
 	void SUBS(uint32_t opcode);
 
 	bool interrupts_enabled = false;
-	uint32_t pc = 0x0;
-	uint32_t next_pc = 0x0;
-	uint32_t hi = 0x0;
-	uint32_t lo = 0x0;
+	uint32_t pc = 0xdeadbeef;
+	uint32_t next_pc = 0xdeadbeef;
+	uint32_t hi = 0xdeadbeef;
+	uint32_t lo = 0xdeadbeef;
 	std::array<uint32_t, 31> regs{0xDEADBEEF};
 
-
+	// TODO: make this actual value
 	struct {
 		bool cc;
 		uint8_t rm;

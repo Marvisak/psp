@@ -27,6 +27,7 @@ public:
 	PSP(RendererType renderer_type);
 
 	void Run();
+	void Step();
 
 	bool LoadExec(std::string path);
 	void* VirtualToPhysical(uint32_t addr);
@@ -34,8 +35,9 @@ public:
 	void Exit();
 	void ForceExit();
 	void SetExitCallback(int cbid) { exit_callback = cbid; }
+	bool IsClosed() const { return close; }
 
-	bool IsVBlank() { return vblank; }
+	bool IsVBlank() const { return vblank; }
 	void SetVBlank(bool vblank) { this->vblank = vblank; }
 	
 	uint8_t ReadMemory8(uint32_t addr);
@@ -52,13 +54,13 @@ public:
 
 	static PSP* GetInstance() { return instance; }
 	Renderer* GetRenderer() { return renderer.get(); }
-	Kernel& GetKernel() { return kernel; }
-	CPU& GetCPU() { return cpu; }
+	Kernel* GetKernel() { return kernel.get(); }
+	CPU* GetCPU() { return cpu.get(); }
 private:
 	inline static PSP* instance;
 	std::unique_ptr<Renderer> renderer;
-	Kernel kernel;
-	CPU cpu;
+	std::unique_ptr<Kernel> kernel;
+	std::unique_ptr<CPU> cpu;
 
 	int exit_callback = 0;
 	bool vblank = false;

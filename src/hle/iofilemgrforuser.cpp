@@ -21,7 +21,7 @@ static int sceIoRead(int fd, uint32_t buf_addr, uint32_t size) {
 
 static int sceIoWrite(int fd, uint32_t buf_addr, uint32_t size) {
 	spdlog::error("sceIoWrite({}, {:x}, {})", fd, buf_addr, size);
-	return 0;
+	return size;
 }
 
 static int64_t sceIoLseek(int fd, int64_t offset, int whence) {
@@ -65,6 +65,9 @@ static int sceIoDevctl(const char* devname, int cmd, uint32_t arg_addr, int arg_
 		case 2:
 			if (arg_addr) {
 				std::string data(reinterpret_cast<const char*>(psp->VirtualToPhysical(arg_addr)), arg_len);
+				if (data.ends_with('\n')) {
+					data.pop_back();
+				}
 				spdlog::info(data);
 			}
 			return 0;

@@ -9,9 +9,9 @@ Callback::Callback(int thid, std::string name, uint32_t entry, uint32_t common)
 
 void Callback::Execute() {
 	auto psp = PSP::GetInstance();
-	auto& kernel = psp->GetKernel();
-	auto& cpu = psp->GetCPU();
-	auto thread = kernel.GetKernelObject<Thread>(thid);
+	auto kernel = psp->GetKernel();
+	auto cpu = psp->GetCPU();
+	auto thread = kernel->GetKernelObject<Thread>(thid);
 	if (!thread) {
 		spdlog::error("Callback: {} missing thread with {} id", name, thid);
 		return;
@@ -19,14 +19,14 @@ void Callback::Execute() {
 
 	if (thread->GetState() == ThreadState::WAIT && !thread->GetAllowCallbacks()) return;
 
-	if (kernel.GetCurrentThread() == thid) {
+	if (kernel->GetCurrentThread() == thid) {
 		thread->SaveState();
 	}
 	thread->SwitchState();
-	cpu.SetPC(entry);
+	cpu->SetPC(entry);
 
-	cpu.SetRegister(31, KERNEL_MEMORY_START + 12);
-	cpu.SetRegister(4, 0);
-	cpu.SetRegister(5, 0);
-	cpu.SetRegister(6, common);
+	cpu->SetRegister(31, KERNEL_MEMORY_START + 12);
+	cpu->SetRegister(4, 0);
+	cpu->SetRegister(5, 0);
+	cpu->SetRegister(6, common);
 }

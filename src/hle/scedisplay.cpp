@@ -14,7 +14,7 @@ static int sceDisplaySetMode(int mode, int display_width, int display_height) {
 		return SCE_ERROR_INVALID_SIZE;
 	}
 
-	PSP::GetInstance()->GetKernel().WaitCurrentThread(WaitReason::VBLANK, false);
+	PSP::GetInstance()->GetKernel()->WaitCurrentThread(WaitReason::VBLANK, false);
 	return 0;
 }
 
@@ -47,19 +47,19 @@ static int sceDisplaySetFrameBuf(uint32_t frame_buffer_address, int frame_width,
 }
 
 static int sceDisplayWaitVblankStart() {
-	PSP::GetInstance()->GetKernel().WaitCurrentThread(WaitReason::VBLANK, false);
+	PSP::GetInstance()->GetKernel()->WaitCurrentThread(WaitReason::VBLANK, false);
 	return 0;
 }
 
 static int sceDisplayWaitVblank() {
 	auto psp = PSP::GetInstance();
 	if (!psp->IsVBlank()) {
-		psp->GetKernel().WaitCurrentThread(WaitReason::VBLANK, false);
+		psp->GetKernel()->WaitCurrentThread(WaitReason::VBLANK, false);
 		return 0;
 	}
 	else {
 		psp->EatCycles(1110);
-		psp->GetKernel().Reschedule();
+		psp->GetKernel()->Reschedule();
 		return 1;
 	}
 }

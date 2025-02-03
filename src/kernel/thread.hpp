@@ -23,6 +23,9 @@ class Thread : public KernelObject {
 public:
 	Thread(Module* module, uint32_t return_addr);
 	Thread(std::string name, uint32_t entry_addr, int priority, uint32_t stack_size, uint32_t return_addr);
+	~Thread();
+
+	void SetArgs(uint32_t arg_size, uint32_t arg_block_addr);
 	
 	void SwitchState() const;
 	void SaveState();
@@ -54,7 +57,7 @@ private:
 
 	int priority;
 	uint32_t initial_stack;
-	uint32_t pc;
-	uint32_t hi;
-	uint32_t lo;
+	uint32_t pc = 0xdeadbeef;
+	uint32_t hi = 0xdeadbeef;
+	uint32_t lo = 0xdeadbeef;
 };

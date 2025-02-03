@@ -11,11 +11,11 @@ static void sceKernelPrintf(const char* format) {
 }
 
 static int sceKernelTotalFreeMemSize() {
-	return PSP::GetInstance()->GetKernel().GetUserMemory().GetFreeMemSize();
+	return PSP::GetInstance()->GetKernel()->GetUserMemory()->GetFreeMemSize();
 }
 
 static int sceKernelMaxFreeMemSize() {
-	return PSP::GetInstance()->GetKernel().GetUserMemory().GetLargestFreeBlockSize();
+	return PSP::GetInstance()->GetKernel()->GetUserMemory()->GetLargestFreeBlockSize();
 }
 
 static int sceKernelAllocPartitionMemory(int partition, const char* name, int type, uint32_t size, uint32_t addr) {
@@ -23,11 +23,11 @@ static int sceKernelAllocPartitionMemory(int partition, const char* name, int ty
 		return SCE_KERNEL_ERROR_ILLEGAL_MEMBLOCKTYPE;
 	}
 
-	auto& kernel = PSP::GetInstance()->GetKernel();
+	auto kernel = PSP::GetInstance()->GetKernel();
 
 	std::unique_ptr<MemoryBlock> block;
 	switch (partition) {
-	case 2: block = std::make_unique<MemoryBlock>(kernel.GetUserMemory(), name, size, type, addr);
+	case 2: block = std::make_unique<MemoryBlock>(kernel->GetUserMemory(), name, size, type, addr);
 	}
 
 	if (!block) {
@@ -35,7 +35,7 @@ static int sceKernelAllocPartitionMemory(int partition, const char* name, int ty
 		return SCE_KERNEL_ERROR_ILLEGAL_PARTITION;
 	}
 
-	return kernel.AddKernelObject(std::move(block));
+	return kernel->AddKernelObject(std::move(block));
 }
 
 static int sceKernelFreePartitionMemory(int mbid) {
@@ -44,7 +44,7 @@ static int sceKernelFreePartitionMemory(int mbid) {
 }
 
 static uint32_t sceKernelGetBlockHeadAddr(int mbid) {
-	MemoryBlock* block = PSP::GetInstance()->GetKernel().GetKernelObject<MemoryBlock>(mbid);
+	MemoryBlock* block = PSP::GetInstance()->GetKernel()->GetKernelObject<MemoryBlock>(mbid);
 	if (block) {
 		return block->GetAddress();
 	} else {

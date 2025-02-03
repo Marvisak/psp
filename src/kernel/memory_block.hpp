@@ -6,10 +6,10 @@
 
 class MemoryBlock : public KernelObject {
 public:
-	MemoryBlock(MemoryAllocator& allocator, std::string name, uint32_t size, int type, uint32_t addr);
+	MemoryBlock(MemoryAllocator* allocator, std::string name, uint32_t size, int type, uint32_t addr);
 	~MemoryBlock();
 
-	uint32_t GetAddress() { return address; }
+	uint32_t GetAddress() const { return address; }
 
 	std::string GetName() const { return name; }
 	KernelObjectType GetType() override { return KernelObjectType::MEMORY_BLOCK; }
@@ -17,5 +17,5 @@ public:
 private:
 	std::string name;
 	uint32_t address = 0;
-	MemoryAllocator& allocator;
+	MemoryAllocator* allocator;
 };

@@ -9,6 +9,8 @@
 
 #undef CALLBACK
 
+constexpr auto UID_COUNT = 4096;
+
 enum class KernelObjectType {
 	INVALID,
 	MODULE,
@@ -19,6 +21,8 @@ enum class KernelObjectType {
 
 class KernelObject {
 public:
+	virtual ~KernelObject() {}
+
 	virtual std::string GetName() const { return "INVALID"; }
 	virtual KernelObjectType GetType() { return KernelObjectType::INVALID; }
 	static KernelObjectType GetStaticType() { return KernelObjectType::INVALID; }
@@ -34,8 +38,6 @@ enum class WaitReason;
 class Kernel {
 public:
 	Kernel();
-	void AllocateFakeSyscalls();
-
 	int AddKernelObject(std::unique_ptr<KernelObject> obj);
 
 	template <class T>
@@ -54,7 +56,7 @@ public:
 	int Reschedule();
 	int CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr);
 	void DeleteThread(int thid);
-	int StartThread(int thid);
+	void StartThread(int thid);
 
 	int CreateCallback(std::string name, uint32_t entry, uint32_t common);
 	void ExecuteCallback(int cbid);
@@ -66,17 +68,19 @@ public:
 
 	void ExecHLEFunction(int import_index);
 
+	int GetExecModule() const { return exec_module; }
 	int GetCurrentThread() const { return current_thread; }
 	int GetCurrentCallback() const { return current_callback; }
-	MemoryAllocator& GetUserMemory() { return user_memory; }
-	MemoryAllocator& GetKernelMemory() { return kernel_memory; }
+	MemoryAllocator* GetUserMemory() { return user_memory.get(); }
+	MemoryAllocator* GetKernelMemory() { return kernel_memory.get(); }
 private:
+	int exec_module = -1;
 	int current_thread = -1;
 	int current_callback = -1;
 	int next_uid = 0;
 
-	std::array<std::unique_ptr<KernelObject>, 4096> objects{};
+	std::unique_ptr<MemoryAllocator> user_memory;
+	std::unique_ptr<MemoryAllocator> kernel_memory;
+	std::array<std::unique_ptr<KernelObject>, UID_COUNT> objects{};
 	std::array<std::queue<int>, 111> thread_ready_queue{};
-	MemoryAllocator user_memory;
-	MemoryAllocator kernel_memory;
 };

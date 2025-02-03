@@ -1,0 +1,6 @@
+R"(l<?xml version="1.0"?>
+<!DOCTYPE memory-map>
+<memory-map>
+	<memory type="ram" start="{}" length="{}"/>
+	<memory type="ram" start="{}" length="{}"/>
+</memory-map>)"

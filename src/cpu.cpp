@@ -544,7 +544,7 @@ void CPU::SWC1(uint32_t opcode) {
 
 void CPU::SYSCALL(uint32_t opcode) {
 	uint32_t import_num = opcode >> 6;
-	PSP::GetInstance()->GetKernel().ExecHLEFunction(import_num);
+	PSP::GetInstance()->GetKernel()->ExecHLEFunction(import_num);
 }
 
 void CPU::XOR(uint32_t opcode) {

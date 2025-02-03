@@ -8,14 +8,11 @@
 #include "thread.hpp"
 #include "callback.hpp"
 
-Kernel::Kernel() : 
-	user_memory(USER_MEMORY_START, USER_MEMORY_END - USER_MEMORY_START, 0x100), 
-	kernel_memory(KERNEL_MEMORY_START, USER_MEMORY_START - KERNEL_MEMORY_START, 0x100)
-{
-	user_memory.AllocAt(USER_MEMORY_START, 0x4000, "usersystemlib");
-}
+Kernel::Kernel() {
+	user_memory = std::make_unique<MemoryAllocator>(USER_MEMORY_START, USER_MEMORY_END - USER_MEMORY_START, 0x100);
+	kernel_memory = std::make_unique<MemoryAllocator>(KERNEL_MEMORY_START, USER_MEMORY_START - KERNEL_MEMORY_START, 0x100);
+	user_memory->AllocAt(USER_MEMORY_START, 0x4000, "usersystemlib");
 
-void Kernel::AllocateFakeSyscalls() {
 	std::vector<uint32_t> opcodes;
 	for (int i = 0; i < hle_imports.size(); i++) {
 		auto& import_data = hle_imports[i];
@@ -25,7 +22,7 @@ void Kernel::AllocateFakeSyscalls() {
 		}
 	}
 
-	kernel_memory.AllocAt(KERNEL_MEMORY_START, sizeof(uint32_t) * opcodes.size(), "fakesyscalls");
+	kernel_memory->AllocAt(KERNEL_MEMORY_START, sizeof(uint32_t) * opcodes.size(), "fakesyscalls");
 	auto fake_syscalls_addr = PSP::GetInstance()->VirtualToPhysical(KERNEL_MEMORY_START);
 	memcpy(fake_syscalls_addr, opcodes.data(), sizeof(uint32_t) * opcodes.size());
 }
@@ -60,6 +57,7 @@ bool Kernel::ExecModule(int uid) {
 	auto thread = std::make_unique<Thread>(module, KERNEL_MEMORY_START);
 	int thid = AddKernelObject(std::move(thread));
 	StartThread(thid);
+	exec_module = uid;
 
 	return true;
 }
@@ -111,7 +109,7 @@ int Kernel::CreateThread(std::string name, uint32_t entry, int init_priority, ui
 		return SCE_KERNEL_ERROR_ILLEGAL_PRIORITY;
 	}
 
-	if (user_memory.GetLargestFreeBlockSize() < stack_size) {
+	if (user_memory->GetLargestFreeBlockSize() < stack_size) {
 		spdlog::warn("Kernel: not enough space for thread {:x}", stack_size);
 		return SCE_KERNEL_ERROR_NO_MEMORY;
 	}
@@ -136,16 +134,12 @@ void Kernel::DeleteThread(int thid) {
 	objects[thid] = nullptr;
 }
 
-int Kernel::StartThread(int thid) {
+void Kernel::StartThread(int thid) {
 	auto thread = GetKernelObject<Thread>(thid);
-	if (!thread) return SCE_KERNEL_ERROR_UNKNOWN_THID;
-	if (thread->GetState() != ThreadState::DORMANT) return SCE_KERNEL_ERROR_NOT_DORMANT;
 
 	thread->SetState(ThreadState::READY);
 	thread_ready_queue[thread->GetPriority()].push(thid);
 	Reschedule();
-
-	return SCE_KERNEL_ERROR_OK;
 }
 
 int Kernel::CreateCallback(std::string name, uint32_t entry, uint32_t common) {
@@ -199,5 +193,7 @@ void Kernel::WakeUpVBlank() {
 void Kernel::ExecHLEFunction(int import_index) {
 	auto& import_data = hle_imports[import_index];
 	auto& func = hle_modules[import_data.module][import_data.nid];
-	func(PSP::GetInstance()->GetCPU());
+
+	auto cpu = PSP::GetInstance()->GetCPU();
+	func(cpu);
 }

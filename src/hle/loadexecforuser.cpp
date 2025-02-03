@@ -10,7 +10,7 @@ static void sceKernelExitGame() {
 }
 
 static int sceKernelRegisterExitCallback(int uid) {
-	auto callback = PSP::GetInstance()->GetKernel().GetKernelObject<Callback>(uid);
+	auto callback = PSP::GetInstance()->GetKernel()->GetKernelObject<Callback>(uid);
 	if (!callback) {
 		spdlog::warn("sceKernelRegisterExitCallback: tried to register invalid callback {}", uid);
 		return SCE_KERNEL_ERROR_ERROR;

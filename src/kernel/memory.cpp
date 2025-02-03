@@ -49,6 +49,8 @@ uint32_t MemoryAllocator::Alloc(uint32_t size, std::string name, uint32_t alignm
 				curr->free = false;
 				curr->name = name;
 
+				if (curr->next)
+					curr->next->prev = block;
 				block->next = curr->next;
 				curr->next = block;
 				block->prev = curr;
@@ -92,6 +94,8 @@ uint32_t MemoryAllocator::AllocTop(uint32_t size, std::string name, uint32_t ali
 				block->name = name;
 				curr->size -= needed;
 
+				if (curr->next)
+					curr->next->prev = block;
 				block->next = curr->next;
 				curr->next = block;
 				block->prev = curr;

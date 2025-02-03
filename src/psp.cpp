@@ -13,7 +13,7 @@ static void VBlankEndHandler(uint64_t cycles_late) {
 static void VBlankHandler(uint64_t cycles_late) {
 	auto psp = PSP::GetInstance();
 
-	psp->GetKernel().WakeUpVBlank();
+	psp->GetKernel()->WakeUpVBlank();
 	psp->GetRenderer()->Frame();
 	psp->SetVBlank(true);
 
@@ -23,14 +23,13 @@ static void VBlankHandler(uint64_t cycles_late) {
 	psp->Schedule(MS_TO_CYCLES(0.7315), VBlankEndHandler);
 }
 
-
-
 PSP::PSP(RendererType renderer_type) {
 	instance = this;
 	ram = std::make_unique<uint8_t[]>(USER_MEMORY_END - KERNEL_MEMORY_START);
 	vram = std::make_unique<uint8_t[]>(VRAM_END - VRAM_START);
+	kernel = std::make_unique<Kernel>();
+	cpu = std::make_unique<CPU>();
 	RegisterHLE();
-	kernel.AllocateFakeSyscalls();
 
 	if (SDL_Init(SDL_INIT_VIDEO)) {
 		spdlog::error("PSP: SDL init error {}", SDL_GetError());
@@ -49,27 +48,44 @@ void PSP::Run() {
 	while (!close) {
 		GetEarliestEvent();
 		for (; cycles < earlisest_event_cycles; cycles++) {
-			if (kernel.GetCurrentThread() == -1) continue;
-			if (!cpu.RunInstruction()) {
+			if (kernel->GetCurrentThread() == -1) continue;
+			if (!cpu->RunInstruction()) {
 				close = true;
 				break;
 			}
 		}
+
 		ExecuteEvents();
 	}
 }
 
+void PSP::Step() {
+	GetEarliestEvent();
+	cycles++;
+	
+	if (cycles >= earlisest_event_cycles) {
+		ExecuteEvents();
+	}
+
+	if (kernel->GetCurrentThread() != -1) {
+		if (!cpu->RunInstruction()) {
+			close = true;
+		}
+	}
+}
+
 bool PSP::LoadExec(std::string path) {
-	int uid = kernel.LoadModule(path);
+	int uid = kernel->LoadModule(path);
 	if (uid == -1)
 		return false;
-	kernel.ExecModule(uid);
+	kernel->ExecModule(uid);
 
 	return true;
 }
 
 void* PSP::VirtualToPhysical(uint32_t addr) {
 	addr %= 0x40000000;
+
 	if (addr >= VRAM_START && addr <= VRAM_END) {
 		return vram.get() + addr - VRAM_START;
 	} else if (addr >= KERNEL_MEMORY_START && addr <= USER_MEMORY_END) {
@@ -81,7 +97,7 @@ void* PSP::VirtualToPhysical(uint32_t addr) {
 
 void PSP::Exit() {
 	if (exit_callback != -1) {
-		kernel.ExecuteCallback(exit_callback);
+		kernel->ExecuteCallback(exit_callback);
 	} else {
 		ForceExit();
 	}

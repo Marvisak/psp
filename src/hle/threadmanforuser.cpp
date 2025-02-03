@@ -6,12 +6,30 @@
 #include "defs.hpp"
 
 static int sceKernelCreateThread(const char* name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr, uint32_t opt_param_addr) {
-	return PSP::GetInstance()->GetKernel().CreateThread(name, entry, init_priority, stack_size, attr);
+	return PSP::GetInstance()->GetKernel()->CreateThread(name, entry, init_priority, stack_size, attr);
 }
 
-static int sceKernelStartThread(int thid, uint32_t arg_size, uint32_t arg_block_pointer) {
-	// TODO: Args
-	return PSP::GetInstance()->GetKernel().StartThread(thid);
+static int sceKernelStartThread(int thid, uint32_t arg_size, uint32_t arg_block_addr) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+	auto thread = kernel->GetKernelObject<Thread>(thid);
+	if (!thread) {
+		return SCE_KERNEL_ERROR_UNKNOWN_THID;
+	}
+
+	if (thread->GetState() != ThreadState::DORMANT) {
+		return SCE_KERNEL_ERROR_NOT_DORMANT;
+	}
+
+	if (arg_size && arg_block_addr) {
+		if (!psp->VirtualToPhysical(arg_block_addr)) {
+			return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
+		}
+		thread->SetArgs(arg_size, arg_block_addr);
+	}
+
+	kernel->StartThread(thid);
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelExitThread(int exit_status) {
@@ -25,9 +43,9 @@ static int sceKernelTerminateThread(int thid) {
 }
 
 static int sceKernelGetThreadCurrentPriority() {
-	auto& kernel = PSP::GetInstance()->GetKernel();
-	int current_thread = kernel.GetCurrentThread();
-	auto thread = kernel.GetKernelObject<Thread>(current_thread);
+	auto kernel = PSP::GetInstance()->GetKernel();
+	int current_thread = kernel->GetCurrentThread();
+	auto thread = kernel->GetKernelObject<Thread>(current_thread);
 	return thread->GetPriority();
 }
 
@@ -37,12 +55,12 @@ static int sceKernelGetThreadId() {
 }
 
 static int sceKernelReferThreadStatus(int thid, uint32_t info_addr) {
-	spdlog::info("sceKernelReferThreadStatus({}, {:x})", thid, info_addr);
+	spdlog::error("sceKernelReferThreadStatus({}, {:x})", thid, info_addr);
 	return 0;
 }
 
 static int sceKernelCreateCallback(const char* name, uint32_t entry, uint32_t common) {
-	return PSP::GetInstance()->GetKernel().CreateCallback(name, entry, common);
+	return PSP::GetInstance()->GetKernel()->CreateCallback(name, entry, common);
 }
 
 static int sceKernelDeleteCallback(int thid) {
@@ -51,13 +69,13 @@ static int sceKernelDeleteCallback(int thid) {
 }
 
 static int sceKernelSleepThreadCB() {
-	PSP::GetInstance()->GetKernel().WaitCurrentThread(WaitReason::SLEEP, true);
+	PSP::GetInstance()->GetKernel()->WaitCurrentThread(WaitReason::SLEEP, true);
 	return 0;
 }
 
 static int sceKernelDelayThread(uint32_t usec) {
 	auto psp = PSP::GetInstance();
-	auto& kernel = psp->GetKernel();
+	auto kernel = psp->GetKernel();
 	psp->EatCycles(2000);
 
 	if (usec < 200) {
@@ -68,10 +86,10 @@ static int sceKernelDelayThread(uint32_t usec) {
 	}
 
 	
-	int thid = kernel.GetCurrentThread();
-	kernel.WaitCurrentThread(WaitReason::DELAY, false);
+	int thid = kernel->GetCurrentThread();
+	kernel->WaitCurrentThread(WaitReason::DELAY, false);
 	auto func = [thid](uint64_t _) {
-		PSP::GetInstance()->GetKernel().WakeUpThread(thid, WaitReason::DELAY);
+		PSP::GetInstance()->GetKernel()->WakeUpThread(thid, WaitReason::DELAY);
 	};
 
 	psp->Schedule(US_TO_CYCLES(usec), func);

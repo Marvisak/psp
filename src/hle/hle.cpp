@@ -46,20 +46,20 @@ int GetHLEIndex(std::string module, uint32_t nid) {
 	return hle_imports.size() - 1;
 }
 
-void ReturnFromModule(CPU& _) {
-	auto& kernel = PSP::GetInstance()->GetKernel();
-	int thid = kernel.GetCurrentThread();
-	kernel.DeleteThread(thid);
+void ReturnFromModule(CPU* _) {
+	auto kernel = PSP::GetInstance()->GetKernel();
+	int thid = kernel->GetCurrentThread();
+	kernel->DeleteThread(thid);
 }
 
-void ReturnFromThread(CPU& _) {
-	auto& kernel = PSP::GetInstance()->GetKernel();
-	int thid = kernel.GetCurrentThread();
-	kernel.DeleteThread(thid);
+void ReturnFromThread(CPU* _) {
+	auto kernel = PSP::GetInstance()->GetKernel();
+	int thid = kernel->GetCurrentThread();
+	kernel->DeleteThread(thid);
 }
 
-void ReturnFromCallback(CPU& _) {
-	auto& kernel = PSP::GetInstance()->GetKernel();
-	int cbid = kernel.GetCurrentCallback();
+void ReturnFromCallback(CPU* _) {
+	auto kernel = PSP::GetInstance()->GetKernel();
+	int cbid = kernel->GetCurrentCallback();
 	spdlog::error("Exiting callbacks not implemenented");
 }
