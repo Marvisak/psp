@@ -62,6 +62,8 @@ private:
 	void MIN(uint32_t opcode);
 	void MOVN(uint32_t opcode);
 	void MOVZ(uint32_t opcode);
+	void MSUB(uint32_t opcode);
+	void MSUBU(uint32_t opcode);
 	void MTIC(uint32_t opcode);
 	void MTHI(uint32_t opcode);
 	void MTLO(uint32_t opcode);

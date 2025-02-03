@@ -46,6 +46,8 @@ bool CPU::RunInstruction() {
 		case 0x2B: SLTU(opcode); break;
 		case 0x2C: MAX(opcode); break;
 		case 0x2D: MIN(opcode); break;
+		case 0x2E: MSUB(opcode); break;
+		case 0x2F: MSUBU(opcode); break;
 		default:
 			spdlog::error("CPU: Unknown instruction opcode {:x} at {:x}", opcode, current_pc);
 			return false;
@@ -281,6 +283,24 @@ void CPU::JR(uint32_t opcode) {
 	next_pc = GetRegister(RS(opcode));
 }
 
+void CPU::MADD(uint32_t opcode) {
+	int32_t rs = GetRegister(RS(opcode));
+	int32_t rt = GetRegister(RT(opcode));
+	uint64_t milo = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
+	int64_t result = static_cast<int64_t>(milo) + static_cast<int64_t>(rs) * static_cast<int64_t>(rt);
+	hi = result >> 32;
+	lo = result;
+}
+
+void CPU::MADDU(uint32_t opcode) {
+	uint32_t rs = GetRegister(RS(opcode));
+	uint32_t rt = GetRegister(RT(opcode));
+	uint64_t milo = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
+	uint64_t result = milo + static_cast<uint64_t>(rs) * static_cast<uint64_t>(rt);
+	hi = result >> 32;
+	lo = result;
+}
+
 void CPU::MAX(uint32_t opcode) {
 	uint32_t value = std::max(static_cast<int32_t>(GetRegister(RS(opcode))), static_cast<int32_t>(GetRegister(RT(opcode))));
 	SetRegister(RD(opcode), value);
@@ -313,6 +333,24 @@ void CPU::MOVZ(uint32_t opcode) {
 		SetRegister(RD(opcode), GetRegister(RS(opcode)));
 }
 
+void CPU::MSUB(uint32_t opcode) {
+	int32_t rs = GetRegister(RS(opcode));
+	int32_t rt = GetRegister(RT(opcode));
+	uint64_t milo = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
+	int64_t result = static_cast<int64_t>(milo) - static_cast<int64_t>(rs) * static_cast<int64_t>(rt);
+	hi = result >> 32;
+	lo = result;
+}
+
+void CPU::MSUBU(uint32_t opcode) {
+	uint32_t rs = GetRegister(RS(opcode));
+	uint32_t rt = GetRegister(RT(opcode));
+	uint64_t milo = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
+	uint64_t result = milo - static_cast<uint64_t>(rs) * static_cast<uint64_t>(rt);
+	hi = result >> 32;
+	lo = result;
+}
+
 void CPU::MTIC(uint32_t opcode) {
 	interrupts_enabled = GetRegister(RT(opcode)) != 0;
 }
@@ -324,25 +362,6 @@ void CPU::MTHI(uint32_t opcode) {
 void CPU::MTLO(uint32_t opcode) {
 	lo = GetRegister(RS(opcode));
 }
-
-void CPU::MADD(uint32_t opcode) {
-	int32_t rs = GetRegister(RS(opcode));
-	int32_t rt = GetRegister(RT(opcode));
-	uint64_t milo = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
-	int64_t result = static_cast<int64_t>(milo) + static_cast<int64_t>(rs) * static_cast<int64_t>(rt);
-	hi = result >> 32;
-	lo = result;
-}
-
-void CPU::MADDU(uint32_t opcode) {
-	uint32_t rs = GetRegister(RS(opcode));
-	uint32_t rt = GetRegister(RT(opcode));
-	uint64_t milo = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
-	uint64_t result = milo + static_cast<uint64_t>(rs) * static_cast<uint64_t>(rt);
-	hi = result >> 32;
-	lo = result;
-}
-
 void CPU::MULT(uint32_t opcode) {
 	int32_t rs = GetRegister(RS(opcode));
 	int32_t rt = GetRegister(RT(opcode));
