@@ -49,8 +49,6 @@ private:
 	bool CreateStack(uint32_t stack_size);
 
 	std::string name;
-	std::array<uint32_t, 31> saved_regs;
-	std::array<float, 32> saved_fpu_regs;
 
 	ThreadState state = ThreadState::DORMANT;
 	WaitReason wait_reason = WaitReason::NONE;
@@ -58,7 +56,11 @@ private:
 
 	int priority;
 	uint32_t initial_stack;
-	uint32_t pc = 0xdeadbeef;
-	uint32_t hi = 0xdeadbeef;
-	uint32_t lo = 0xdeadbeef;
+
+	std::array<uint32_t, 31> regs;
+	std::array<float, 32> fpu_regs;
+	uint32_t pc = 0x0;
+	uint32_t hi = 0x0;
+	uint32_t lo = 0x0;
+	uint32_t fcr31 = 0x00000E00;
 };

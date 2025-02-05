@@ -24,7 +24,9 @@ public:
 	std::array<uint32_t, 31> GetRegs() const { return regs; };
 	void SetRegs(std::array<uint32_t, 31> regs) { this->regs = regs; }
 	std::array<float, 32> GetFPURegs() const { return fpu_regs; }
-	void GetFPURegs(std::array<float, 32> fpu_regs) { this->fpu_regs = fpu_regs; }
+	void SetFPURegs(std::array<float, 32> fpu_regs) { this->fpu_regs = fpu_regs; }
+	uint32_t GetFCR31() const { return fcr31 & ~(1 << 23) | (fpu_cond << 23); }
+	void SetFCR31(uint32_t val) { fcr31 = val & 0x181FFFF; fpu_cond = (val >> 23 & 1) != 0; }
 
 	uint32_t GetHI() const { return hi; }
 	uint32_t GetLO() const { return lo; }
@@ -109,16 +111,22 @@ private:
 
 	void ABSS(uint32_t opcode);
 	void ADDS(uint32_t opcode);
-	void BC1T(uint32_t opcode);
 	void CCONDS(uint32_t opcode);
+	void CEILWS(uint32_t opcode);
+	void CFC1(uint32_t opcode);
 	void CTC1(uint32_t opcode);
 	void CVTWS(uint32_t opcode);
 	void DIVS(uint32_t opcode);
+	void FLOORWS(uint32_t opcode);
+	void MFC1(uint32_t opcode);
 	void MOVS(uint32_t opcode);
+	void MTC1(uint32_t opcode);
 	void MULS(uint32_t opcode);
 	void NEGS(uint32_t opcode);
 	void SQRTS(uint32_t opcode);
 	void SUBS(uint32_t opcode);
+	void TRUNCWS(uint32_t opcode);
+	void BranchFPU(uint32_t opcode);
 
 	bool interrupts_enabled = false;
 	uint32_t pc = 0xdeadbeef;
@@ -127,10 +135,7 @@ private:
 	uint32_t lo = 0xdeadbeef;
 	std::array<uint32_t, 31> regs{0xDEADBEEF};
 
-	// TODO: make this actual value
-	struct {
-		bool cc;
-		uint8_t rm;
-	} fcr31;
+	uint32_t fcr31 = 0xdeadbeef;
+	bool fpu_cond = false;
 	std::array<float, 32> fpu_regs{ std::numeric_limits<float>::quiet_NaN() };
 };

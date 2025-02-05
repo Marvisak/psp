@@ -142,11 +142,11 @@ std::string Debugger::ReadRegisters() {
 	registers += ToLittleEndian(cpu->GetPC());
 
 	auto fpu_regs = cpu->GetFPURegs();
-	for (int i = 0; i < 32; i++) {
-		uint32_t value = *reinterpret_cast<uint32_t*>(&fpu_regs[i]);
+	for (auto reg : fpu_regs) {
+		auto value = std::bit_cast<uint32_t>(reg);
 		registers += ToLittleEndian(value);
 	}
-	registers += "xxxxxxxx"; // TODO: FCSR
+	registers += ToLittleEndian(cpu->GetFCR31());
 	registers += "xxxxxxxx";
 
 	return registers;
@@ -159,7 +159,7 @@ std::string Debugger::ReadRegister(std::string packet) {
 	if (reg < 32) {
 		return ToLittleEndian(cpu->GetRegister(reg));
 	} else if (reg > 37 && reg < 70) {
-		uint32_t value = *reinterpret_cast<uint32_t*>(&cpu->GetFPURegs()[reg - 38]);
+		auto value = std::bit_cast<uint32_t>(cpu->GetFPURegs()[reg - 38]);
 		return ToLittleEndian(value);
 	} else if (reg == 33) {
 		return ToLittleEndian(cpu->GetLO());
