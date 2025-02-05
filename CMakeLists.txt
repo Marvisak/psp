@@ -10,7 +10,7 @@ add_subdirectory(vendors/SDL)
 add_subdirectory(vendors/ELFIO)
 add_subdirectory(vendors/sockpp)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 
 list(APPEND sources 
 	src/main.cpp
@@ -28,6 +28,9 @@ list(APPEND sources
 	src/kernel/thread.cpp
 	src/kernel/callback.cpp
 	src/kernel/memory_block.cpp
+
+	src/kernel/filesystem/realfilesystem.cpp
+	src/kernel/filesystem/realfile.cpp
 
 	src/hle/hle.cpp
 	src/hle/modulemgrforuser.cpp

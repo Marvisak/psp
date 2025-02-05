@@ -12,6 +12,12 @@ constexpr auto STDIN = 0;
 constexpr auto STDOUT = 1;
 constexpr auto STDERR = 2;
 
+constexpr auto SCE_FREAD = 0x0001;
+constexpr auto SCE_FWRITE = 0x0002;
+constexpr auto SCE_FAPPEND = 0x0100;
+constexpr auto SCE_FCREAT = 0x0200;
+constexpr auto SCE_FTRUNC = 0x0400;
+
 constexpr auto SCE_DISPLAY_MODE_LCD = 0;
 
 constexpr auto SCE_ERROR_INVALID_POINTER = 0x80000103;
@@ -29,4 +35,6 @@ constexpr auto SCE_KERNEL_ERROR_ILLEGAL_PRIORITY = 0x80020193;
 constexpr auto SCE_KERNEL_ERROR_ILLEGAL_STACK_SIZE = 0x80020194;
 constexpr auto SCE_KERNEL_ERROR_UNKNOWN_THID = 0x80020198;
 constexpr auto SCE_KERNEL_ERROR_NOT_DORMANT = 0x800201A4;
+constexpr auto SCE_KERNEL_ERROR_MFILE = 0x80020320;
+constexpr auto SCE_KERNEL_ERROR_BADF = 0x80020323;
 constexpr auto SCE_KERNEL_ERROR_UNSUP = 0x80020325;

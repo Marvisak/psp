@@ -16,7 +16,8 @@ enum class WaitReason {
 	NONE,
 	DELAY,
 	SLEEP,
-	VBLANK
+	VBLANK,
+	IO
 };
 
 class Thread : public KernelObject {

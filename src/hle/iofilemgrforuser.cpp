@@ -3,10 +3,41 @@
 #include <spdlog/spdlog.h>
 
 #include "defs.hpp"
+#include "../kernel/thread.hpp"
+#include "../kernel/filesystem/file.hpp"
+
+static int FILE_DESCRIPTORS[64]{};
+
+static void IODelay(int usec) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	int thid = kernel->GetCurrentThread();
+	kernel->WaitCurrentThread(WaitReason::IO, false);
+	auto func = [thid](uint64_t _) {
+		PSP::GetInstance()->GetKernel()->WakeUpThread(thid, WaitReason::IO);
+		};
+	psp->Schedule(US_TO_CYCLES(usec), func);
+}
+
+static int CreateFD(int fid) {
+	for (int i = 3; i < 64; i++) {
+		if (FILE_DESCRIPTORS[i] == 0) {
+			FILE_DESCRIPTORS[i] = fid;
+			return i;
+		}
+	}
+
+	return SCE_KERNEL_ERROR_MFILE;
+}
 
 static int sceIoOpen(const char* file_name, int flags, int mode) {
-	spdlog::error("sceIoOpen({}, {}, {})", file_name, flags, mode);
-	return 0;
+	auto psp = PSP::GetInstance();
+	psp->EatCycles(18000);
+	IODelay(5000);
+
+	int fid = psp->GetKernel()->OpenFile(file_name, flags);
+	return CreateFD(fid);
 }
 
 static int sceIoClose(int fd) {
@@ -20,8 +51,42 @@ static int sceIoRead(int fd, uint32_t buf_addr, uint32_t size) {
 }
 
 static int sceIoWrite(int fd, uint32_t buf_addr, uint32_t size) {
-	spdlog::error("sceIoWrite({}, {:x}, {})", fd, buf_addr, size);
-	return size;
+	auto psp = PSP::GetInstance();
+
+	void* data = psp->VirtualToPhysical(buf_addr);
+	if (!data) {
+		return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
+	}
+
+	if (fd == STDOUT) {
+		std::string out(reinterpret_cast<char*>(data), size);
+		spdlog::info(out);
+		return size;
+	} else if (fd == STDERR) {
+		std::string out(reinterpret_cast<char*>(data), size);
+		spdlog::error(out);
+		return size;
+	} else if (fd == STDIN) {
+		spdlog::warn("sceIoWrite: trying to write to STDIN");
+		return 0;
+	}
+	
+	if (fd < 0 || fd >= 64) {
+		return SCE_KERNEL_ERROR_BADF;
+	}
+
+	int fid = FILE_DESCRIPTORS[fd];
+	auto file = psp->GetKernel()->GetKernelObject<File>(fid);
+	if (!file) {
+		return SCE_KERNEL_ERROR_BADF;
+	}
+
+	int delay = size / 100;
+	if (delay < 100) {
+		delay = 100;
+	}
+	IODelay(delay);
+	return file->Write(data, size);
 }
 
 static int64_t sceIoLseek(int fd, int64_t offset, int whence) {
@@ -68,7 +133,9 @@ static int sceIoDevctl(const char* devname, int cmd, uint32_t arg_addr, int arg_
 				if (data.ends_with('\n')) {
 					data.pop_back();
 				}
-				spdlog::info(data);
+				if (!data.empty()) {
+					spdlog::info(data);
+				}
 			}
 			return 0;
 		case 3:

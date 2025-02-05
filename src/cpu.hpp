@@ -40,12 +40,16 @@ private:
 	void ANDI(uint32_t opcode);
 	void BEQ(uint32_t opcode);
 	void BEQL(uint32_t opcode);
+	void BITREV(uint32_t opcode);
 	void BNE(uint32_t opcode);
 	void BNEL(uint32_t opcode);
 	void BLEZ(uint32_t opcode);
 	void BLEZL(uint32_t opcode);
 	void BGTZ(uint32_t opcode);
+	void BGTZL(uint32_t opcode);
+	void CLO(uint32_t opcode);
 	void CLZ(uint32_t opcode);
+	void DIV(uint32_t opcode);
 	void DIVU(uint32_t opcode);
 	void EXT(uint32_t opcode);
 	void INS(uint32_t opcode);
@@ -97,6 +101,8 @@ private:
 	void SW(uint32_t opcode);
 	void SWC1(uint32_t opcode);
 	void SYSCALL(uint32_t opcode);
+	void WSBH(uint32_t opcode);
+	void WSBW(uint32_t opcode);
 	void XOR(uint32_t opcode);
 	void XORI(uint32_t opcode);
 	void BranchCond(uint32_t opcode);

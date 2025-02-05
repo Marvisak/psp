@@ -43,7 +43,6 @@ bool Debugger::WaitForConnection() {
 		return false;
 	}
 	socket = response.release();
-	socket.set_non_blocking(true);
 	spdlog::info("Debugger: connection estabilished");
 
 	return true;
@@ -54,9 +53,6 @@ std::string Debugger::ReceivePacket() {
 
 	char buf;
 	auto response = socket.recv(&buf, 1);
-	if (response.is_error()) {
-		return packet;
-	}
 
 	if (response.value() == 0) {
 		spdlog::info("Debugger: GDB connection closed");
@@ -68,7 +64,6 @@ std::string Debugger::ReceivePacket() {
 		return packet;
 	}
 
-	socket.set_non_blocking(false);
 	while (true) {
 		socket.recv(&buf, 1, MSG_WAITALL);
 		if (buf != '#') {
@@ -88,7 +83,6 @@ std::string Debugger::ReceivePacket() {
 			break;
 		}
 	}
-	socket.set_non_blocking(true);
 
 	return packet;
 }
@@ -117,14 +111,12 @@ void Debugger::SendResponse(std::string response) {
 
 	socket.write(packet.data(), packet.length());
 	
-	socket.set_non_blocking(false);
 	char buffer;
 	socket.read(&buffer, 1);
 	while (buffer == '-') {
 		socket.write(packet.data(), packet.length());
 		socket.read(&buffer, 1);
 	}
-	socket.set_non_blocking(true);
 }
 
 uint8_t Debugger::CalculateChecksum(std::string packet) {
@@ -278,16 +270,18 @@ std::string Debugger::HandleVPacket(std::string packet) {
 	} else if (command == "vCont?") {
 		return "vCont;s;S;c;C;";
 	} else if (command == "vCont") {
+		auto psp = PSP::GetInstance();
 		switch (packet[6]) {
 		case 's':
-			PSP::GetInstance()->Step();
+			psp->Step();
+			psp->GetRenderer()->Frame();
 			return "S05";
 		case 'c': {
-			auto psp = PSP::GetInstance();
 			while (true) {
 				uint32_t pc = psp->GetCPU()->GetPC();
 				for (auto breakpoint : breakpoints) {
 					if (breakpoint == pc) {
+						psp->GetRenderer()->Frame();
 						return "S05";
 					}
 				}

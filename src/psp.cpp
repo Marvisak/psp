@@ -2,6 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "kernel/filesystem/realfilesystem.hpp"
 #include "renderer/software/renderer.hpp"
 #include "kernel/module.hpp"
 #include "hle/hle.hpp"
@@ -48,13 +49,13 @@ void PSP::Run() {
 	while (!close) {
 		GetEarliestEvent();
 		for (; cycles < earlisest_event_cycles; cycles++) {
-			if (kernel->GetCurrentThread() == -1) continue;
+			if (kernel->ShouldReschedule()) kernel->Reschedule();
+			else if (kernel->GetCurrentThread() == -1) continue;
 			if (!cpu->RunInstruction()) {
 				close = true;
 				break;
 			}
 		}
-
 		ExecuteEvents();
 	}
 }
@@ -67,6 +68,7 @@ void PSP::Step() {
 		ExecuteEvents();
 	}
 
+	if (kernel->ShouldReschedule()) kernel->Reschedule();
 	if (kernel->GetCurrentThread() != -1) {
 		if (!cpu->RunInstruction()) {
 			close = true;
@@ -75,7 +77,23 @@ void PSP::Step() {
 }
 
 bool PSP::LoadExec(std::string path) {
-	int uid = kernel->LoadModule(path);
+	std::string executable_path{};
+	std::filesystem::path fs_path(path);
+	if (!std::filesystem::exists(fs_path)) {
+		return false;
+	}
+
+	if (std::filesystem::is_regular_file(fs_path)) {
+		executable_path = "umd0:/" + fs_path.filename().string();
+		fs_path = fs_path.parent_path();
+	}
+
+	auto file_system = std::make_shared<RealFileSystem>(fs_path);
+
+	kernel->Mount("umd0:", file_system);
+	kernel->Mount("host0:", file_system);
+
+	int uid = kernel->LoadModule(executable_path);
 	if (uid == -1)
 		return false;
 	kernel->ExecModule(uid);

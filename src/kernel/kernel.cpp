@@ -7,6 +7,7 @@
 #include "module.hpp"
 #include "thread.hpp"
 #include "callback.hpp"
+#include "filesystem/filesystem.hpp"
 
 Kernel::Kernel() {
 	user_memory = std::make_unique<MemoryAllocator>(USER_MEMORY_START, USER_MEMORY_END - USER_MEMORY_START, 0x100);
@@ -27,17 +28,20 @@ Kernel::Kernel() {
 	memcpy(fake_syscalls_addr, opcodes.data(), sizeof(uint32_t) * opcodes.size());
 }
 
+Kernel::~Kernel() {}
+
 int Kernel::AddKernelObject(std::unique_ptr<KernelObject> obj) {
 	for (int i = next_uid; i < objects.size(); i++) {
 		if (!objects[i]) {
 			obj->SetUID(i);
 			objects[i] = std::move(obj);
 			++next_uid %= objects.size();
+			if (next_uid == 0) next_uid++;
 			return i;
 		}
 	}
 	spdlog::error("Kernel: unable to assing uid to object");
-	return -1;
+	return 0;
 }
 
 int Kernel::LoadModule(std::string path) {
@@ -66,6 +70,7 @@ bool Kernel::ExecModule(int uid) {
 int Kernel::Reschedule() {
 	auto current_thread_obj = GetKernelObject<Thread>(current_thread);
 	bool current_thread_valid = current_thread_obj && current_thread_obj->GetState() == ThreadState::READY;
+	reschedule_next_cycle = false;
 	for (int priority = 0; priority < thread_ready_queue.size(); priority++) {
 		auto& ready_threads = thread_ready_queue[priority];
 		if (ready_threads.empty())
@@ -139,7 +144,7 @@ void Kernel::StartThread(int thid) {
 
 	thread->SetState(ThreadState::READY);
 	thread_ready_queue[thread->GetPriority()].push(thid);
-	Reschedule();
+	reschedule_next_cycle = true;
 }
 
 int Kernel::CreateCallback(std::string name, uint32_t entry, uint32_t common) {
@@ -163,6 +168,32 @@ void Kernel::ExecuteCallback(int cbid) {
 	callback->Execute();
 }
 
+void Kernel::Mount(std::string mount_point, std::shared_ptr<FileSystem> file_system) {
+	mount_points[mount_point] = file_system;
+}
+
+int Kernel::OpenFile(std::string file_path, int flags) {
+	int drive_end = file_path.find('/');
+	std::string relative_path = file_path.substr(drive_end + 1);
+	std::string drive = file_path.substr(0, drive_end);
+	if (!mount_points.contains(drive)) {
+		spdlog::error("Kernel: unknown drive {}", drive);
+		return -1;
+	}
+
+	auto& file_system = mount_points[drive];
+	auto file = file_system->OpenFile(relative_path, flags);
+	if (!file) {
+		return -1;
+	}
+
+	return AddKernelObject(std::move(file));
+}
+
+void Kernel::CloseFile(int fid) {
+	objects[fid] = nullptr;
+}
+
 void Kernel::WakeUpThread(int thid, WaitReason reason) {
 	Thread* thread = GetKernelObject<Thread>(thid);
 	if (thread->GetState() != ThreadState::WAIT || thread->GetWaitReason() != reason) { return; }
@@ -170,7 +201,7 @@ void Kernel::WakeUpThread(int thid, WaitReason reason) {
 	thread->SetWaitReason(WaitReason::NONE);
 
 	thread_ready_queue[thread->GetPriority()].push(thid);
-	Reschedule();
+	reschedule_next_cycle = true;
 }
 
 void Kernel::WaitCurrentThread(WaitReason reason, bool allow_callbacks) {
@@ -178,7 +209,7 @@ void Kernel::WaitCurrentThread(WaitReason reason, bool allow_callbacks) {
 	thread->SetState(ThreadState::WAIT);
 	thread->SetWaitReason(reason);
 	thread->SetAllowCallbacks(allow_callbacks);
-	Reschedule();
+	reschedule_next_cycle = true;
 }
 
 void Kernel::WakeUpVBlank() {

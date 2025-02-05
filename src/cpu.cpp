@@ -31,8 +31,10 @@ bool CPU::RunInstruction() {
 		case 0x12: MFLO(opcode); break;
 		case 0x13: MTLO(opcode); break;
 		case 0x16: CLZ(opcode); break;
+		case 0x17: CLO(opcode); break;
 		case 0x18: MULT(opcode); break;
 		case 0x19: MULTU(opcode); break;
+		case 0x1A: DIV(opcode); break;
 		case 0x1B: DIVU(opcode); break;
 		case 0x1C: MADD(opcode); break;
 		case 0x1D: MADDU(opcode); break;
@@ -96,6 +98,7 @@ bool CPU::RunInstruction() {
 	case 0x14: BEQL(opcode); break;
 	case 0x15: BNEL(opcode); break;
 	case 0x16: BLEZL(opcode); break;
+	case 0x17: BGTZL(opcode); break;
 	case 0x1C: 
 		switch (opcode & 0xFF) {
 		case 0x24: MFIC(opcode); break;
@@ -112,12 +115,12 @@ bool CPU::RunInstruction() {
 					if ((opcode & 0x200) == 0) { SEB(opcode); break; }
 					SEH(opcode); break;
 				}
-				spdlog::error("BITREV"); return false;
+				BITREV(opcode); break;
 			}
 			if ((opcode & 0x40) == 0) {
-				spdlog::error("WSBH"); return false;
+				WSBH(opcode); break;
 			}
-			spdlog::error("WSBW"); return false;
+			WSBW(opcode); break;
 		}
 		if ((opcode & 0x4) == 0) { EXT(opcode); break; }
 		INS(opcode); break;
@@ -187,6 +190,17 @@ void CPU::BEQL(uint32_t opcode) {
 	}
 }
 
+void CPU::BITREV(uint32_t opcode) {
+	uint32_t rt = GetRegister(RT(opcode));
+	uint32_t tmp = 0;
+	for (int i = 0; i < 32; i++) {
+		if (rt & (1 << i)) {
+			tmp |= (0x80000000 >> i);
+		}
+	}
+	SetRegister(RD(opcode), tmp);
+}
+
 void CPU::BNE(uint32_t opcode) {
 	if (GetRegister(RS(opcode)) != GetRegister(RT(opcode))) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
@@ -212,7 +226,7 @@ void CPU::BLEZ(uint32_t opcode) {
 }
 
 void CPU::BLEZL(uint32_t opcode) {
-	if (GetRegister(RS(opcode)) <= GetRegister(RT(opcode))) {
+	if (static_cast<int32_t>(GetRegister(RS(opcode))) <= 0) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
 		next_pc = pc + offset;
 	} else {
@@ -221,29 +235,59 @@ void CPU::BLEZL(uint32_t opcode) {
 	}
 }
 
-void CPU::BGTZ(uint32_t opcode)
-{
+void CPU::BGTZ(uint32_t opcode) {
 	if (static_cast<int32_t>(GetRegister(RS(opcode))) > 0) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
 		next_pc = pc + offset;
 	}
 }
 
+void CPU::BGTZL(uint32_t opcode) {
+	if (static_cast<int32_t>(GetRegister(RS(opcode))) > 0) {
+		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
+		next_pc = pc + offset;
+	} else {
+		pc += 4;
+		next_pc = pc + 4;
+	}
+}
+
+void CPU::CLO(uint32_t opcode) {
+	SetRegister(RD(opcode), std::countl_one(GetRegister(RS(opcode))));
+}
+
 void CPU::CLZ(uint32_t opcode) {
 	SetRegister(RD(opcode), std::countl_zero(GetRegister(RS(opcode))));
+}
+
+void CPU::DIV(uint32_t opcode) {
+	auto n = static_cast<int32_t>(GetRegister(RS(opcode)));
+	auto d = static_cast<int32_t>(GetRegister(RT(opcode)));
+	if (d == 0) {
+		hi = n;
+		if (n >= 0) {
+			lo = 0xFFFFFFFF;
+		} else {
+			lo = 1;
+		}
+	} else if (n == 0x80000000 && d == -1) {
+		hi = 0;
+		lo = 0x80000000;
+	} else {
+		hi = n % d;
+		lo = n / d;
+	}
 }
 
 void CPU::DIVU(uint32_t opcode) {
 	uint32_t n = GetRegister(RS(opcode));
 	uint32_t d = GetRegister(RT(opcode));
 
-	if (d == 0)
-	{
+	if (d == 0) {
 		hi = n;
 		lo = 0xFFFFFFFF;
 	}
-	else
-	{
+	else {
 		hi = n % d;
 		lo = n / d;
 	}
@@ -524,12 +568,23 @@ void CPU::SRAV(uint32_t opcode) {
 }
 
 void CPU::SRL(uint32_t opcode) {
-	uint32_t value = GetRegister(RT(opcode)) >> IMM5(opcode);
+	uint32_t value = 0;
+	if (RS(opcode) == 0) {
+		value = GetRegister(RT(opcode)) >> IMM5(opcode);
+	} else if (RS(opcode) == 1) {
+		value = std::rotr(GetRegister(RT(opcode)), IMM5(opcode));
+	}
 	SetRegister(RD(opcode), value);
 }
 
 void CPU::SRLV(uint32_t opcode) {
-	uint32_t value = GetRegister(RT(opcode)) >> (GetRegister(RS(opcode)) & 0x1F);
+	uint32_t value = 0;
+	if (FD(opcode) == 0) {
+		value = GetRegister(RT(opcode)) >> (GetRegister(RS(opcode)) & 0x1F);
+	} else if (FD(opcode) == 1) {
+		value = std::rotr(GetRegister(RT(opcode)), GetRegister(RS(opcode)));
+	}
+
 	SetRegister(RD(opcode), value);
 }
 
@@ -566,6 +621,16 @@ void CPU::SYSCALL(uint32_t opcode) {
 	PSP::GetInstance()->GetKernel()->ExecHLEFunction(import_num);
 }
 
+void CPU::WSBH(uint32_t opcode) {
+	uint32_t rt = GetRegister(RT(opcode));
+	uint32_t value = ((rt & 0xFF00FF00) >> 8) | ((rt & 0x00FF00FF) << 8);
+	SetRegister(RD(opcode), value);
+}
+
+void CPU::WSBW(uint32_t opcode) {
+	SetRegister(RD(opcode), std::byteswap(GetRegister(RT(opcode))));
+}
+
 void CPU::XOR(uint32_t opcode) {
 	uint32_t value = GetRegister(RS(opcode)) ^ GetRegister(RT((opcode)));
 	SetRegister(RD(opcode), value);
@@ -576,10 +641,10 @@ void CPU::XORI(uint32_t opcode) {
 	SetRegister(RT(opcode), value);
 }
 
-void CPU::BranchCond(uint32_t opcode)
-{
+void CPU::BranchCond(uint32_t opcode) {
 	bool bgez = RT(opcode) & 1;
-	bool link = (RT(opcode) & 0x1E) == 0x10;
+	bool link = (RT(opcode) & 0x1C) == 0x10;
+	bool likely = (RT(opcode) & 2) == 0x2;
 
 	int32_t reg = static_cast<int32_t>(GetRegister(RS(opcode)));
 	bool branch = bgez ? reg >= 0 : reg < 0;
@@ -592,6 +657,9 @@ void CPU::BranchCond(uint32_t opcode)
 	{
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
 		next_pc = pc + offset;
+	} else if (likely) {
+		pc += 4;
+		next_pc = pc + 4;
 	}
 }
 

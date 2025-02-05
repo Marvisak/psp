@@ -51,19 +51,19 @@ struct PSPLibStubEntry {
 
 class Module : public KernelObject {
 public:
-	Module(std::string file_name);
+	Module(std::string file_path);
 	bool Load();
 
 	uint32_t GetOffset() const { return offset; }
 	uint32_t GetEntrypoint() const { return entrypoint; }
 	uint32_t GetGP() const { return gp; }
-	std::string GetFileName() const { return file_name; }
+	std::string GetFilePath() const { return file_path; }
 
 	std::string GetName() const { return name; }
 	KernelObjectType GetType() override { return KernelObjectType::MODULE; }
 	static KernelObjectType GetStaticType() { return KernelObjectType::MODULE; }
 private:
-	std::string file_name;
+	std::string file_path;
 	std::string name;
 	ELFIO::elfio elfio;
 

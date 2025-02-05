@@ -4,6 +4,7 @@
 #include <fstream>
 #include <queue>
 #include <array>
+#include <map>
 
 #include "memory.hpp"
 
@@ -16,7 +17,8 @@ enum class KernelObjectType {
 	MODULE,
 	THREAD,
 	CALLBACK,
-	MEMORY_BLOCK
+	MEMORY_BLOCK,
+	FILE
 };
 
 class KernelObject {
@@ -33,11 +35,13 @@ private:
 	int uid = -1;
 };
 
+class FileSystem;
 class Thread;
 enum class WaitReason;
 class Kernel {
 public:
 	Kernel();
+	~Kernel();
 	int AddKernelObject(std::unique_ptr<KernelObject> obj);
 
 	template <class T>
@@ -61,6 +65,10 @@ public:
 	int CreateCallback(std::string name, uint32_t entry, uint32_t common);
 	void ExecuteCallback(int cbid);
 
+	void Mount(std::string mount_point, std::shared_ptr<FileSystem> file_system);
+	int OpenFile(std::string file_path, int flags);
+	void CloseFile(int fid);
+
 	void WakeUpThread(int thid, WaitReason reason);
 	void WaitCurrentThread(WaitReason reason, bool allow_callbacks);
 
@@ -71,14 +79,17 @@ public:
 	int GetExecModule() const { return exec_module; }
 	int GetCurrentThread() const { return current_thread; }
 	int GetCurrentCallback() const { return current_callback; }
+	bool ShouldReschedule() const { return reschedule_next_cycle; }
 	MemoryAllocator* GetUserMemory() { return user_memory.get(); }
 	MemoryAllocator* GetKernelMemory() { return kernel_memory.get(); }
 private:
 	int exec_module = -1;
 	int current_thread = -1;
 	int current_callback = -1;
-	int next_uid = 0;
+	int next_uid = 1;
+	bool reschedule_next_cycle = false;
 
+	std::map<std::string, std::shared_ptr<FileSystem>> mount_points;
 	std::unique_ptr<MemoryAllocator> user_memory;
 	std::unique_ptr<MemoryAllocator> kernel_memory;
 	std::array<std::unique_ptr<KernelObject>, UID_COUNT> objects{};

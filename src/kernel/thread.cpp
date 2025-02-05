@@ -11,8 +11,7 @@ Thread::Thread(Module* module, uint32_t return_addr) : name("root"), priority(0x
 	CreateStack(0x40000);
 	pc = module->GetEntrypoint();
 
-	// TODO: Change this to use PSP filesystem
-	auto file_name = module->GetFileName();
+	auto file_name = module->GetFilePath();
 	int file_name_size = file_name.size() + 1;
 
 	saved_regs[30] = return_addr;

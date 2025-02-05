@@ -3,17 +3,32 @@
 #include "../psp.hpp"
 #include "module.hpp"
 #include "../hle/hle.hpp"
+#include "../hle/defs.hpp"
+#include "filesystem/file.hpp"
 
-Module::Module(std::string file_name) : file_name(file_name) {}
+Module::Module(std::string file_path) : file_path(file_path) {}
 
 bool Module::Load() {
-	if (!elfio.load(file_name, true)) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	auto fid = kernel->OpenFile(file_path, SCE_FREAD);
+	auto file = kernel->GetKernelObject<File>(fid);
+
+	auto size = file->Seek(0, std::ios::end);
+	file->Seek(0, std::ios::beg);
+
+	std::string data{};
+	data.resize(size);
+	file->Read(data.data(), size);
+	kernel->CloseFile(fid);
+	std::istringstream ss(data);
+
+	if (!elfio.load(ss, true)) {
 		spdlog::error("Module: cannot parse ELF file");
 		return false;
 	}
 
-	auto psp = PSP::GetInstance();
-	auto kernel = psp->GetKernel();
 	auto memory = kernel->GetUserMemory();
 
 	bool relocatable = elfio.get_type() != ELFIO::ET_EXEC;
@@ -38,15 +53,15 @@ bool Module::Load() {
 		auto segment = elfio.segments[i];
 		if (segment->get_type() == ELFIO::PT_LOAD) {
 			if (!relocatable) {
-				uint32_t addr = memory->AllocAt(segment->get_virtual_address(), segment->get_file_size(), mod_name);
+				uint32_t addr = memory->AllocAt(segment->get_virtual_address(), segment->get_memory_size(), mod_name);
 				void* ram_addr = psp->VirtualToPhysical(addr);
 
-				memcpy(ram_addr, segment->get_data(), segment->get_file_size());
+				memcpy(ram_addr, segment->get_data(), segment->get_memory_size());
 
 				segments[i] = addr;
 			}
 			else {
-				offset = memory->Alloc(segment->get_file_size(), mod_name);
+				offset = memory->Alloc(segment->get_memory_size(), mod_name);
 				void* ram_addr = psp->VirtualToPhysical(offset);
 
 				memcpy(ram_addr, segment->get_data(), segment->get_file_size());
