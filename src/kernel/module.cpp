@@ -56,7 +56,7 @@ bool Module::Load() {
 				uint32_t addr = memory->AllocAt(segment->get_virtual_address(), segment->get_memory_size(), mod_name);
 				void* ram_addr = psp->VirtualToPhysical(addr);
 
-				memcpy(ram_addr, segment->get_data(), segment->get_memory_size());
+				memcpy(ram_addr, segment->get_data(), segment->get_file_size());
 
 				segments[i] = addr;
 			}
