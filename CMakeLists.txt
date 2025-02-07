@@ -29,8 +29,8 @@ list(APPEND sources
 	src/kernel/callback.cpp
 	src/kernel/memory_block.cpp
 
-	src/kernel/filesystem/realfilesystem.cpp
-	src/kernel/filesystem/realfile.cpp
+	src/kernel/filesystem/directory/directoryfs.cpp
+	src/kernel/filesystem/directory/directoryfile.cpp
 
 	src/hle/hle.cpp
 	src/hle/modulemgrforuser.cpp

@@ -5,8 +5,10 @@
 #include "defs.hpp"
 #include "../kernel/thread.hpp"
 #include "../kernel/filesystem/file.hpp"
+#include "../kernel/filesystem/dirlisting.hpp"
 
-static int FILE_DESCRIPTORS[64]{};
+std::array<int, 64> FILE_DESCRIPTORS;
+std::string CWD{};
 
 static void IODelay(int usec) {
 	auto psp = PSP::GetInstance();
@@ -31,23 +33,76 @@ static int CreateFD(int fid) {
 	return SCE_KERNEL_ERROR_MFILE;
 }
 
+static int ResolveFD(int fd) {
+	if (fd > 0 && fd < FILE_DESCRIPTORS.size()) {
+		return FILE_DESCRIPTORS[fd];
+	}
+	return 0;
+}
+
+static std::string HandleCWD(std::string path) {
+	if (path.find(":/") != -1) {
+		return path;
+	}
+	else {
+		return CWD + path;
+	}
+}
+
 static int sceIoOpen(const char* file_name, int flags, int mode) {
 	auto psp = PSP::GetInstance();
 	psp->EatCycles(18000);
 	IODelay(5000);
 
-	int fid = psp->GetKernel()->OpenFile(file_name, flags);
+	int fid = psp->GetKernel()->OpenFile(HandleCWD(file_name), flags);
+	if (fid < 0) {
+		return fid;
+	}
 	return CreateFD(fid);
 }
 
 static int sceIoClose(int fd) {
-	spdlog::error("sceIoClose({})", fd);
+	auto kernel = PSP::GetInstance()->GetKernel();
+	int fid = ResolveFD(fd);
+	auto file = kernel->GetKernelObject<File>(fid);
+	if (!file) {
+		return SCE_KERNEL_ERROR_BADF;
+	}
+	FILE_DESCRIPTORS[fd] = 0;
+	kernel->RemoveKernelObject(fid);
+	IODelay(100);
 	return 0;
 }
 
 static int sceIoRead(int fd, uint32_t buf_addr, uint32_t size) {
-	spdlog::error("sceIoRead({}, {:x}, {})", fd, buf_addr, size);
-	return 0;
+	auto psp = PSP::GetInstance();
+
+	void* data = psp->VirtualToPhysical(buf_addr);
+	if (!data) {
+		return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
+	}
+
+	if (fd == STDIN) {
+		spdlog::debug("sceIoRead: trying to read from STDIN");
+		return size;
+	}
+
+	int fid = ResolveFD(fd);
+	auto file = psp->GetKernel()->GetKernelObject<File>(fid);
+	if (!file) {
+		return SCE_KERNEL_ERROR_BADF;
+	}
+
+	if ((file->GetFlags() & SCE_FREAD) == 0) {
+		return SCE_KERNEL_ERROR_BADF;
+	}
+
+	int delay = size / 100;
+	if (delay < 100) {
+		delay = 100;
+	}
+	IODelay(delay);
+	return file->Read(data, size);
 }
 
 static int sceIoWrite(int fd, uint32_t buf_addr, uint32_t size) {
@@ -66,18 +121,15 @@ static int sceIoWrite(int fd, uint32_t buf_addr, uint32_t size) {
 		std::string out(reinterpret_cast<char*>(data), size);
 		spdlog::error(out);
 		return size;
-	} else if (fd == STDIN) {
-		spdlog::warn("sceIoWrite: trying to write to STDIN");
-		return 0;
 	}
-	
-	if (fd < 0 || fd >= 64) {
+
+	int fid = ResolveFD(fd);
+	auto file = psp->GetKernel()->GetKernelObject<File>(fid);
+	if (!file) {
 		return SCE_KERNEL_ERROR_BADF;
 	}
 
-	int fid = FILE_DESCRIPTORS[fd];
-	auto file = psp->GetKernel()->GetKernelObject<File>(fid);
-	if (!file) {
+	if ((file->GetFlags() & SCE_FWRITE) == 0) {
 		return SCE_KERNEL_ERROR_BADF;
 	}
 
@@ -86,37 +138,123 @@ static int sceIoWrite(int fd, uint32_t buf_addr, uint32_t size) {
 		delay = 100;
 	}
 	IODelay(delay);
-	return file->Write(data, size);
+	file->Write(data, size);
+	return size;
 }
 
 static int64_t sceIoLseek(int fd, int64_t offset, int whence) {
-	spdlog::error("sceIoLseek({}, {}, {})", fd, offset, whence);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	int fid = ResolveFD(fd);
+	auto file = kernel->GetKernelObject<File>(fid);
+	if (!file) {
+		return SCE_KERNEL_ERROR_BADF;
+	}
+
+	psp->EatCycles(1400);
+	kernel->RescheduleNextCycle();
+	return file->Seek(offset, whence);
+}
+
+static int sceIoLseek32(int fd, int offset, int whence) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	int fid = ResolveFD(fd);
+	auto file = kernel->GetKernelObject<File>(fid);
+	if (!file) {
+		return SCE_KERNEL_ERROR_BADF;
+	}
+
+	psp->EatCycles(1400);
+	kernel->RescheduleNextCycle();
+	return file->Seek(offset, whence);
+}
+
+static int sceIoRename(const char* new_name, const char* old_name) {
+	IODelay(1000);
+	return PSP::GetInstance()->GetKernel()->Rename(HandleCWD(new_name), HandleCWD(old_name));
+}
+
+static int sceIoRemove(const char* file_name) {
+	IODelay(100);
+	return PSP::GetInstance()->GetKernel()->RemoveFile(HandleCWD(file_name));
+}
+
+static int sceIoMkdir(const char* dir_name, int mode) {
+	IODelay(1000);
+	return PSP::GetInstance()->GetKernel()->CreateDirectory(HandleCWD(dir_name));
+}
+
+static int sceIoRmdir(const char* dir_name) {
+	IODelay(1000);
+	return PSP::GetInstance()->GetKernel()->RemoveDirectory(HandleCWD(dir_name));
 }
 
 static int sceIoDopen(const char* dirname) {
-	spdlog::error("sceIoDopen({})", dirname);
-	return 0;
+	int fid = PSP::GetInstance()->GetKernel()->OpenDirectory(HandleCWD(dirname));
+	if (fid < 0) {
+		return fid;
+	}
+	return CreateFD(fid);
 }
 
 static int sceIoDread(int fd, uint32_t buf_addr) {
-	spdlog::error("sceIoDread({}, {:x})", fd, buf_addr);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+	int did = ResolveFD(fd);
+	auto directory = kernel->GetKernelObject<DirectoryListing>(did);
+	if (!directory) {
+		return SCE_KERNEL_ERROR_BADF;
+	}
+
+	SceIoDirent* dest = reinterpret_cast<SceIoDirent*>(psp->VirtualToPhysical(buf_addr));
+	if (directory->Empty()) {
+		dest->name[0] = '\0';
+		return 0;
+	}
+
+	SceIoDirent entry = directory->GetNextEntry();
+	memcpy(dest, &entry, sizeof(SceIoDirent));
+
+	return 1;
 }
 
 static int sceIoDclose(int fd) {
-	spdlog::error("sceIoDclose({})", fd);
+	auto kernel = PSP::GetInstance()->GetKernel();
+	int did = ResolveFD(fd);
+	auto directory = kernel->GetKernelObject<DirectoryListing>(did);
+	if (!directory) {
+		return SCE_KERNEL_ERROR_BADF;
+	}
+	FILE_DESCRIPTORS[fd] = 0;
+	kernel->RemoveKernelObject(did);
 	return 0;
 }
 
 static int sceIoChdir(const char* dirname) {
-	spdlog::error("sceIoChdir({})", dirname);
+	std::string path = HandleCWD(dirname);
+	std::string drive = path.substr(0, path.find('/'));
+	if (!PSP::GetInstance()->GetKernel()->DoesDriveExist(drive)) {
+		return SCE_KERNEL_ERROR_NODEV;
+	}
+
+	if (!path.ends_with("/")) {
+		path += "/";
+	}
+	CWD = path;
 	return 0;
 }
 
 static int sceIoGetstat(const char* name, uint32_t buf_addr) {
-	spdlog::error("sceIoGetstat({}, {:x})", name, buf_addr);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto stat = reinterpret_cast<SceIoStat*>(psp->VirtualToPhysical(buf_addr));
+	if (!stat) {
+		return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
+	}
+	IODelay(1000);
+	return psp->GetKernel()->GetStat(HandleCWD(name), stat);
 }
 
 static int sceIoDevctl(const char* devname, int cmd, uint32_t arg_addr, int arg_len, uint32_t buf_addr, int buf_len) {
@@ -159,7 +297,12 @@ FuncMap RegisterIoFileMgrForUser() {
 	funcs[0x810C4BC3] = HLE_I_R(sceIoClose);
 	funcs[0x6A638D83] = HLE_IUU_R(sceIoRead);
 	funcs[0x42EC03AC] = HLE_IUU_R(sceIoWrite);
-	funcs[0x27EB27B8] = HLE_II64I_64R(sceIoWrite);
+	funcs[0x27EB27B8] = HLE_II64I_64R(sceIoLseek);
+	funcs[0x68963324] = HLE_III_R(sceIoLseek32);
+	funcs[0x779103A0] = HLE_CC_R(sceIoRename);
+	funcs[0xF27A9C51] = HLE_C_R(sceIoRemove);
+	funcs[0x06A70004] = HLE_CI_R(sceIoMkdir);
+	funcs[0x1117C65F] = HLE_C_R(sceIoRmdir);
 	funcs[0xB29DDF9C] = HLE_C_R(sceIoDopen);
 	funcs[0xE3EB004C] = HLE_IU_R(sceIoDread);
 	funcs[0xEB092469] = HLE_I_R(sceIoDclose);

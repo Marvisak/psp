@@ -34,10 +34,10 @@ void SoftwareRenderer::SetFrameBuffer(uint32_t frame_buffer_address, int frame_w
 
 	uint32_t sdl_pixel_format = 0;
 	switch (pixel_format) {
-	case 0: sdl_pixel_format = SDL_PIXELFORMAT_RGB565; break;
-	case 1: sdl_pixel_format = SDL_PIXELFORMAT_RGBA5551; break;
-	case 2: sdl_pixel_format = SDL_PIXELFORMAT_RGBA4444; break;
-	case 3: sdl_pixel_format = SDL_PIXELFORMAT_RGBA8888; frame_width *= 4; break;
+	case SCE_DISPLAY_PIXEL_RGB565: sdl_pixel_format = SDL_PIXELFORMAT_RGB565; break;
+	case SCE_DISPLAY_PIXEL_RGBA5551: sdl_pixel_format = SDL_PIXELFORMAT_RGBA5551; break;
+	case SCE_DISPLAY_PIXEL_RGBA4444: sdl_pixel_format = SDL_PIXELFORMAT_RGBA4444; break;
+	case SCE_DISPLAY_PIXEL_RGBA8888: sdl_pixel_format = SDL_PIXELFORMAT_RGBA8888; frame_width *= 4; break;
 	};
 
 	if (sdl_pixel_format == 0) {

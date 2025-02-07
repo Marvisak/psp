@@ -5,8 +5,8 @@
 #include <string>
 #include <cstdint>
 
-#include "..\psp.hpp"
-#include "..\cpu.hpp"
+#include "../psp.hpp"
+#include "../cpu.hpp"
 
 struct ImportData {
 	std::string module;
@@ -74,6 +74,20 @@ FuncMap RegisterSceCtrl();
 #define HLE_C_R(func) [](CPU* cpu) { \
 		cpu->SetRegister(2, func( \
 			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu->GetRegister(4))) \
+		)); \
+	}
+
+#define HLE_CC_R(func) [](CPU* cpu) { \
+		cpu->SetRegister(2, func( \
+			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu->GetRegister(4))), \
+			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu->GetRegister(5))) \
+		)); \
+	}
+
+#define HLE_CI_R(func) [](CPU* cpu) { \
+		cpu->SetRegister(2, func( \
+			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu->GetRegister(4))), \
+			static_cast<int32_t>(cpu->GetRegister(5)) \
 		)); \
 	}
 
@@ -165,8 +179,8 @@ FuncMap RegisterSceCtrl();
 #define HLE_II64I_64R(func) [](CPU* cpu) { \
 		uint64_t value = func( \
 			static_cast<int32_t>(cpu->GetRegister(4)), \
-			static_cast<int64_t>(cpu->GetRegister(5) | (static_cast<uint64_t>(cpu->GetRegister(6)) << 32)), \
-			static_cast<int32_t>(cpu->GetRegister(7)) \
+			static_cast<int64_t>(cpu->GetRegister(6) | (static_cast<uint64_t>(cpu->GetRegister(7)) << 32)), \
+			static_cast<int32_t>(cpu->GetRegister(8)) \
 		); \
 		cpu->SetRegister(2, value & 0xFFFFFFFF); \
 		cpu->SetRegister(3, value >> 32); \

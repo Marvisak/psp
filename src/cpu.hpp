@@ -2,6 +2,7 @@
 
 #include <array>
 #include <limits>
+#include <cstdint>
 
 #define IMM26(opcode) (opcode & 0x3FFFFFF)
 #define IMM16(opcode) (opcode & 0xFFFF)

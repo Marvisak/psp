@@ -299,10 +299,9 @@ std::string Debugger::HandleVPacket(std::string packet) {
 			spdlog::warn("Debugger: unknown vCont command {}", packet);
 			return {};
 		}
-	} else {
-		spdlog::warn("Debugger: unknown v command {}", command);
-		return {};
 	}
+	spdlog::warn("Debugger: unknown v command {}", command);
+	return {};
 }
 
 std::string Debugger::ToLittleEndian(uint32_t value) {

@@ -15,13 +15,13 @@ bool Module::Load() {
 	auto fid = kernel->OpenFile(file_path, SCE_FREAD);
 	auto file = kernel->GetKernelObject<File>(fid);
 
-	auto size = file->Seek(0, std::ios::end);
-	file->Seek(0, std::ios::beg);
+	auto size = file->Seek(0, SCE_SEEK_END);
+	file->Seek(0, SCE_SEEK_SET);
 
 	std::string data{};
 	data.resize(size);
 	file->Read(data.data(), size);
-	kernel->CloseFile(fid);
+	kernel->RemoveKernelObject(fid);
 	std::istringstream ss(data);
 
 	if (!elfio.load(ss, true)) {

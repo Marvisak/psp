@@ -2,7 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include "kernel/filesystem/realfilesystem.hpp"
+#include "kernel/filesystem/directory/directoryfs.hpp"
 #include "renderer/software/renderer.hpp"
 #include "kernel/module.hpp"
 #include "hle/hle.hpp"
@@ -88,7 +88,7 @@ bool PSP::LoadExec(std::string path) {
 		fs_path = fs_path.parent_path();
 	}
 
-	auto file_system = std::make_shared<RealFileSystem>(fs_path);
+	auto file_system = std::make_shared<DirectoryFileSystem>(fs_path);
 
 	kernel->Mount("umd0:", file_system);
 	kernel->Mount("host0:", file_system);

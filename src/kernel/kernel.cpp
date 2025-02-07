@@ -136,7 +136,7 @@ void Kernel::DeleteThread(int thid) {
 			spdlog::warn("Kernel: no thread to reschedule to");
 		}
 	}
-	objects[thid] = nullptr;
+	RemoveKernelObject(thid);
 }
 
 void Kernel::StartThread(int thid) {
@@ -169,29 +169,130 @@ void Kernel::ExecuteCallback(int cbid) {
 }
 
 void Kernel::Mount(std::string mount_point, std::shared_ptr<FileSystem> file_system) {
-	mount_points[mount_point] = file_system;
+	drives[mount_point] = file_system;
 }
 
-int Kernel::OpenFile(std::string file_path, int flags) {
-	int drive_end = file_path.find('/');
-	std::string relative_path = file_path.substr(drive_end + 1);
-	std::string drive = file_path.substr(0, drive_end);
-	if (!mount_points.contains(drive)) {
+int Kernel::OpenFile(std::string path, int flags) {
+	int drive_end = path.find('/');
+	std::string relative_path = path.substr(drive_end + 1);
+	std::string drive = path.substr(0, drive_end);
+	if (!DoesDriveExist(drive)) {
 		spdlog::error("Kernel: unknown drive {}", drive);
-		return -1;
+		return SCE_KERNEL_ERROR_NODEV;
 	}
 
-	auto& file_system = mount_points[drive];
+	auto& file_system = drives[drive];
 	auto file = file_system->OpenFile(relative_path, flags);
 	if (!file) {
-		return -1;
+		return SCE_ERROR_ERRNO_ENOENT;
 	}
 
 	return AddKernelObject(std::move(file));
 }
 
-void Kernel::CloseFile(int fid) {
-	objects[fid] = nullptr;
+int Kernel::OpenDirectory(std::string path) {
+	int drive_end = path.find('/');
+	if (drive_end == -1) drive_end = path.size();
+	std::string relative_path = drive_end == path.size() ? "" : path.substr(drive_end + 1);
+	std::string drive = path.substr(0, drive_end);
+	if (!DoesDriveExist(drive)) {
+		spdlog::error("Kernel: unknown drive {}", drive);
+		return SCE_KERNEL_ERROR_NODEV;
+	}
+
+	auto& file_system = drives[drive];
+	auto directory = file_system->OpenDirectory(relative_path);
+	if (!directory) {
+		return SCE_ERROR_ERRNO_ENOENT;
+	}
+
+	return AddKernelObject(std::move(directory));
+}
+
+int Kernel::CreateDirectory(std::string path) {
+	int drive_end = path.find('/');
+	std::string relative_path = path.substr(drive_end + 1);
+	std::string drive = path.substr(0, drive_end);
+	if (!DoesDriveExist(drive)) {
+		spdlog::error("Kernel: unknown drive {}", drive);
+		return SCE_KERNEL_ERROR_NODEV;
+	}
+
+	auto& file_system = drives[drive];
+	file_system->CreateDirectory(relative_path);
+
+	return 0;
+}
+
+int Kernel::GetStat(std::string path, SceIoStat* data) {
+	int drive_end = path.find('/');
+	std::string relative_path = path.substr(drive_end + 1);
+	std::string drive = path.substr(0, drive_end);
+	if (!DoesDriveExist(drive)) {
+		spdlog::error("Kernel: unknown drive {}", drive);
+		return SCE_KERNEL_ERROR_NODEV;
+	}
+
+	auto& file_system = drives[drive];
+	if (!file_system->GetStat(relative_path, data)) {
+		return SCE_ERROR_ERRNO_ENOENT;
+	}
+	return 0;
+}
+
+int Kernel::RemoveFile(std::string path) {
+	int drive_end = path.find('/');
+	std::string relative_path = path.substr(drive_end + 1);
+	std::string drive = path.substr(0, drive_end);
+	if (!DoesDriveExist(drive)) {
+		spdlog::error("Kernel: unknown drive {}", drive);
+		return SCE_KERNEL_ERROR_NODEV;
+	}
+
+	auto& file_system = drives[drive];
+	if (!file_system->RemoveFile(relative_path)) {
+		return SCE_ERROR_ERRNO_ENOENT;
+	}
+	return 0;
+}
+
+int Kernel::RemoveDirectory(std::string path) {
+	int drive_end = path.find('/');
+	std::string relative_path = path.substr(drive_end + 1);
+	std::string drive = path.substr(0, drive_end);
+	if (!DoesDriveExist(drive)) {
+		spdlog::error("Kernel: unknown drive {}", drive);
+		return SCE_KERNEL_ERROR_NODEV;
+	}
+
+	auto& file_system = drives[drive];
+	if (!file_system->RemoveDirectory(relative_path)) {
+		return SCE_ERROR_ERRNO_ENOENT;
+	}
+	return 0;
+}
+
+int Kernel::Rename(std::string old_path, std::string new_path) {
+	int old_drive_end = old_path.find('/');
+	std::string old_relative_path = old_path.substr(old_drive_end + 1);
+	std::string old_drive = old_path.substr(0, old_drive_end);
+	if (!DoesDriveExist(old_drive)) {
+		spdlog::error("Kernel: unknown drive {}", old_drive);
+		return SCE_KERNEL_ERROR_NODEV;
+	}
+
+	int new_drive_end = new_path.find('/');
+	std::string new_relative_path = new_path.substr(new_drive_end + 1);
+	std::string new_drive = new_path.substr(0, new_drive_end);
+	if (old_drive != new_drive) {
+		return SCE_KERNEL_ERROR_XDEV;
+	}
+
+	auto& file_system = drives[old_drive];
+	if (!file_system->Rename(old_relative_path, new_relative_path)) {
+		return SCE_ERROR_ERRNO_ENOENT;
+	}
+	return 0;
 }
 
 void Kernel::WakeUpThread(int thid, WaitReason reason) {

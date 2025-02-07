@@ -2,10 +2,12 @@
 
 #include <type_traits>
 #include <fstream>
+#include <memory>
 #include <queue>
 #include <array>
 #include <map>
 
+#include "../hle/defs.hpp"
 #include "memory.hpp"
 
 #undef CALLBACK
@@ -18,7 +20,8 @@ enum class KernelObjectType {
 	THREAD,
 	CALLBACK,
 	MEMORY_BLOCK,
-	FILE
+	FILE,
+	DIRECTORY
 };
 
 class KernelObject {
@@ -42,8 +45,9 @@ class Kernel {
 public:
 	Kernel();
 	~Kernel();
-	int AddKernelObject(std::unique_ptr<KernelObject> obj);
 
+	int AddKernelObject(std::unique_ptr<KernelObject> obj);
+	void RemoveKernelObject(int uid) { objects[uid] = nullptr; }
 	template <class T>
 	requires std::is_base_of_v<KernelObject, T>
 	T* GetKernelObject(int uid) {
@@ -58,6 +62,8 @@ public:
 	bool ExecModule(int uid);
 
 	int Reschedule();
+	void RescheduleNextCycle() { reschedule_next_cycle = true; }
+	bool ShouldReschedule() const { return reschedule_next_cycle; }
 	int CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr);
 	void DeleteThread(int thid);
 	void StartThread(int thid);
@@ -66,8 +72,14 @@ public:
 	void ExecuteCallback(int cbid);
 
 	void Mount(std::string mount_point, std::shared_ptr<FileSystem> file_system);
-	int OpenFile(std::string file_path, int flags);
-	void CloseFile(int fid);
+	bool DoesDriveExist(std::string mount_point) { return drives.contains(mount_point); }
+	int OpenFile(std::string path, int flags);
+	int OpenDirectory(std::string path);
+	int CreateDirectory(std::string path);
+	int GetStat(std::string path, SceIoStat* data);
+	int Rename(std::string old_path, std::string new_path);
+	int RemoveFile(std::string path);
+	int RemoveDirectory(std::string path);
 
 	void WakeUpThread(int thid, WaitReason reason);
 	void WaitCurrentThread(WaitReason reason, bool allow_callbacks);
@@ -79,7 +91,6 @@ public:
 	int GetExecModule() const { return exec_module; }
 	int GetCurrentThread() const { return current_thread; }
 	int GetCurrentCallback() const { return current_callback; }
-	bool ShouldReschedule() const { return reschedule_next_cycle; }
 	MemoryAllocator* GetUserMemory() { return user_memory.get(); }
 	MemoryAllocator* GetKernelMemory() { return kernel_memory.get(); }
 private:
@@ -89,7 +100,7 @@ private:
 	int next_uid = 1;
 	bool reschedule_next_cycle = false;
 
-	std::map<std::string, std::shared_ptr<FileSystem>> mount_points;
+	std::map<std::string, std::shared_ptr<FileSystem>> drives;
 	std::unique_ptr<MemoryAllocator> user_memory;
 	std::unique_ptr<MemoryAllocator> kernel_memory;
 	std::array<std::unique_ptr<KernelObject>, UID_COUNT> objects{};

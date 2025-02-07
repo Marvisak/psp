@@ -1,6 +1,8 @@
-#include "realfile.hpp"
+#include "directoryfile.hpp"
 
-#include "../../hle/defs.hpp"
+#include "../../../hle/defs.hpp"
+
+#include <spdlog/spdlog.h>
 
 RealFile::RealFile(std::filesystem::path file_path, int flags) : flags(flags) {
 	std::ios_base::openmode mode = std::ios::binary;
@@ -21,22 +23,31 @@ RealFile::RealFile(std::filesystem::path file_path, int flags) : flags(flags) {
 }
 
 int64_t RealFile::Seek(int64_t offset, int whence) {
-	file.seekg(offset, whence);
-	return file.tellg();
+	std::ios_base::seekdir way = std::ios::cur;
+	switch (whence) {
+	case SCE_SEEK_SET: way = std::ios::beg; break;
+	case SCE_SEEK_CUR: way = std::ios::cur; break;
+	case SCE_SEEK_END: way = std::ios::end; break;
+	}
+
+	file.seekg(offset, way);
+	int64_t pos = file.tellg();
+	if (file.fail()) {
+		file.clear();
+	}
+
+	return pos;
 }
 
 uint32_t RealFile::Read(void* buffer, uint32_t len) {
 	file.read(reinterpret_cast<char*>(buffer), len);
-	if (file) {
-		return len;
+	if (file.fail()) {
+		file.clear();
 	}
+
 	return file.gcount();
 }
 
-uint32_t RealFile::Write(void* buffer, uint32_t len) {
+void RealFile::Write(void* buffer, uint32_t len) {
 	file.write(reinterpret_cast<char*>(buffer), len);
-	if (file) {
-		return len;
-	}
-	return 0;
 }
