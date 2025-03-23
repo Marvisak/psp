@@ -13,3 +13,6 @@
 [submodule "vendors/sockpp"]
 	path = vendors/sockpp
 	url = https://github.com/fpagliughi/sockpp.git
+[submodule "vendors/glm"]
+	path = vendors/glm
+	url = https://github.com/g-truc/glm.git
