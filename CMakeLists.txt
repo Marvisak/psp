@@ -9,6 +9,7 @@ add_subdirectory(vendors/CLI11)
 add_subdirectory(vendors/SDL)
 add_subdirectory(vendors/ELFIO)
 add_subdirectory(vendors/sockpp)
+add_subdirectory(vendors/glm)
 
 set(CMAKE_CXX_STANDARD 23)
 
@@ -45,8 +46,14 @@ list(APPEND sources
 	src/hle/kernel_library.cpp
 	src/hle/stdioforuser.cpp
 	src/hle/scectrl.cpp
+	src/hle/scedmac.cpp
+	src/hle/utilsforuser.cpp
+	src/hle/sceaudio.cpp
+	src/hle/scepower.cpp
 )
 
 add_executable(psp ${sources})
-target_link_libraries(psp PRIVATE Sockpp::sockpp-static elfio::elfio spdlog::spdlog CLI11::CLI11 SDL2::SDL2-static SDL2::SDL2main)
+target_link_libraries(psp PRIVATE Sockpp::sockpp-static elfio::elfio spdlog::spdlog CLI11::CLI11 SDL3::SDL3-static glm::glm)
 target_include_directories(psp PRIVATE include)
+
+SET_TARGET_PROPERTIES(psp PROPERTIES LINK_FLAGS "/PROFILE")

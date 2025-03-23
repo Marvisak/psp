@@ -53,12 +53,13 @@ bool Module::Load() {
 		auto segment = elfio.segments[i];
 		if (segment->get_type() == ELFIO::PT_LOAD) {
 			if (!relocatable) {
-				uint32_t addr = memory->AllocAt(segment->get_virtual_address(), segment->get_memory_size(), mod_name);
-				void* ram_addr = psp->VirtualToPhysical(addr);
+				uint32_t segment_addr = segment->get_virtual_address();
+				uint32_t block_addr = memory->AllocAt(segment_addr, segment->get_memory_size(), mod_name);
+				void* ram_addr = psp->VirtualToPhysical(segment_addr);
 
 				memcpy(ram_addr, segment->get_data(), segment->get_file_size());
 
-				segments[i] = addr;
+				segments[i] = block_addr;
 			}
 			else {
 				offset = memory->Alloc(segment->get_memory_size(), mod_name);
@@ -138,8 +139,8 @@ bool Module::Load() {
 		for (int i = 0; i < entry->num_funcs; i++) {
 			uint32_t nid = nids[i];
 			if (!hle_module.contains(nid)) {
+				// The game will crash if it tries to call missing function
 				spdlog::error("Module: HLE module {} is missing {:x} NID function", module_name, nid);
-				return false;
 			}
 
 			int index = GetHLEIndex(module_name, nid);

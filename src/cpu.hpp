@@ -36,6 +36,8 @@ public:
 
 	void SetRegister(int index, uint32_t value);
 	uint32_t GetRegister(int index);
+
+	void SetFPURegister(int index, float value) { fpu_regs[index] = value; }
 private:
 	void ADDIU(uint32_t opcode);
 	void ADDU(uint32_t opcode);
@@ -84,6 +86,8 @@ private:
 	void LUI(uint32_t opcode);
 	void LW(uint32_t opcode);
 	void LWC1(uint32_t opcode);
+	void LWL(uint32_t opcode);
+	void LWR(uint32_t opcode);
 	void OR(uint32_t opcode);
 	void ORI(uint32_t opcode);
 	void SB(uint32_t opcode);
@@ -103,6 +107,8 @@ private:
 	void SUBU(uint32_t opcode);
 	void SW(uint32_t opcode);
 	void SWC1(uint32_t opcode);
+	void SWL(uint32_t opcode);
+	void SWR(uint32_t opcode);
 	void SYSCALL(uint32_t opcode);
 	void WSBH(uint32_t opcode);
 	void WSBW(uint32_t opcode);
@@ -116,6 +122,7 @@ private:
 	void CEILWS(uint32_t opcode);
 	void CFC1(uint32_t opcode);
 	void CTC1(uint32_t opcode);
+	void CVTSW(uint32_t opcode);
 	void CVTWS(uint32_t opcode);
 	void DIVS(uint32_t opcode);
 	void FLOORWS(uint32_t opcode);

@@ -26,6 +26,8 @@ void ReturnFromCallback(CPU* _);
 void RegisterHLE();
 int GetHLEIndex(std::string module, uint32_t nid);
 
+void HLEDelay(int usec);
+
 FuncMap RegisterModuleMgrForUser();
 FuncMap RegisterSysMemUserForUser();
 FuncMap RegisterThreadManForUser();
@@ -38,6 +40,10 @@ FuncMap RegisterIoFileMgrForUser();
 FuncMap RegisterKernelLibrary();
 FuncMap RegisterStdioForUser();
 FuncMap RegisterSceCtrl();
+FuncMap RegisterSceDmac();
+FuncMap RegisterUtilsForUser();
+FuncMap RegisterSceAudio();
+FuncMap RegisterScePower();
 
 #define HLE_V(func) [](CPU* cpu) { \
 		func(); \
@@ -51,6 +57,10 @@ FuncMap RegisterSceCtrl();
 
 #define HLE_R(func) [](CPU* cpu) { \
 		cpu->SetRegister(2, func()); \
+	}
+
+#define HLE_RF(func) [](CPU* cpu) { \
+		cpu->SetFPURegister(0, func()); \
 	}
 
 #define HLE_64R(func) [](CPU* cpu) { \
@@ -116,6 +126,13 @@ FuncMap RegisterSceCtrl();
 		cpu->SetRegister(2, func( \
 			static_cast<int32_t>(cpu->GetRegister(4)), \
 			static_cast<int32_t>(cpu->GetRegister(5)) \
+		)); \
+	}
+
+#define HLE_UU_R(func) [](CPU* cpu) { \
+		cpu->SetRegister(2, func( \
+			cpu->GetRegister(4), \
+			cpu->GetRegister(5) \
 		)); \
 	}
 
@@ -195,6 +212,15 @@ FuncMap RegisterSceCtrl();
 		)); \
 	}
 
+#define HLE_CUIU_R(func)[](CPU* cpu) { \
+		cpu->SetRegister(2, func( \
+			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu->GetRegister(4))), \
+			cpu->GetRegister(5), \
+			static_cast<int32_t>(cpu->GetRegister(6)), \
+			cpu->GetRegister(7) \
+		)); \
+	}
+
 #define HLE_CUUU_R(func) [](CPU* cpu) { \
 		cpu->SetRegister(2, func( \
 			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu->GetRegister(4))), \
@@ -228,6 +254,15 @@ FuncMap RegisterSceCtrl();
 			static_cast<int32_t>(cpu->GetRegister(5)), \
 			static_cast<int32_t>(cpu->GetRegister(6)), \
 			static_cast<int32_t>(cpu->GetRegister(7)) \
+		)); \
+	}
+
+#define HLE_IIIU_R(func) [](CPU* cpu) { \
+		cpu->SetRegister(2, func( \
+			static_cast<int32_t>(cpu->GetRegister(4)), \
+			static_cast<int32_t>(cpu->GetRegister(5)), \
+			static_cast<int32_t>(cpu->GetRegister(6)), \
+			cpu->GetRegister(7) \
 		)); \
 	}
 

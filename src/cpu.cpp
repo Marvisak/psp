@@ -1,6 +1,8 @@
 #include "cpu.hpp"
 
 #include <spdlog/spdlog.h>
+#include <glm/integer.hpp>
+
 
 #include "psp.hpp"
 
@@ -92,6 +94,7 @@ bool CPU::RunInstruction() {
 				case 0x0D: TRUNCWS(opcode); break;
 				case 0x0E: CEILWS(opcode); break;
 				case 0x0F: FLOORWS(opcode); break;
+				case 0x20: CVTSW(opcode); break;
 				case 0x24: CVTWS(opcode); break;
 				default:
 					spdlog::error("CPU: Unknown COP1 instruction opcode {:x} at {:x}", opcode, current_pc);
@@ -133,12 +136,16 @@ bool CPU::RunInstruction() {
 	}
 	case 0x20: LB(opcode); break;
 	case 0x21: LH(opcode); break;
+	case 0x22: LWL(opcode); break;
 	case 0x23: LW(opcode); break;
 	case 0x24: LBU(opcode); break;
 	case 0x25: LHU(opcode); break;
+	case 0x26: LWR(opcode); break;
 	case 0x28: SB(opcode); break;
 	case 0x29: SH(opcode); break;
+	case 0x2A: SWL(opcode); break;
 	case 0x2B: SW(opcode); break;
+	case 0x2E: SWR(opcode); break;
 	case 0x31: LWC1(opcode); break;
 	case 0x39: SWC1(opcode); break;
 	default:
@@ -197,14 +204,8 @@ void CPU::BEQL(uint32_t opcode) {
 }
 
 void CPU::BITREV(uint32_t opcode) {
-	uint32_t rt = GetRegister(RT(opcode));
-	uint32_t tmp = 0;
-	for (int i = 0; i < 32; i++) {
-		if (rt & (1 << i)) {
-			tmp |= (0x80000000 >> i);
-		}
-	}
-	SetRegister(RD(opcode), tmp);
+	uint32_t value = glm::bitfieldReverse(GetRegister(RT(opcode)));
+	SetRegister(RD(opcode), value);
 }
 
 void CPU::BNE(uint32_t opcode) {
@@ -300,16 +301,14 @@ void CPU::DIVU(uint32_t opcode) {
 }
 
 void CPU::EXT(uint32_t opcode) {
-	int size = MSBD(opcode) + 1;
-	uint32_t mask = 0xFFFFFFFFUL >> (32 - size);
-	SetRegister(RT(opcode), (GetRegister(RS(opcode)) >> IMM5(opcode)) & mask);
+	uint32_t value = glm::bitfieldExtract(GetRegister(RS(opcode)), IMM5(opcode), MSBD(opcode) + 1);
+	SetRegister(RT(opcode), value);
 }
 
 void CPU::INS(uint32_t opcode) {
-	int size = (MSBD(opcode) + 1) - IMM5(opcode);
-	uint32_t source_mask = 0xFFFFFFFFUL >> (32 - size);
-	uint32_t dest_mask = source_mask << IMM5(opcode);
-	uint32_t value = (GetRegister(RT(opcode)) & ~dest_mask) | ((GetRegister(RS(opcode)) & source_mask) << IMM5(opcode));
+	uint8_t bits = IMM5(opcode);
+	uint8_t size = (MSBD(opcode) + 1) - bits;
+	uint32_t value = glm::bitfieldInsert(GetRegister(RT(opcode)), GetRegister(RS(opcode)), bits, size);
 	SetRegister(RT(opcode), value);
 }
 
@@ -495,6 +494,24 @@ void CPU::LWC1(uint32_t opcode) {
 	fpu_regs[RT(opcode)] = std::bit_cast<float>(value);
 }
 
+void CPU::LWL(uint32_t opcode) {
+	auto psp = PSP::GetInstance();
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+	uint32_t shift = (addr & 0x3) * 8;
+	uint32_t mem = psp->ReadMemory32(addr & 0xFFFFFFFC);
+	uint32_t result = (GetRegister(RT(opcode)) & (0x00FFFFFF >> shift)) | (mem << (24 - shift));
+	SetRegister(RT(opcode), result);
+}
+
+void CPU::LWR(uint32_t opcode) {
+	auto psp = PSP::GetInstance();
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+	uint32_t shift = (addr & 0x3) * 8;
+	uint32_t mem = psp->ReadMemory32(addr & 0xFFFFFFFC);
+	uint32_t result = (GetRegister(RT(opcode)) & (0x0FFFFFF00 << (24 - shift))) | (mem >> shift);
+	SetRegister(RT(opcode), result);
+}
+
 void CPU::OR(uint32_t opcode) {
 	uint32_t value = GetRegister(RS(opcode)) | GetRegister(RT(opcode));
 	SetRegister(RD(opcode), value);
@@ -622,6 +639,24 @@ void CPU::SWC1(uint32_t opcode) {
 	PSP::GetInstance()->WriteMemory32(addr, value);
 }
 
+void CPU::SWL(uint32_t opcode) {
+	auto psp = PSP::GetInstance();
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+	uint32_t shift = (addr & 0x3) * 8;
+	uint32_t mem = psp->ReadMemory32(addr & 0xFFFFFFFC);
+	uint32_t result = (GetRegister(RT(opcode)) >> (24 - shift)) | (mem & (0xFFFFFF00 << shift));
+	psp->WriteMemory32(addr & 0xFFFFFFFC, result);
+}
+
+void CPU::SWR(uint32_t opcode) {
+	auto psp = PSP::GetInstance();
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+	uint32_t shift = (addr & 0x3) * 8;
+	uint32_t mem = psp->ReadMemory32(addr & 0xFFFFFFFC);
+	uint32_t result = (GetRegister(RT(opcode)) << shift) | (mem & (0x00FFFFFF >> (24 - shift)));
+	psp->WriteMemory32(addr & 0xFFFFFFFC, result);
+}
+
 void CPU::SYSCALL(uint32_t opcode) {
 	uint32_t import_num = opcode >> 6;
 	PSP::GetInstance()->GetKernel()->ExecHLEFunction(import_num);
@@ -717,6 +752,11 @@ void CPU::CTC1(uint32_t opcode) {
 	if (FS(opcode) == 31) {
 		SetFCR31(value);
 	}
+}
+
+void CPU::CVTSW(uint32_t opcode) {
+	float fs = fpu_regs[FS(opcode)];
+	fpu_regs[FD(opcode)] = std::bit_cast<int>(fs);
 }
 
 void CPU::CVTWS(uint32_t opcode) {

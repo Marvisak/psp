@@ -7,32 +7,14 @@
 #include "kernel/module.hpp"
 #include "hle/hle.hpp"
 
-static void VBlankEndHandler(uint64_t cycles_late) {
-	PSP::GetInstance()->SetVBlank(false);
-}
-
-static void VBlankHandler(uint64_t cycles_late) {
-	auto psp = PSP::GetInstance();
-
-	psp->GetKernel()->WakeUpVBlank();
-	psp->GetRenderer()->Frame();
-	psp->SetVBlank(true);
-
-	uint64_t frame_cycles = MS_TO_CYCLES(1001.0 / static_cast<double>(REFRESH_RATE));
-	uint64_t cycles = frame_cycles - cycles_late;
-	psp->Schedule(cycles, VBlankHandler);
-	psp->Schedule(MS_TO_CYCLES(0.7315), VBlankEndHandler);
-}
-
 PSP::PSP(RendererType renderer_type) {
 	instance = this;
 	ram = std::make_unique<uint8_t[]>(USER_MEMORY_END - KERNEL_MEMORY_START);
 	vram = std::make_unique<uint8_t[]>(VRAM_END - VRAM_START);
 	kernel = std::make_unique<Kernel>();
 	cpu = std::make_unique<CPU>();
-	RegisterHLE();
 
-	if (SDL_Init(SDL_INIT_VIDEO)) {
+	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		spdlog::error("PSP: SDL init error {}", SDL_GetError());
 		return;
 	}
@@ -42,15 +24,24 @@ PSP::PSP(RendererType renderer_type) {
 		renderer = std::make_unique<SoftwareRenderer>();
 		break;
 	}
-	VBlankHandler(0);
+	RegisterHLE();
 }
 
 void PSP::Run() {
 	while (!close) {
 		GetEarliestEvent();
-		for (; cycles < earlisest_event_cycles; cycles++) {
-			if (kernel->ShouldReschedule()) kernel->Reschedule();
-			else if (kernel->GetCurrentThread() == -1) continue;
+		for (; cycles < earliest_event_cycles; cycles++) {
+			if (renderer->ShouldRun()) { 
+				renderer->Step();
+			}
+
+			if (kernel->ShouldReschedule()) { 
+				kernel->Reschedule();
+			}
+
+			if (kernel->GetCurrentThread() == -1) {
+				continue;
+			}
 			if (!cpu->RunInstruction()) {
 				close = true;
 				break;
@@ -64,10 +55,11 @@ void PSP::Step() {
 	GetEarliestEvent();
 	cycles++;
 	
-	if (cycles >= earlisest_event_cycles) {
+	if (cycles >= earliest_event_cycles) {
 		ExecuteEvents();
 	}
 
+	renderer->Step();
 	if (kernel->ShouldReschedule()) kernel->Reschedule();
 	if (kernel->GetCurrentThread() != -1) {
 		if (!cpu->RunInstruction()) {
@@ -102,15 +94,26 @@ bool PSP::LoadExec(std::string path) {
 }
 
 void* PSP::VirtualToPhysical(uint32_t addr) {
-	addr %= 0x40000000;
+	addr &= 0x0FFFFFFF;
 
 	if (addr >= VRAM_START && addr <= VRAM_END) {
-		return vram.get() + addr - VRAM_START;
+		return vram.get() + ((addr - VRAM_START) % 0x1FFFFF);
 	} else if (addr >= KERNEL_MEMORY_START && addr <= USER_MEMORY_END) {
 		return ram.get() + addr - KERNEL_MEMORY_START;
 	}
 	spdlog::error("PSP: cannot convert {:x} to physical addr", addr);
 	return nullptr;
+}
+
+uint32_t PSP::GetMaxSize(uint32_t addr) {
+	if (addr >= VRAM_START && addr <= VRAM_END) {
+		return VRAM_END - addr;
+	}
+	else if (addr >= USER_MEMORY_START && addr <= USER_MEMORY_END) {
+		return USER_MEMORY_END - addr;
+	}
+	spdlog::error("PSP: cannot get {:x} max size", addr);
+	return 0;
 }
 
 void PSP::Exit() {
@@ -122,8 +125,9 @@ void PSP::Exit() {
 }
 
 void PSP::ForceExit() {
+	renderer->Frame();
 	close = true;
-	earlisest_event_cycles = 0;
+	earliest_event_cycles = 0;
 }
 
 uint8_t PSP::ReadMemory8(uint32_t addr) {
@@ -176,10 +180,10 @@ void PSP::Schedule(uint64_t cycles, SchedulerFunc func) {
 }
 
 void PSP::GetEarliestEvent() {
-	earlisest_event_cycles = ULLONG_MAX;
+	earliest_event_cycles = ULLONG_MAX;
 	for (auto& event : events) {
-		if (earlisest_event_cycles > event.cycle_trigger) {
-			earlisest_event_cycles = event.cycle_trigger;
+		if (earliest_event_cycles > event.cycle_trigger) {
+			earliest_event_cycles = event.cycle_trigger;
 		}
 	}
 }
@@ -193,4 +197,8 @@ void PSP::ExecuteEvents() {
 			i--;
 		}
 	}
+}
+
+uint64_t PSP::GetSystemTime() {
+	return cycles * 100000 / CPU_HZ;
 }

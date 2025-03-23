@@ -3,7 +3,7 @@
 #include <type_traits>
 #include <fstream>
 #include <memory>
-#include <queue>
+#include <vector>
 #include <array>
 #include <map>
 
@@ -65,7 +65,7 @@ public:
 	void RescheduleNextCycle() { reschedule_next_cycle = true; }
 	bool ShouldReschedule() const { return reschedule_next_cycle; }
 	int CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr);
-	void DeleteThread(int thid);
+	int TerminateThread(int thid, bool del);
 	void StartThread(int thid);
 
 	int CreateCallback(std::string name, uint32_t entry, uint32_t common);
@@ -83,8 +83,6 @@ public:
 
 	void WakeUpThread(int thid, WaitReason reason);
 	void WaitCurrentThread(WaitReason reason, bool allow_callbacks);
-
-	void WakeUpVBlank();
 
 	void ExecHLEFunction(int import_index);
 
@@ -104,5 +102,5 @@ private:
 	std::unique_ptr<MemoryAllocator> user_memory;
 	std::unique_ptr<MemoryAllocator> kernel_memory;
 	std::array<std::unique_ptr<KernelObject>, UID_COUNT> objects{};
-	std::array<std::queue<int>, 111> thread_ready_queue{};
+	std::array<std::vector<int>, 128> thread_ready_queue{};
 };

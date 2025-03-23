@@ -76,23 +76,36 @@ int Kernel::Reschedule() {
 		if (ready_threads.empty())
 			continue;
 
-		if (current_thread_valid && current_thread_obj->GetPriority() >= priority)
+		if (current_thread_valid && current_thread_obj->GetPriority() <= priority)
 			break;
 
-		int ready_thid = ready_threads.front();
-		ready_threads.pop();
+		Thread* ready_thread = nullptr;
+		for (auto thid : ready_threads) {
+			auto thread = GetKernelObject<Thread>(thid);
+			if (!thread) {
+				spdlog::error("Kernel: thread in ready queue doesn't exist");
+				continue;
+			}
+			if (thread->GetState() == ThreadState::READY) {
+				ready_thread = thread;
+			}
+		}
 
-		auto ready_thread = GetKernelObject<Thread>(ready_thid);
 		if (!ready_thread) {
-			spdlog::error("Kernel: thread in ready queue doesn't exist");
 			continue;
 		}
 
-		if (current_thread_obj)
+		if (current_thread_valid) {
+			thread_ready_queue[current_thread_obj->GetPriority()].push_back(current_thread);
+		}
+
+		if (current_thread_obj) {
 			current_thread_obj->SaveState();
+		}
+
 		ready_thread->SwitchState();
-		current_thread = ready_thid;
-		return ready_thid;
+		current_thread = ready_thread->GetUID();
+		return current_thread;
 	}
 
 	if (!current_thread_valid) {
@@ -104,51 +117,45 @@ int Kernel::Reschedule() {
 }
 
 int Kernel::CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr) {
-	if (stack_size < 0x200) {
-		spdlog::warn("Kernel: invalid stack size {:x}", stack_size);
-		return SCE_KERNEL_ERROR_ILLEGAL_STACK_SIZE;
-	}
-
-	if (init_priority < 0x8 || init_priority > 0x77) {
-		spdlog::warn("Kernel: invalid init priority {:x}", init_priority);
-		return SCE_KERNEL_ERROR_ILLEGAL_PRIORITY;
-	}
-
-	if (user_memory->GetLargestFreeBlockSize() < stack_size) {
-		spdlog::warn("Kernel: not enough space for thread {:x}", stack_size);
-		return SCE_KERNEL_ERROR_NO_MEMORY;
-	}
-
-	if (PSP::GetInstance()->VirtualToPhysical(entry) == 0) {
-		spdlog::warn("Kernel: invalid entry {:x}", entry);
-		return SCE_KERNEL_ERROR_ILLEGAL_ENTRY;
-	}
-
 	PSP::GetInstance()->EatCycles(32000);
-	auto thread = std::make_unique<Thread>(name, entry, init_priority, stack_size, KERNEL_MEMORY_START + 8);
+	auto thread = std::make_unique<Thread>(name, entry, init_priority, stack_size, attr, KERNEL_MEMORY_START + 8);
 	return AddKernelObject(std::move(thread));
 }
 
-void Kernel::DeleteThread(int thid) {
-	if (current_thread == thid) {
-		current_thread = -1;
-		if (Reschedule() == thid) {
-			spdlog::warn("Kernel: no thread to reschedule to");
-		}
+int Kernel::TerminateThread(int thid, bool del) {
+	auto thread = GetKernelObject<Thread>(thid);
+	if (!thread) {
+		return SCE_KERNEL_ERROR_UNKNOWN_THID;
 	}
-	RemoveKernelObject(thid);
+
+	auto& queue = thread_ready_queue[thread->GetPriority()];
+	queue.erase(std::remove(queue.begin(), queue.end(), current_thread), queue.end());
+	RescheduleNextCycle();
+
+	if (del) {
+		RemoveKernelObject(thid);
+	} else {
+		if (thread->GetState() == ThreadState::DORMANT) {
+			return SCE_KERNEL_ERROR_DORMANT;
+		}
+
+		thread->SetState(ThreadState::DORMANT);
+	}
+
+	return 0;
 }
 
 void Kernel::StartThread(int thid) {
 	auto thread = GetKernelObject<Thread>(thid);
 
+	thread->Start();
 	thread->SetState(ThreadState::READY);
-	thread_ready_queue[thread->GetPriority()].push(thid);
-	reschedule_next_cycle = true;
+	thread_ready_queue[thread->GetPriority()].push_back(thid);
+	RescheduleNextCycle();
 }
 
 int Kernel::CreateCallback(std::string name, uint32_t entry, uint32_t common) {
-	if (!PSP::GetInstance()->VirtualToPhysical(entry)) {
+	if (entry & 0xF0000000) {
 		return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
 	}
 
@@ -301,25 +308,22 @@ void Kernel::WakeUpThread(int thid, WaitReason reason) {
 	thread->SetState(ThreadState::READY);
 	thread->SetWaitReason(WaitReason::NONE);
 
-	thread_ready_queue[thread->GetPriority()].push(thid);
-	reschedule_next_cycle = true;
+	thread_ready_queue[thread->GetPriority()].push_back(thid);
+	if (current_thread == -1) {
+		RescheduleNextCycle();
+	}
 }
 
 void Kernel::WaitCurrentThread(WaitReason reason, bool allow_callbacks) {
 	Thread* thread = GetKernelObject<Thread>(current_thread);
+	
+	auto& queue = thread_ready_queue[thread->GetPriority()];
+	queue.erase(std::remove(queue.begin(), queue.end(), current_thread), queue.end());
+
 	thread->SetState(ThreadState::WAIT);
 	thread->SetWaitReason(reason);
 	thread->SetAllowCallbacks(allow_callbacks);
-	reschedule_next_cycle = true;
-}
-
-void Kernel::WakeUpVBlank() {
-	for (auto& object : objects) {
-		if (object && object->GetType() == KernelObjectType::THREAD) {
-			auto thread = reinterpret_cast<Thread*>(object.get());
-			WakeUpThread(thread->GetUID(), WaitReason::VBLANK);
-		}
-	}
+	RescheduleNextCycle();
 }
 
 void Kernel::ExecHLEFunction(int import_index) {

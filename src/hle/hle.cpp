@@ -2,6 +2,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include "../kernel/thread.hpp"
+
 std::unordered_map<std::string, FuncMap> hle_modules{};
 std::vector<ImportData> hle_imports{
 	{"FakeSyscalls", 0x0},
@@ -28,6 +30,10 @@ void RegisterHLE() {
 	hle_modules["Kernel_Library"] = RegisterKernelLibrary();
 	hle_modules["StdioForUser"] = RegisterStdioForUser();
 	hle_modules["sceCtrl"] = RegisterSceCtrl();
+	hle_modules["sceDmac"] = RegisterSceDmac();
+	hle_modules["UtilsForUser"] = RegisterUtilsForUser();
+	hle_modules["sceAudio"] = RegisterSceAudio();
+	hle_modules["scePower"] = RegisterScePower();
 }
 
 int GetHLEIndex(std::string module, uint32_t nid) {
@@ -49,17 +55,29 @@ int GetHLEIndex(std::string module, uint32_t nid) {
 void ReturnFromModule(CPU* _) {
 	auto kernel = PSP::GetInstance()->GetKernel();
 	int thid = kernel->GetCurrentThread();
-	kernel->DeleteThread(thid);
+	kernel->TerminateThread(thid, true);
 }
 
 void ReturnFromThread(CPU* _) {
 	auto kernel = PSP::GetInstance()->GetKernel();
 	int thid = kernel->GetCurrentThread();
-	kernel->DeleteThread(thid);
+	kernel->TerminateThread(thid, false);
 }
 
 void ReturnFromCallback(CPU* _) {
 	auto kernel = PSP::GetInstance()->GetKernel();
 	int cbid = kernel->GetCurrentCallback();
 	spdlog::error("Exiting callbacks not implemenented");
+}
+
+void HLEDelay(int usec) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	int thid = kernel->GetCurrentThread();
+	kernel->WaitCurrentThread(WaitReason::HLE_DELAY, false);
+	auto func = [thid](uint64_t _) {
+		PSP::GetInstance()->GetKernel()->WakeUpThread(thid, WaitReason::HLE_DELAY);
+		};
+	psp->Schedule(US_TO_CYCLES(usec), func);
 }

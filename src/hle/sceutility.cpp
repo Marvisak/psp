@@ -2,7 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
-int sceUtilityGetSystemParamInt(int id, uint32_t out_addr) {
+static int sceUtilityGetSystemParamInt(int id, uint32_t out_addr) {
 	spdlog::error("sceUtilityGetSystemParamInt({}, {:x})", id, out_addr);
 	return 0;
 }

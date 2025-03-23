@@ -1,6 +1,7 @@
 
 #include <spdlog/spdlog.h>
 #include "memory.hpp"
+#include "../psp.hpp"
 
 MemoryAllocator::MemoryAllocator(uint32_t start, uint32_t size, uint32_t default_alignment) : start(start), size(size), default_alignment(default_alignment) {
 	first = new Block;
@@ -25,7 +26,7 @@ MemoryAllocator::~MemoryAllocator() {
 uint32_t MemoryAllocator::Alloc(uint32_t size, std::string name, uint32_t alignment) {
 	if (alignment == -1)
 		alignment = default_alignment;
-	size = (size + alignment - 1) & ~(alignment - 1);
+	size = ALIGN(size, alignment);
 	
 	if (size > this->size) {
 		spdlog::error("MemoryAllocator: bogus size {} bytes", size);
@@ -38,8 +39,7 @@ uint32_t MemoryAllocator::Alloc(uint32_t size, std::string name, uint32_t alignm
 				curr->name = name;
 				curr->free = false;
 				return curr->start;
-			}
-			else if (curr->size > size) {
+			} else if (curr->size > size) {
 				auto block = new Block;
 				block->size = curr->size - size;
 				block->start = curr->start + size;
@@ -85,8 +85,7 @@ uint32_t MemoryAllocator::AllocTop(uint32_t size, std::string name, uint32_t ali
 				curr->name = name;
 				curr->free = false;
 				return curr->start;
-			}
-			else if (curr->size > needed) {
+			} else if (curr->size > needed) {
 				auto block = new Block;
 				block->size = needed;
 				block->start = curr->start + curr->size - needed;
@@ -113,7 +112,14 @@ uint32_t MemoryAllocator::AllocTop(uint32_t size, std::string name, uint32_t ali
 uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, std::string name, uint32_t alignment) {
 	if (alignment == -1)
 		alignment = default_alignment;
-	size = (size + alignment - 1) & ~(alignment - 1);
+
+	if (addr & (alignment - 1)) {
+		uint32_t aligned_addr = addr & ~(alignment - 1);
+		size += addr - aligned_addr;
+		addr = aligned_addr;
+	}
+
+	size = ALIGN(size, alignment);
 
 	if (size > this->size) {
 		spdlog::error("MemoryAllocator: bogus size {} bytes", size);
@@ -214,8 +220,9 @@ bool MemoryAllocator::Free(uint32_t addr) {
 uint32_t MemoryAllocator::GetLargestFreeBlockSize() {
 	int largest = 0;
 	for (auto curr = first; curr; curr = curr->next) {
-		if (curr->free && curr->size > largest)
+		if (curr->free && curr->size > largest) {
 			largest = curr->size;
+		}
 	}
 	return largest;
 }
@@ -223,8 +230,9 @@ uint32_t MemoryAllocator::GetLargestFreeBlockSize() {
 uint32_t MemoryAllocator::GetFreeMemSize() {
 	int size = 0;
 	for (auto curr = first; curr; curr = curr->next) {
-		if (curr->free)
+		if (curr->free) {
 			size += curr->size;
+		}
 	}
 	return size;
 }
