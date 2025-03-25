@@ -55,13 +55,9 @@ int GetHLEIndex(std::string module, uint32_t nid) {
 void ReturnFromModule(CPU* _) {
 	auto kernel = PSP::GetInstance()->GetKernel();
 	int thid = kernel->GetCurrentThread();
-	kernel->TerminateThread(thid, true);
-}
-
-void ReturnFromThread(CPU* _) {
-	auto kernel = PSP::GetInstance()->GetKernel();
-	int thid = kernel->GetCurrentThread();
-	kernel->TerminateThread(thid, false);
+	kernel->RemoveThreadFromQueue(thid);
+	kernel->RemoveKernelObject(thid);
+	kernel->RescheduleNextCycle();
 }
 
 void ReturnFromCallback(CPU* _) {

@@ -24,6 +24,11 @@ constexpr auto CPU_HZ = 222000000;
 
 typedef std::function<void(uint64_t cycles_late)> SchedulerFunc;
 
+struct ScheduledEvent {
+	uint64_t cycle_trigger;
+	SchedulerFunc func;
+};
+
 class PSP {
 public:
 	PSP(RendererType renderer_type);
@@ -50,7 +55,8 @@ public:
 	void WriteMemory16(uint32_t addr, uint16_t value);
 	void WriteMemory32(uint32_t addr, uint32_t value);
 
-	void Schedule(uint64_t cycles, SchedulerFunc func);
+	std::shared_ptr<ScheduledEvent> Schedule(uint64_t cycles, SchedulerFunc func);
+	void Unschedule(std::shared_ptr<ScheduledEvent> event);
 	void GetEarliestEvent();
 	void ExecuteEvents();
 	uint64_t GetSystemTime();
@@ -71,14 +77,9 @@ private:
 	bool vblank = false;
 	bool close = false;
 
-	struct ScheduledEvent {
-		uint64_t cycle_trigger;
-		SchedulerFunc func;
-	};
-
 	uint64_t earliest_event_cycles = -1;
 	uint64_t cycles = 0;
-	std::vector<ScheduledEvent> events;
+	std::vector<std::shared_ptr<ScheduledEvent>> events;
 	std::unique_ptr<uint8_t[]> ram;
 	std::unique_ptr<uint8_t[]> vram;
 };

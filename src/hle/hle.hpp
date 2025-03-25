@@ -49,6 +49,12 @@ FuncMap RegisterScePower();
 		func(); \
 	}
 
+#define HLE_I(func)[](CPU* cpu) { \
+		func( \
+			static_cast<int32_t>(cpu->GetRegister(4)) \
+		); \
+	}
+
 #define HLE_C(func)[](CPU* cpu) { \
 		func( \
 			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu->GetRegister(4))) \

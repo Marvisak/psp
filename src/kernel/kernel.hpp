@@ -61,12 +61,18 @@ public:
 	int LoadModule(std::string path);
 	bool ExecModule(int uid);
 
+	int GetSDKVersion() const { return sdk_version; }
+	void SetSDKVersion(int version) { sdk_version = version; }
+
 	int Reschedule();
+	void ForceReschedule() { force_reschedule = true; RescheduleNextCycle(); }
 	void RescheduleNextCycle() { reschedule_next_cycle = true; }
 	bool ShouldReschedule() const { return reschedule_next_cycle; }
 	int CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr);
-	int TerminateThread(int thid, bool del);
-	void StartThread(int thid);
+	void StartThread(int thid, int arg_size, void* arg_block);
+
+	void AddThreadToQueue(int thid);
+	void RemoveThreadFromQueue(int thid);
 
 	int CreateCallback(std::string name, uint32_t entry, uint32_t common);
 	void ExecuteCallback(int cbid);
@@ -81,7 +87,7 @@ public:
 	int RemoveFile(std::string path);
 	int RemoveDirectory(std::string path);
 
-	void WakeUpThread(int thid, WaitReason reason);
+	bool WakeUpThread(int thid, WaitReason reason);
 	void WaitCurrentThread(WaitReason reason, bool allow_callbacks);
 
 	void ExecHLEFunction(int import_index);
@@ -97,6 +103,8 @@ private:
 	int current_callback = -1;
 	int next_uid = 1;
 	bool reschedule_next_cycle = false;
+	bool force_reschedule = false;
+	int sdk_version = 0;
 
 	std::map<std::string, std::shared_ptr<FileSystem>> drives;
 	std::unique_ptr<MemoryAllocator> user_memory;

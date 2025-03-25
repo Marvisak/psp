@@ -22,8 +22,8 @@ public:
 	uint32_t GetPC() const { return pc; }
 	void SetPC(uint32_t addr) { pc = addr; next_pc = addr + 4; }
 
-	std::array<uint32_t, 31> GetRegs() const { return regs; };
-	void SetRegs(std::array<uint32_t, 31> regs) { this->regs = regs; }
+	std::array<uint32_t, 32> GetRegs() const { return regs; };
+	void SetRegs(std::array<uint32_t, 32> regs) { this->regs = regs; }
 	std::array<float, 32> GetFPURegs() const { return fpu_regs; }
 	void SetFPURegs(std::array<float, 32> fpu_regs) { this->fpu_regs = fpu_regs; }
 	uint32_t GetFCR31() const { return fcr31 & ~(1 << 23) | (fpu_cond << 23); }
@@ -141,7 +141,7 @@ private:
 	uint32_t next_pc = 0xdeadbeef;
 	uint32_t hi = 0xdeadbeef;
 	uint32_t lo = 0xdeadbeef;
-	std::array<uint32_t, 31> regs{0xDEADBEEF};
+	std::array<uint32_t, 32> regs{0xDEADBEEF};
 
 	uint32_t fcr31 = 0xdeadbeef;
 	bool fpu_cond = false;

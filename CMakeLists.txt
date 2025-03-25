@@ -55,5 +55,3 @@ list(APPEND sources
 add_executable(psp ${sources})
 target_link_libraries(psp PRIVATE Sockpp::sockpp-static elfio::elfio spdlog::spdlog CLI11::CLI11 SDL3::SDL3-static glm::glm)
 target_include_directories(psp PRIVATE include)
-
-SET_TARGET_PROPERTIES(psp PROPERTIES LINK_FLAGS "/PROFILE")

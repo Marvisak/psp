@@ -58,9 +58,11 @@ bool Kernel::ExecModule(int uid) {
 	auto module = GetKernelObject<Module>(uid);
 	if (!module) return false;
 	
-	auto thread = std::make_unique<Thread>(module, KERNEL_MEMORY_START);
+	std::string file_path = module->GetFilePath();
+	auto thread = std::make_unique<Thread>(module, module->GetName(), module->GetEntrypoint(), 0x20, 0x40000, 0, KERNEL_MEMORY_START);
+
 	int thid = AddKernelObject(std::move(thread));
-	StartThread(thid);
+	StartThread(thid, file_path.size() + 1, file_path.data());
 	exec_module = uid;
 
 	return true;
@@ -69,15 +71,18 @@ bool Kernel::ExecModule(int uid) {
 // TODO: Maybe add some cycle counting to this?
 int Kernel::Reschedule() {
 	auto current_thread_obj = GetKernelObject<Thread>(current_thread);
-	bool current_thread_valid = current_thread_obj && current_thread_obj->GetState() == ThreadState::READY;
+	bool current_thread_valid = !force_reschedule && current_thread_obj && current_thread_obj->GetState() == ThreadState::READY;
 	reschedule_next_cycle = false;
+	force_reschedule = false;
 	for (int priority = 0; priority < thread_ready_queue.size(); priority++) {
 		auto& ready_threads = thread_ready_queue[priority];
-		if (ready_threads.empty())
+		if (ready_threads.empty()) {
 			continue;
+		}
 
-		if (current_thread_valid && current_thread_obj->GetPriority() <= priority)
+		if (current_thread_valid && current_thread_obj->GetPriority() <= priority) {
 			break;
+		}
 
 		Thread* ready_thread = nullptr;
 		for (auto thid : ready_threads) {
@@ -88,15 +93,12 @@ int Kernel::Reschedule() {
 			}
 			if (thread->GetState() == ThreadState::READY) {
 				ready_thread = thread;
+				break;
 			}
 		}
 
 		if (!ready_thread) {
 			continue;
-		}
-
-		if (current_thread_valid) {
-			thread_ready_queue[current_thread_obj->GetPriority()].push_back(current_thread);
 		}
 
 		if (current_thread_obj) {
@@ -118,47 +120,36 @@ int Kernel::Reschedule() {
 
 int Kernel::CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr) {
 	PSP::GetInstance()->EatCycles(32000);
-	auto thread = std::make_unique<Thread>(name, entry, init_priority, stack_size, attr, KERNEL_MEMORY_START + 8);
+
+	auto current_thread_obj = GetKernelObject<Thread>(GetCurrentThread());
+	auto module = GetKernelObject<Module>(current_thread_obj->GetModule());
+	auto thread = std::make_unique<Thread>(module, name, entry, init_priority, stack_size, attr, KERNEL_MEMORY_START + 8);
 	return AddKernelObject(std::move(thread));
 }
 
-int Kernel::TerminateThread(int thid, bool del) {
+void Kernel::StartThread(int thid, int arg_size, void* arg_block) {
 	auto thread = GetKernelObject<Thread>(thid);
-	if (!thread) {
-		return SCE_KERNEL_ERROR_UNKNOWN_THID;
-	}
 
-	auto& queue = thread_ready_queue[thread->GetPriority()];
-	queue.erase(std::remove(queue.begin(), queue.end(), current_thread), queue.end());
+	thread->Start(arg_size, arg_block);
+	thread->SetState(ThreadState::READY);
+	AddThreadToQueue(thid);
 	RescheduleNextCycle();
-
-	if (del) {
-		RemoveKernelObject(thid);
-	} else {
-		if (thread->GetState() == ThreadState::DORMANT) {
-			return SCE_KERNEL_ERROR_DORMANT;
-		}
-
-		thread->SetState(ThreadState::DORMANT);
-	}
-
-	return 0;
 }
 
-void Kernel::StartThread(int thid) {
+void Kernel::AddThreadToQueue(int thid) {
 	auto thread = GetKernelObject<Thread>(thid);
 
-	thread->Start();
-	thread->SetState(ThreadState::READY);
 	thread_ready_queue[thread->GetPriority()].push_back(thid);
-	RescheduleNextCycle();
+}
+
+void Kernel::RemoveThreadFromQueue(int thid) {
+	auto thread = GetKernelObject<Thread>(thid);
+
+	auto& queue = thread_ready_queue[thread->GetPriority()];
+	queue.erase(std::remove(queue.begin(), queue.end(), thid), queue.end());
 }
 
 int Kernel::CreateCallback(std::string name, uint32_t entry, uint32_t common) {
-	if (entry & 0xF0000000) {
-		return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
-	}
-
 	auto callback = std::make_unique<Callback>(GetCurrentThread(), name, entry, common);
 	int cbid = AddKernelObject(std::move(callback));
 	return cbid;
@@ -302,25 +293,31 @@ int Kernel::Rename(std::string old_path, std::string new_path) {
 	return 0;
 }
 
-void Kernel::WakeUpThread(int thid, WaitReason reason) {
+bool Kernel::WakeUpThread(int thid, WaitReason reason) {
 	Thread* thread = GetKernelObject<Thread>(thid);
-	if (thread->GetState() != ThreadState::WAIT || thread->GetWaitReason() != reason) { return; }
-	thread->SetState(ThreadState::READY);
+	if ((thread->GetState() != ThreadState::WAIT && thread->GetState() != ThreadState::WAIT_SUSPEND)
+		|| thread->GetWaitReason() != reason) { return false; }
+
+	if (thread->GetState() == ThreadState::WAIT_SUSPEND) {
+		thread->SetState(ThreadState::SUSPEND);
+	} else {
+		thread->SetState(ThreadState::READY);
+		AddThreadToQueue(thid);
+	}
 	thread->SetWaitReason(WaitReason::NONE);
 
-	thread_ready_queue[thread->GetPriority()].push_back(thid);
-	if (current_thread == -1) {
+	if (GetCurrentThread() == -1) {
 		RescheduleNextCycle();
 	}
+
+	return true;
 }
 
 void Kernel::WaitCurrentThread(WaitReason reason, bool allow_callbacks) {
-	Thread* thread = GetKernelObject<Thread>(current_thread);
-	
-	auto& queue = thread_ready_queue[thread->GetPriority()];
-	queue.erase(std::remove(queue.begin(), queue.end(), current_thread), queue.end());
+	Thread* thread = GetKernelObject<Thread>(GetCurrentThread());
 
 	thread->SetState(ThreadState::WAIT);
+	RemoveThreadFromQueue(GetCurrentThread());
 	thread->SetWaitReason(reason);
 	thread->SetAllowCallbacks(allow_callbacks);
 	RescheduleNextCycle();

@@ -115,7 +115,7 @@ static int sceKernelGetCompiledSdkVersion() {
 }
 
 static int sceKernelSetCompiledSdkVersion(int version) {
-	spdlog::error("sceKernelSetCompiledSdkVersion({})", version);
+	PSP::GetInstance()->GetKernel()->SetSDKVersion(version);
 	return 0;
 }
 
