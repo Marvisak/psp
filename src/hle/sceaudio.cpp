@@ -2,8 +2,11 @@
 
 #include <spdlog/spdlog.h>
 
+#include "../kernel/thread.hpp"
+
 static int sceAudioOutputPannedBlocking(int channel, int left_vol, int right_vol, uint32_t buf_addr) {
 	spdlog::error("sceAudioOutputPannedBlocking({}, {}, {}, {:x})", channel, left_vol, right_vol, buf_addr);
+	HLEDelay(1000000);
 	return 0;
 }
 

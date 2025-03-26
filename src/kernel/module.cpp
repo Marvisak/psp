@@ -15,12 +15,12 @@ bool Module::Load() {
 	auto fid = kernel->OpenFile(file_path, SCE_FREAD);
 	auto file = kernel->GetKernelObject<File>(fid);
 
-	auto size = file->Seek(0, SCE_SEEK_END);
+	auto file_size = file->Seek(0, SCE_SEEK_END);
 	file->Seek(0, SCE_SEEK_SET);
 
 	std::string data{};
-	data.resize(size);
-	file->Read(data.data(), size);
+	data.resize(file_size);
+	file->Read(data.data(), file_size);
 	kernel->RemoveKernelObject(fid);
 	std::istringstream ss(data);
 
@@ -38,6 +38,7 @@ bool Module::Load() {
 		auto section = elfio.sections[i];
 		if (section->get_name() == ".rodata.sceModuleInfo") {
 			module_info = reinterpret_cast<const PSPModuleInfo*>(section->get_data());
+			break;
 		}
 	}
 
@@ -49,26 +50,36 @@ bool Module::Load() {
 	std::string mod_name = "ELF/";
 	mod_name += module_info->name;
 
+	uint32_t start = 0xFFFFFFFF;
+	uint32_t end = 0;
+
 	for (int i = 0; i < elfio.segments.size(); i++) {
 		auto segment = elfio.segments[i];
 		if (segment->get_type() == ELFIO::PT_LOAD) {
-			if (!relocatable) {
-				uint32_t segment_addr = segment->get_virtual_address();
-				uint32_t block_addr = memory->AllocAt(segment_addr, segment->get_memory_size(), mod_name);
-				void* ram_addr = psp->VirtualToPhysical(segment_addr);
-
-				memcpy(ram_addr, segment->get_data(), segment->get_file_size());
-
-				segments[i] = block_addr;
+			if (segment->get_virtual_address() < start) {
+				start = segment->get_virtual_address();
 			}
-			else {
-				offset = memory->Alloc(segment->get_memory_size(), mod_name);
-				void* ram_addr = psp->VirtualToPhysical(offset);
 
-				memcpy(ram_addr, segment->get_data(), segment->get_file_size());
-
-				segments[i] = offset;
+			uint32_t current_end = segment->get_virtual_address() + segment->get_memory_size();
+			if (current_end > end) {
+				end = current_end;
 			}
+		}
+	}
+
+	uint32_t size = end - start;
+	if (relocatable) {
+		offset = memory->Alloc(size, mod_name);
+	} else {
+		// A cleanup would be nice sometimes, but idc rn
+		memory->AllocAt(start, size, mod_name);
+	}
+
+	for (int i = 0; i < elfio.segments.size(); i++) {
+		auto segment = elfio.segments[i];
+		if (segment->get_type() == ELFIO::PT_LOAD) {
+			void* ram_addr = psp->VirtualToPhysical(offset + segment->get_virtual_address());
+			memcpy(ram_addr, segment->get_data(), segment->get_file_size());
 		}
 	}
 

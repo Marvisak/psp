@@ -60,8 +60,14 @@ void PSP::Step() {
 		ExecuteEvents();
 	}
 
-	renderer->Step();
-	if (kernel->ShouldReschedule()) kernel->Reschedule();
+	if (renderer->ShouldRun()) {
+		renderer->Step();
+	}
+
+	if (kernel->ShouldReschedule()) {
+		kernel->Reschedule();
+	}
+
 	if (kernel->GetCurrentThread() != -1) {
 		if (!cpu->RunInstruction()) {
 			close = true;
