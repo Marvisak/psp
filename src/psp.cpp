@@ -79,6 +79,9 @@ bool PSP::LoadExec(std::string path) {
 	if (std::filesystem::is_regular_file(fs_path)) {
 		executable_path = "umd0:/" + fs_path.filename().string();
 		fs_path = fs_path.parent_path();
+	} else if (std::filesystem::is_directory(fs_path)) {
+		executable_path = "umd0:/PSP_GAME/SYSDIR/BOOT.BIN";
+		fs_path = path;
 	}
 
 	auto file_system = std::make_shared<DirectoryFileSystem>(fs_path);

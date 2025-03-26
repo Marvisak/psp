@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
     argv = app.ensure_utf8(argv);
 
     std::string elf_path;
-    app.add_option("-f,--file", elf_path, "Path to the game ELF")->check(CLI::ExistingFile)->required();
+    app.add_option("-f,--file", elf_path, "Path to the game ELF")->check(CLI::ExistingPath)->required();
     
     spdlog::level::level_enum level = spdlog::level::info;
     std::map<std::string, spdlog::level::level_enum> levels{
