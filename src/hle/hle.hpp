@@ -44,6 +44,8 @@ FuncMap RegisterSceDmac();
 FuncMap RegisterUtilsForUser();
 FuncMap RegisterSceAudio();
 FuncMap RegisterScePower();
+FuncMap RegisterSceAtrac3Plus();
+FuncMap RegisterSceUmdUser();
 
 #define HLE_V(func) [](CPU* cpu) { \
 		func(); \

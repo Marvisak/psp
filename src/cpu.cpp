@@ -446,7 +446,7 @@ void CPU::LBU(uint32_t opcode) {
 void CPU::LH(uint32_t opcode) {
 	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
 	if (addr % 2 != 0) {
-		spdlog::error("CPU: Exception or smth, LHU");
+		spdlog::error("CPU: Exception or smth, LH");
 		return;
 	}
 
@@ -484,7 +484,7 @@ void CPU::LW(uint32_t opcode) {
 void CPU::LWC1(uint32_t opcode) {
 	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
 	if (addr % 4 != 0) {
-		spdlog::error("CPU: Exception or smth, LW");
+		spdlog::error("CPU: Exception or smth, LWC1");
 		return;
 	}
 
@@ -539,7 +539,7 @@ void CPU::SEH(uint32_t opcode) {
 void CPU::SH(uint32_t opcode) {
 	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
 	if (addr % 2 != 0) {
-		spdlog::error("CPU: Exception or smth, SW");
+		spdlog::error("CPU: Exception or smth, SH");
 		return;
 	}
 

@@ -33,10 +33,12 @@ bool Module::Load() {
 
 	bool relocatable = elfio.get_type() != ELFIO::ET_EXEC;
 
+	uint32_t module_info_addr = 0;
 	const PSPModuleInfo* module_info = nullptr;
 	for (int i = 0; i < elfio.sections.size(); i++) {
 		auto section = elfio.sections[i];
 		if (section->get_name() == ".rodata.sceModuleInfo") {
+			module_info_addr = section->get_address();
 			module_info = reinterpret_cast<const PSPModuleInfo*>(section->get_data());
 			break;
 		}
@@ -78,12 +80,13 @@ bool Module::Load() {
 	for (int i = 0; i < elfio.segments.size(); i++) {
 		auto segment = elfio.segments[i];
 		if (segment->get_type() == ELFIO::PT_LOAD) {
-			void* ram_addr = psp->VirtualToPhysical(offset + segment->get_virtual_address());
+			uint32_t addr = offset + segment->get_virtual_address();
+			void* ram_addr = psp->VirtualToPhysical(addr);
 			memcpy(ram_addr, segment->get_data(), segment->get_file_size());
+			segments[i] = addr;
 		}
 	}
 
-	gp = offset + module_info->gp;
 	name = module_info->name;
 	entrypoint = offset + elfio.get_entry();
 
@@ -95,15 +98,18 @@ bool Module::Load() {
 			auto rels = reinterpret_cast<const ELFIO::Elf32_Rel*>(section->get_data());
 			for (int j = 0; j < num_relocs; j++) {
 				auto rel = rels[j];
-				uint32_t addr = rel.r_offset + offset;
+				uint32_t read_write = segments[(rel.r_info >> 8) & 0xFF];
+				uint32_t relocate_addr = segments[(rel.r_info >> 16) & 0xFF];
+
+				uint32_t addr = rel.r_offset + read_write;
 				uint32_t opcode = psp->ReadMemory32(addr);
-				
+
 				switch (rel.r_info & 0xF) {
 				case R_MIPS_32:
-					opcode += offset;
+					opcode += relocate_addr;
 					break;
 				case R_MIPS_26:
-					opcode = (opcode & 0xFC000000) | (((opcode & 0x03FFFFFF) + (offset >> 2)) & 0x03FFFFFF);
+					opcode = (opcode & 0xFC000000) | (((opcode & 0x03FFFFFF) + (relocate_addr >> 2)) & 0x03FFFFFF);
 					break;
 				case R_MIPS_HI16: {
 					for (int k = j + 1; k < num_relocs; k++) {
@@ -111,9 +117,9 @@ bool Module::Load() {
 						if (lo_type != 6 && lo_type != 1)
 							continue;
 
-						int16_t lo = static_cast<int16_t>(psp->ReadMemory16(rels[k].r_offset + offset));
+						int16_t lo = static_cast<int16_t>(psp->ReadMemory16(rels[k].r_offset + read_write));
 
-						uint32_t value = ((opcode & 0xFFFF) << 16) + lo + offset;
+						uint32_t value = ((opcode & 0xFFFF) << 16) + lo + relocate_addr;
 						opcode = (opcode & 0xFFFF0000) | ((value - static_cast<int16_t>(value & 0xFFFF)) >> 16);
 						break;
 					}
@@ -121,7 +127,7 @@ bool Module::Load() {
 					break;
 				}
 				case R_MIPS_LO16:
-					opcode = (opcode & 0xFFFF0000) | ((offset + opcode & 0xFFFF) & 0xFFFF);
+					opcode = (opcode & 0xFFFF0000) | ((relocate_addr + opcode & 0xFFFF) & 0xFFFF);
 					break;
 				case R_MIPS_GPREL16:
 					break;
@@ -134,8 +140,11 @@ bool Module::Load() {
 		}
 	}
 
-	uint32_t* stub_start = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(offset + module_info->lib_stub));
-	uint32_t* stub_end = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(offset + module_info->lib_stub_end));
+	module_info = reinterpret_cast<const PSPModuleInfo*>(psp->VirtualToPhysical(offset + module_info_addr));
+	gp = module_info->gp;
+
+	uint32_t* stub_start = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(module_info->lib_stub));
+	uint32_t* stub_end = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(module_info->lib_stub_end));
 	uint32_t* current_pos = stub_start;
 	while (current_pos < stub_end) {
 		auto entry = reinterpret_cast<PSPLibStubEntry*>(current_pos);

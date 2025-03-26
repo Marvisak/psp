@@ -70,4 +70,5 @@ private:
 	uint32_t offset = 0;
 	uint32_t gp = 0;
 	uint32_t entrypoint = 0;
+	std::unordered_map<int, uint32_t> segments{};
 };

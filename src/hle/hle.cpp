@@ -34,6 +34,8 @@ void RegisterHLE() {
 	hle_modules["UtilsForUser"] = RegisterUtilsForUser();
 	hle_modules["sceAudio"] = RegisterSceAudio();
 	hle_modules["scePower"] = RegisterScePower();
+	hle_modules["sceAtrac3plus"] = RegisterSceAtrac3Plus();
+	hle_modules["sceUmdUser"] = RegisterSceUmdUser();
 }
 
 int GetHLEIndex(std::string module, uint32_t nid) {
