@@ -7,6 +7,7 @@
 #include "module.hpp"
 #include "thread.hpp"
 #include "callback.hpp"
+#include "semaphore.hpp"
 #include "filesystem/filesystem.hpp"
 
 Kernel::Kernel() {
@@ -118,9 +119,20 @@ int Kernel::Reschedule() {
 	return current_thread;
 }
 
-int Kernel::CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr) {
-	PSP::GetInstance()->EatCycles(32000);
+void Kernel::AddThreadToQueue(int thid) {
+	auto thread = GetKernelObject<Thread>(thid);
 
+	thread_ready_queue[thread->GetPriority()].push_back(thid);
+}
+
+void Kernel::RemoveThreadFromQueue(int thid) {
+	auto thread = GetKernelObject<Thread>(thid);
+
+	auto& queue = thread_ready_queue[thread->GetPriority()];
+	queue.erase(std::remove(queue.begin(), queue.end(), thid), queue.end());
+}
+
+int Kernel::CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr) {
 	auto current_thread_obj = GetKernelObject<Thread>(GetCurrentThread());
 	auto module = GetKernelObject<Module>(current_thread_obj->GetModule());
 	auto thread = std::make_unique<Thread>(module, name, entry, init_priority, stack_size, attr, KERNEL_MEMORY_START + 8);
@@ -136,23 +148,9 @@ void Kernel::StartThread(int thid, int arg_size, void* arg_block) {
 	RescheduleNextCycle();
 }
 
-void Kernel::AddThreadToQueue(int thid) {
-	auto thread = GetKernelObject<Thread>(thid);
-
-	thread_ready_queue[thread->GetPriority()].push_back(thid);
-}
-
-void Kernel::RemoveThreadFromQueue(int thid) {
-	auto thread = GetKernelObject<Thread>(thid);
-
-	auto& queue = thread_ready_queue[thread->GetPriority()];
-	queue.erase(std::remove(queue.begin(), queue.end(), thid), queue.end());
-}
-
 int Kernel::CreateCallback(std::string name, uint32_t entry, uint32_t common) {
 	auto callback = std::make_unique<Callback>(GetCurrentThread(), name, entry, common);
-	int cbid = AddKernelObject(std::move(callback));
-	return cbid;
+	return AddKernelObject(std::move(callback));
 }
 
 void Kernel::ExecuteCallback(int cbid) {
@@ -164,6 +162,11 @@ void Kernel::ExecuteCallback(int cbid) {
 
 	current_callback = cbid;
 	callback->Execute();
+}
+
+int Kernel::CreateSemaphore(std::string name, uint32_t attr, int init_count, int max_count) {
+	auto semaphore = std::make_unique<Semaphore>(name, attr, init_count, max_count);
+	return AddKernelObject(std::move(semaphore));
 }
 
 void Kernel::Mount(std::string mount_point, std::shared_ptr<FileSystem> file_system) {

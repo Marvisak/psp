@@ -42,6 +42,7 @@ void PSP::Run() {
 			if (kernel->GetCurrentThread() == -1) {
 				continue;
 			}
+
 			if (!cpu->RunInstruction()) {
 				close = true;
 				break;

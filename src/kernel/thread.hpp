@@ -18,6 +18,7 @@ enum class WaitReason {
 	NONE = 0,
 	SLEEP = 1,
 	DELAY = 2,
+	SEMAPHORE = 3,
 	VBLANK = 6,
 	THREAD_END = 9,
 	IO = 16,

@@ -2,13 +2,15 @@
 
 #include <spdlog/spdlog.h>
 
+#include "defs.hpp"
 #include "../kernel/thread.hpp"
 #include "../kernel/callback.hpp"
-#include "defs.hpp"
+#include "../kernel/semaphore.hpp"
 
 struct ThreadEnd {
+	int thid;
+	uint32_t timeout_addr;
 	std::shared_ptr<ScheduledEvent> timeout_event;
-	int waiting_thread;
 };
 
 std::unordered_map<int, std::vector<ThreadEnd>> waiting_thread_end{};
@@ -19,15 +21,18 @@ static void HandleThreadEnd(int thid, int exit_reason) {
 
 	if (waiting_thread_end.contains(thid)) {
 		for (auto& thread_end : waiting_thread_end[thid]) {
-			auto thread = kernel->GetKernelObject<Thread>(thread_end.waiting_thread);
+			auto thread = kernel->GetKernelObject<Thread>(thread_end.thid);
 			if (!thread) {
 				continue;
 			}
-			if (thread_end.timeout_event) {
+
+			if (thread_end.timeout_addr && thread_end.timeout_event) {
+				int64_t cycles_left = thread_end.timeout_event->cycle_trigger - psp->GetCycles();
+				psp->WriteMemory32(thread_end.timeout_addr, CYCLES_TO_US(cycles_left));
 				psp->Unschedule(thread_end.timeout_event);
 			}
 
-			if (kernel->WakeUpThread(thread_end.waiting_thread, WaitReason::THREAD_END)) {
+			if (kernel->WakeUpThread(thread_end.thid, WaitReason::THREAD_END)) {
 				thread->SetReturnValue(exit_reason);
 			}
 		}
@@ -89,7 +94,12 @@ static int sceKernelCreateThread(const char* name, uint32_t entry, int init_prio
 	attr |= SCE_KERNEL_TH_USER;
 	attr &= ~0x78800000;
 
-	return kernel->CreateThread(name, entry, init_priority, stack_size, attr);
+	int thid = kernel->CreateThread(name, entry, init_priority, stack_size, attr);
+
+	psp->EatCycles(32000);
+	kernel->RescheduleNextCycle();
+
+	return thid;
 }
 
 
@@ -305,10 +315,11 @@ static int sceKernelReferThreadStatus(int thid, uint32_t info_addr) {
 		return SCE_KERNEL_ERROR_UNKNOWN_THID;
 	}
 
-	uint32_t size = 104;
+	SceKernelThreadInfo new_info{};
+	new_info.size = 104;
 	if (kernel->GetSDKVersion() > 0x02060010) {
-		size = 108;
-		if (info->size > size) {
+		new_info.size = 108;
+		if (info->size > new_info.size) {
 			spdlog::warn("sceKernelReferThreadStatus: invalid info size {}", info->size);
 			psp->EatCycles(1200);
 			kernel->RescheduleNextCycle();
@@ -316,9 +327,7 @@ static int sceKernelReferThreadStatus(int thid, uint32_t info_addr) {
 		}
 	}
 
-	SceKernelThreadInfo new_info{};
 	SDL_strlcpy(new_info.name, thread->GetName().data(), SceUID_NAME_MAX + 1);
-	new_info.size = size;
 	new_info.attr = thread->GetAttr();
 	new_info.status = static_cast<int>(thread->GetState());
 	new_info.entry = thread->GetEntry();
@@ -336,7 +345,7 @@ static int sceKernelReferThreadStatus(int thid, uint32_t info_addr) {
 	new_info.thread_preempt_count = 0;
 	new_info.release_count = 0;
 
-	auto wanted_size = std::min<size_t>(size, info->size);
+	auto wanted_size = std::min<size_t>(new_info.size, info->size);
 	memcpy(info, &new_info, wanted_size);
 
 	psp->EatCycles(1400);
@@ -555,7 +564,8 @@ static int sceKernelWaitThreadEnd(int thid, uint32_t timeout_addr) {
 	}
 
 	struct ThreadEnd thread_end {};
-	thread_end.waiting_thread = current_thread;
+	thread_end.thid = current_thread;
+	thread_end.timeout_addr = timeout_addr;
 	if (timeout_addr) {
 		uint32_t timeout = psp->ReadMemory32(timeout_addr);
 		auto func = [timeout_addr, thid, current_thread](uint64_t _) {
@@ -563,12 +573,17 @@ static int sceKernelWaitThreadEnd(int thid, uint32_t timeout_addr) {
 			auto kernel = psp->GetKernel();
 
 			psp->WriteMemory32(timeout_addr, 0);
-			if (psp->GetKernel()->WakeUpThread(current_thread, WaitReason::THREAD_END)) {
+			if (kernel->WakeUpThread(current_thread, WaitReason::THREAD_END)) {
 				auto waiting_thread = kernel->GetKernelObject<Thread>(current_thread);
 				waiting_thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_TIMEOUT);
 			}
+
+			auto& map = waiting_thread_end[thid];
+			map.erase(std::remove_if(map.begin(), map.end(), [timeout_addr, current_thread](ThreadEnd data) {
+				return data.thid == current_thread && data.timeout_addr == timeout_addr;
+			}));
 		};
-		thread_end.timeout_event = psp->Schedule(timeout, func);
+		thread_end.timeout_event = psp->Schedule(US_TO_CYCLES(timeout), func);
 	}
 	kernel->WaitCurrentThread(WaitReason::THREAD_END, false);
 	waiting_thread_end[thid].push_back(thread_end);
@@ -597,28 +612,176 @@ static int sceKernelWakeupThread(int thid) {
 }
 
 static int sceKernelCreateSema(const char* name, uint32_t attr, int init_count, int max_count, uint32_t opt_param_addr) {
-	spdlog::error("sceKernelCreateSema({}, {:x}, {}, {}, {:x})", name, attr, init_count, max_count, opt_param_addr);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	if (!name) {
+		spdlog::warn("sceKernelCreateSema: name is NULL");
+		return SCE_KERNEL_ERROR_ERROR;
+	}
+
+	if (attr >= 0x200) {
+		spdlog::warn("sceKernelCreateSema: invalid attr {:x}", attr);
+		return SCE_KERNEL_ERROR_ILLEGAL_ATTR;
+	}
+
+	return kernel->CreateSemaphore(name, attr, init_count, max_count);
 }
 
 static int sceKernelDeleteSema(int semid) {
-	spdlog::error("sceKernelDeleteSema({})", semid);
-	return 0;
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	auto semaphore = kernel->GetKernelObject<Semaphore>(semid);
+	if (!semaphore) {
+		spdlog::warn("sceKernelDeleteSema: invalid semaphore {}", semid);
+		return SCE_KERNEL_ERROR_UNKNOWN_SEMID;
+	}
+
+	kernel->RemoveKernelObject(semid);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelSignalSema(int semid, int signal_count) {
-	spdlog::error("sceKernelSignalSema({}, {})", semid, signal_count);
-	return 0;
+	auto kernel = PSP::GetInstance()->GetKernel();
+	auto semaphore = kernel->GetKernelObject<Semaphore>(semid);
+	if (!semaphore) {
+		spdlog::warn("sceKernelSignalSema: invalid semaphore {}", semid);
+		return SCE_KERNEL_ERROR_UNKNOWN_SEMID;
+	}
+
+	if (semaphore->GetCount() + signal_count - semaphore->GetNumWaitThreads() > semaphore->GetMaxCount()) {
+		spdlog::warn("sceKernelSignalSema: invalid signal count {}", signal_count);
+		return SCE_KERNEL_ERROR_SEMA_OVF;
+	}
+
+	semaphore->Signal(signal_count);
+
+	return SCE_KERNEL_ERROR_OK;
+}
+
+static int sceKernelCancelSema(int semid, int set_count, uint32_t num_wait_threads_addr) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+	auto semaphore = kernel->GetKernelObject<Semaphore>(semid);
+	if (!semaphore) {
+		spdlog::warn("sceKernelCancelSema: invalid semaphore {}", semid);
+		return SCE_KERNEL_ERROR_UNKNOWN_SEMID;
+	}
+
+	if (set_count > semaphore->GetMaxCount()) {
+		spdlog::warn("sceKernelCancelSema: invalid set count {}", set_count);
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+
+	int num_wait_threads = semaphore->Cancel(set_count);
+	if (num_wait_threads_addr) {
+		psp->WriteMemory32(num_wait_threads_addr, num_wait_threads);
+	}
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelWaitSema(int semid, int need_count, uint32_t timeout_addr) {
-	spdlog::error("sceKernelSignalSema({}, {}, {:x})", semid, need_count, timeout_addr);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto kernel = PSP::GetInstance()->GetKernel();
+	auto semaphore = kernel->GetKernelObject<Semaphore>(semid);
+
+	psp->EatCycles(900);
+	if (need_count <= 0) {
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+	psp->EatCycles(500);
+
+	if (!semaphore) {
+		spdlog::warn("sceKernelWaitSema: invalid semaphore {}", semid);
+		return SCE_KERNEL_ERROR_UNKNOWN_SEMID;
+	}
+
+	if (need_count > semaphore->GetMaxCount()) {
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+
+	semaphore->Wait(need_count, false, timeout_addr);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelWaitSemaCB(int semid, int need_count, uint32_t timeout_addr) {
-	spdlog::error("sceKernelWaitSemaCB({}, {}, {:x})", semid, need_count, timeout_addr);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto kernel = PSP::GetInstance()->GetKernel();
+	auto semaphore = kernel->GetKernelObject<Semaphore>(semid);
+
+	psp->EatCycles(900);
+	if (need_count <= 0) {
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+	psp->EatCycles(500);
+
+	if (!semaphore) {
+		spdlog::warn("sceKernelWaitSemaCB: invalid semaphore {}", semid);
+		return SCE_KERNEL_ERROR_UNKNOWN_SEMID;
+	}
+
+	if (need_count > semaphore->GetMaxCount()) {
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+
+	semaphore->Wait(need_count, true, timeout_addr);
+
+	return SCE_KERNEL_ERROR_OK;
+}
+
+static int sceKernelPollSema(int semid, int need_count) {
+	auto psp = PSP::GetInstance();
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	if (need_count <= 0) {
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+
+	auto semaphore = kernel->GetKernelObject<Semaphore>(semid);
+	if (!semaphore) {
+		spdlog::warn("sceKernelPollSema: invalid semaphore {}", semid);
+		return SCE_KERNEL_ERROR_UNKNOWN_SEMID;
+	}
+
+	if (!semaphore->Poll(need_count)) {
+		return SCE_KERNEL_ERROR_SEMA_ZERO;
+	}
+
+	return SCE_KERNEL_ERROR_OK;
+}
+
+static int sceKernelReferSemaStatus(int semid, uint32_t info_addr) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	auto info = reinterpret_cast<SceKernelSemaInfo*>(psp->VirtualToPhysical(info_addr));
+	if (!info) {
+		spdlog::warn("sceKernelReferSemaStatus: invalid info pointer {:x}", info_addr);
+		return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
+	}
+
+	auto semaphore = kernel->GetKernelObject<Semaphore>(semid);
+	if (!semaphore) {
+		spdlog::warn("sceKernelReferSemaStatus: invalid semaphore {}", semid);
+		return SCE_KERNEL_ERROR_UNKNOWN_SEMID;
+	}
+
+	SceKernelSemaInfo new_info{};
+	new_info.size = sizeof(new_info);
+	SDL_strlcpy(new_info.name, semaphore->GetName().data(), SceUID_NAME_MAX + 1);
+	new_info.attr = semaphore->GetAttr();
+	new_info.init_count = semaphore->GetInitCount();
+	new_info.current_count = semaphore->GetCount();
+	new_info.max_count = semaphore->GetMaxCount();
+	new_info.num_wait_threads = semaphore->GetNumWaitThreads();
+
+	auto wanted_size = std::min<size_t>(new_info.size, info->size);
+	memcpy(info, &new_info, wanted_size);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelCreateMsgPipe(const char* name, int mpid, uint32_t attr, int buf_size, uint32_t opt_param_addr) {
@@ -758,8 +921,11 @@ FuncMap RegisterThreadManForUser() {
 	funcs[0xD6DA4BA1] = HLE_CUIIU_R(sceKernelCreateSema);
 	funcs[0x28B6489C] = HLE_I_R(sceKernelDeleteSema);
 	funcs[0x3F53E640] = HLE_II_R(sceKernelSignalSema);
+	funcs[0x8FFDF9A2] = HLE_IIU_R(sceKernelCancelSema);
 	funcs[0x4E3A1105] = HLE_IIU_R(sceKernelWaitSema);
 	funcs[0x6D212BAC] = HLE_IIU_R(sceKernelWaitSemaCB);
+	funcs[0x58B1F937] = HLE_II_R(sceKernelPollSema);
+	funcs[0xBC6FEBC5] = HLE_IU_R(sceKernelReferSemaStatus);
 	funcs[0x7C0DC2A0] = HLE_CIUIU_R(sceKernelCreateMsgPipe);
 	funcs[0xF0B7DA1C] = HLE_I_R(sceKernelDeleteMsgPipe);
 	funcs[0x876DBFAD] = HLE_IUUIUU_R(sceKernelSendMsgPipe);

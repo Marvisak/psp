@@ -19,6 +19,7 @@ constexpr auto CPU_HZ = 222000000;
 
 #define US_TO_CYCLES(usec) (CPU_HZ / 1000000 * usec)
 #define MS_TO_CYCLES(msec) (CPU_HZ / 1000 * msec)
+#define CYCLES_TO_US(cycles) ((cycles * 1000000) / CPU_HZ)
 
 #define ALIGN(n, a) ((n) + (-(n) & ((a) - 1)))
 

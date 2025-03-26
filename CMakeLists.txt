@@ -29,6 +29,7 @@ list(APPEND sources
 	src/kernel/thread.cpp
 	src/kernel/callback.cpp
 	src/kernel/memory_block.cpp
+	src/kernel/semaphore.cpp
 
 	src/kernel/filesystem/directory/directoryfs.cpp
 	src/kernel/filesystem/directory/directoryfile.cpp

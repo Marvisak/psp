@@ -150,7 +150,7 @@ static int sceDisplayWaitVblank() {
 	}
 	else {
 		psp->EatCycles(1110);
-		psp->GetKernel()->Reschedule();
+		psp->GetKernel()->RescheduleNextCycle();
 		return 1;
 	}
 }

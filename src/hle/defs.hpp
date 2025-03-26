@@ -22,6 +22,9 @@ constexpr auto SCE_STM_FLNK = 0x4000;
 
 constexpr auto SceUID_NAME_MAX = 31;
 
+constexpr auto SCE_KERNEL_SA_THFIFO = 0x0;
+constexpr auto SCE_KERNEL_SA_THPRI = 0x100;
+
 constexpr auto SCE_DISPLAY_MODE_LCD = 0;
 
 constexpr auto SCE_DISPLAY_PIXEL_RGB565 = 0;
@@ -123,14 +126,20 @@ constexpr auto SCE_KERNEL_ERROR_ILLEGAL_PRIORITY = 0x80020193;
 constexpr auto SCE_KERNEL_ERROR_ILLEGAL_STACK_SIZE = 0x80020194;
 constexpr auto SCE_KERNEL_ERROR_ILLEGAL_THID = 0x80020197;
 constexpr auto SCE_KERNEL_ERROR_UNKNOWN_THID = 0x80020198;
+constexpr auto SCE_KERNEL_ERROR_UNKNOWN_SEMID = 0x80020199;
 constexpr auto SCE_KERNEL_ERROR_UNKNOWN_CBID = 0x800201A1;
 constexpr auto SCE_KERNEL_ERROR_DORMANT = 0x800201A2;
 constexpr auto SCE_KERNEL_ERROR_SUSPEND = 0x800201A3;
 constexpr auto SCE_KERNEL_ERROR_NOT_DORMANT = 0x800201A4;
 constexpr auto SCE_KERNEL_ERROR_NOT_SUSPEND = 0x800201A5;
 constexpr auto SCE_KERNEL_ERROR_WAIT_TIMEOUT = 0x800201A8;
+constexpr auto SCE_KERNEL_ERROR_WAIT_CANCEL = 0x800201A9;
+constexpr auto SCE_KERNEL_ERROR_SEMA_ZERO = 0x800201AD;
+constexpr auto SCE_KERNEL_ERROR_SEMA_OVF = 0x800201AE;
 constexpr auto SCE_KERNEL_ERROR_THREAD_TERMINATED = 0x800201AC;
+constexpr auto SCE_KERNEL_ERROR_WAIT_DELETE = 0x800201B5;
 constexpr auto SCE_KERNEL_ERROR_ILLEGAL_SIZE = 0x800201BC;
+constexpr auto SCE_KERNEL_ERROR_ILLEGAL_COUNT = 0x800201BD;
 constexpr auto SCE_KERNEL_ERROR_MFILE = 0x80020320;
 constexpr auto SCE_KERNEL_ERROR_NODEV = 0x80020321;
 constexpr auto SCE_KERNEL_ERROR_XDEV = 0x80020322;
@@ -247,6 +256,16 @@ struct SceKernelCallbackInfo {
 	uint32_t common;
 	int notify_count;
 	int notify_arg;
+};
+
+struct SceKernelSemaInfo {
+	uint32_t size;
+	char name[SceUID_NAME_MAX + 1];
+	uint32_t attr;
+	int init_count;
+	int current_count;
+	int max_count;
+	int num_wait_threads;
 };
 
 struct SceKernelTimeval {

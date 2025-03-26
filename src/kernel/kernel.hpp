@@ -21,7 +21,8 @@ enum class KernelObjectType {
 	CALLBACK,
 	MEMORY_BLOCK,
 	FILE,
-	DIRECTORY
+	DIRECTORY,
+	SEMAPHORE,
 };
 
 class KernelObject {
@@ -68,14 +69,16 @@ public:
 	void ForceReschedule() { force_reschedule = true; RescheduleNextCycle(); }
 	void RescheduleNextCycle() { reschedule_next_cycle = true; }
 	bool ShouldReschedule() const { return reschedule_next_cycle; }
-	int CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr);
-	void StartThread(int thid, int arg_size, void* arg_block);
-
 	void AddThreadToQueue(int thid);
 	void RemoveThreadFromQueue(int thid);
 
+	int CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr);
+	void StartThread(int thid, int arg_size, void* arg_block);
+
 	int CreateCallback(std::string name, uint32_t entry, uint32_t common);
 	void ExecuteCallback(int cbid);
+
+	int CreateSemaphore(std::string name, uint32_t attr, int init_count, int max_count);
 
 	void Mount(std::string mount_point, std::shared_ptr<FileSystem> file_system);
 	bool DoesDriveExist(std::string mount_point) { return drives.contains(mount_point); }
