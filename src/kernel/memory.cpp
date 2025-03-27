@@ -176,7 +176,7 @@ uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, std::string name
 					block->next = free_block;
 				}
 
-				curr->size = addr - start;
+				curr->size = addr - curr->start;
 				curr->next = block;
 			}
 

@@ -6,10 +6,6 @@
 
 Thread::Thread(Module* module, std::string name, uint32_t entry_addr, int priority, uint32_t stack_size, uint32_t attr, uint32_t return_addr) 
 	: name(name), priority(priority), init_priority(priority), entry(entry_addr), return_addr(return_addr) {
-	regs.fill(0xDEADBEEF);
-	fpu_regs.fill(std::numeric_limits<float>::quiet_NaN());
-	regs[MIPS_REG_ZERO] = 0;
-
 	auto psp = PSP::GetInstance();
 
 	gp = module->GetGP();
@@ -31,6 +27,10 @@ Thread::~Thread() {
 }
 
 void Thread::Start(int arg_size, void* arg_block) {
+	regs.fill(0xDEADBEEF);
+	fpu_regs.fill(std::numeric_limits<float>::quiet_NaN());
+	regs[MIPS_REG_ZERO] = 0;
+
 	exit_status = SCE_KERNEL_ERROR_NOT_DORMANT;
 	pc = entry;
 	regs[MIPS_REG_GP] = gp;
