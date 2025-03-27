@@ -19,7 +19,7 @@ constexpr auto CPU_HZ = 222000000;
 
 #define US_TO_CYCLES(usec) (CPU_HZ / 1000000 * usec)
 #define MS_TO_CYCLES(msec) (CPU_HZ / 1000 * msec)
-#define CYCLES_TO_US(cycles) ((cycles * 1000000) / CPU_HZ)
+#define CYCLES_TO_US(cycles) (cycles * 1000000 / CPU_HZ)
 
 #define ALIGN(n, a) ((n) + (-(n) & ((a) - 1)))
 
@@ -60,7 +60,6 @@ public:
 	void Unschedule(std::shared_ptr<ScheduledEvent> event);
 	void GetEarliestEvent();
 	void ExecuteEvents();
-	uint64_t GetSystemTime();
 	void EatCycles(uint64_t cycles) { this->cycles += cycles; }
 	uint64_t GetCycles() const { return cycles; }
 

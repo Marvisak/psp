@@ -885,9 +885,10 @@ static int sceKernelSetEventFlag(int evfid, uint32_t bit_pattern) {
 
 static uint64_t sceKernelGetSystemTimeWide() {
 	auto psp = PSP::GetInstance();
+	uint64_t time = CYCLES_TO_US(psp->GetCycles());
 	psp->EatCycles(250);
 	psp->GetKernel()->RescheduleNextCycle();
-	return psp->GetSystemTime();
+	return time;
 }
 
 FuncMap RegisterThreadManForUser() {

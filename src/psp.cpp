@@ -200,7 +200,3 @@ void PSP::ExecuteEvents() {
 		}
 	}
 }
-
-uint64_t PSP::GetSystemTime() {
-	return cycles * 100000 / CPU_HZ;
-}
