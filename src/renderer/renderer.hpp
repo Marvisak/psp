@@ -167,6 +167,7 @@ protected:
 
 	bool clear_mode = false;
 	bool depth_test = false;
+	bool alpha_test = false;
 
 	bool bounding_box_success = false;
 
@@ -191,6 +192,10 @@ protected:
 	glm::u8vec4 blend_afix{};
 	glm::u8vec4 blend_bfix{};
 
+	uint8_t alpha_test_func = 0;
+	uint8_t alpha_test_ref = 0;
+	uint8_t alpha_test_mask = 0;
+
 	bool material_ambient = false;
 	bool material_diffuse = false;
 	bool material_specular = false;
@@ -211,6 +216,8 @@ protected:
 	uint8_t texture_function = 0;
 	uint8_t texture_magnify_filter = 0;
 	uint8_t texture_minify_filter = 0;
+	uint8_t texture_level_mode = 0;
+	int8_t texture_level_offset = 0;
 
 	float u_scale = 0;
 	float v_scale = 0;
@@ -337,6 +344,7 @@ enum GECommand {
 	CMD_CLOAD = 0xC4,
 	CMD_CLUT = 0xC5,
 	CMD_TFILTER = 0xC6,
+	CMD_TLEVEL = 0xC8,
 	CMD_TFUNC = 0xC9,
 	CMD_TFLUSH = 0xCB,
 	CMD_FPF = 0xD2,
@@ -345,6 +353,7 @@ enum GECommand {
 	CMD_SCISSOR2 = 0xD5,
 	CMD_MINZ = 0xD6,
 	CMD_MAXZ = 0xD7,
+	CMD_ATEST = 0xDB,
 	CMD_ZTEST = 0xDE,
 	CMD_BLEND = 0xDF,
 	CMD_FIXA = 0xE0,

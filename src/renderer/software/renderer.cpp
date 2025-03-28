@@ -53,6 +53,8 @@ void SoftwareRenderer::SetFrameBuffer(uint32_t frame_buffer, int frame_width, in
 	}
 
 	texture = SDL_CreateTexture(renderer, sdl_pixel_format, SDL_TEXTUREACCESS_STREAMING, BASE_WIDTH, BASE_HEIGHT);
+	SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+	SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
 }
 
 void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
@@ -78,23 +80,18 @@ void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 	uint32_t height = max.y - min.y;
 	if (width == 0 || height == 0) return;
 
-	bool filtering_needed = (width != textures[0].width) || (height != textures[0].height);
-	bool magnifyX = width > textures[0].width;
-	bool magnifyY = height > textures[0].height;
-	if (magnifyX != magnifyY) {
-		spdlog::error("SoftwareRenderer: per axis texture filtering not implemented");
-		return;
-	}
-
 	if (fpf != SCE_DISPLAY_PIXEL_RGBA8888) {
 		spdlog::error("SoftwareRenderer: unimplemented pixel format for triangle {}", fpf);
 		return;
 	}
 
-	bool use_texture = textures_enabled && uv_format != FORMAT_NONE;
+	bool use_texture = !clear_mode && textures_enabled && uv_format != FORMAT_NONE;
+
+	uint8_t filter = -1;
 	std::vector<Color> texture{};
 	if (use_texture) {
 		texture = DecodeTexture();
+		filter = GetFilter(static_cast<float>(textures[0].width) / width, static_cast<float>(textures[0].height) / height);
 	}
 
 	int scissor_min_x = ScissorTestX(min.x);
@@ -126,19 +123,22 @@ void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 			Color color = start.color;
 			if (use_texture) {
-				glm::uvec2 tex_pos{x, y};
-				if (filtering_needed) {
-					tex_pos = FilterTexture(magnifyX && magnifyY, uv);
-				}
+				glm::uvec2 tex_pos = FilterTexture(filter, uv);
 				color = texture[tex_pos.y * textures[0].width + tex_pos.x];
+			}
+
+			if (!clear_mode && alpha_test) {
+				if (!Test(alpha_test_func, color.a & alpha_test_mask, alpha_test_ref & alpha_test_mask)) {
+					continue;
+				}
 			}
 
 			if (!clear_mode && blend) {
 				color = Blend(color, static_cast<Color>(frame_buffer_start[x + y * fbw]));
 			}
 
-			frame_buffer_start[x + y * fbw] = (0x44 << 24) | (color.abgr & 0xFFFFFF);
-			if (depth_write) {
+			frame_buffer_start[x + y * fbw] = color.abgr;
+			if (depth_write && depth_test) {
 				z_buffer_start[x + y * zbw] = max.z;
 			}
 			uv.x += du;
@@ -192,7 +192,6 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 		return;
 	}
 
-	bool magnify = false;
 	bool use_texture = textures_enabled && uv_format != FORMAT_NONE;
 	std::vector<Color> texture{};
 	if (use_texture) {
@@ -242,12 +241,18 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 						v2.uv.x * w1 + v0.uv.x * w2 + v1.uv.x * w3,
 						v2.uv.y * w1 + v0.uv.y * w2 + v1.uv.y * w3,
 					};
-					glm::uvec2 tex_pos = FilterTexture(magnify, uv);
+					glm::uvec2 tex_pos = FilterTexture(false, uv);
 					color = texture[tex_pos.y * textures[0].width + tex_pos.x];
 				} else if (gouraud_shading) {
 					color.r = v2.color.r * w1 + v0.color.r * w2 + v1.color.r * w3;
 					color.g = v2.color.g * w1 + v0.color.g * w2 + v1.color.g * w3;
 					color.b = v2.color.b * w1 + v0.color.b * w2 + v1.color.b * w3;
+				}
+
+				if (!clear_mode && alpha_test) {
+					if (!Test(alpha_test_func, color.a & alpha_test_mask, alpha_test_ref & alpha_test_mask)) {
+						continue;
+					}
 				}
 
 				if (!clear_mode && blend) {
@@ -261,7 +266,6 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 			}
 		}
 	}
-	Frame();
 }
 
 void SoftwareRenderer::DrawTriangleFan(std::vector<Vertex> vertices) {
@@ -400,6 +404,21 @@ bool SoftwareRenderer::Test(uint8_t test, int src, int dst) {
 	return true;
 }
 
+uint8_t SoftwareRenderer::GetFilter(float ds, float dt) {
+	int detail{};
+
+	int height = 1 << (textures[0].height & 0xF);
+	int width = 1 << (textures[0].width & 0xF);
+	switch (texture_level_mode) {
+	case SCEGU_LOD_AUTO:
+		detail = std::log2(std::max(std::abs(ds * width), std::abs(dt * height)));
+		break;
+	}
+	detail += texture_level_offset;
+
+	return detail > 0 ? texture_minify_filter : texture_magnify_filter;
+}
+
 Color SoftwareRenderer::GetCLUT(uint32_t index) {
 	index = ((index >> clut_shift) & clut_mask) | (clut_offset & (clut_format == SCEGU_PF8888 ? 0xFF : 0x1FF));
 	switch (clut_format) {
@@ -472,11 +491,10 @@ Color SoftwareRenderer::Blend(Color src, Color dest) {
 		static_cast<uint8_t>(std::clamp(result.r, 0, 255)) };
 }
 
-glm::uvec2 SoftwareRenderer::FilterTexture(bool magnify, glm::vec2 uv) {
+glm::uvec2 SoftwareRenderer::FilterTexture(uint8_t filter, glm::vec2 uv) {
 	auto& texture = textures[0];
 
 	glm::uvec2 pos{};
-	uint8_t filter = magnify ? texture_magnify_filter : texture_minify_filter;
 	switch (filter) {
 	case SCEGU_NEAREST:
 		pos.x = floorf(uv.x * texture.width);
@@ -485,6 +503,8 @@ glm::uvec2 SoftwareRenderer::FilterTexture(bool magnify, glm::vec2 uv) {
 	default:
 		spdlog::error("SoftwareRenderer: texel filter not implemented {}", filter);
 	}
+	pos.x = std::max(0u, std::min(pos.x, texture.width - 1));
+	pos.y = std::max(0u, std::min(pos.y, texture.height - 1));
 	return pos;
 }
 
@@ -522,12 +542,28 @@ std::vector<Color> SoftwareRenderer::DecodeTexture() {
 		}
 		break;
 	}
+	case SCEGU_PFIDX4: {
+		uint8_t* buffer = reinterpret_cast<uint8_t*>(psp->VirtualToPhysical(texture.buffer));
+
+		for (int y = 0; y < texture.height; y++) {
+			int texture_index = y * texture.width;
+			int clut_index = y * texture.pitch / 2;
+			for (int x = 0; x < texture.width; x += 2, clut_index++) {
+				uint8_t value = buffer[clut_index];
+				texture_data[texture_index + x] = GetCLUT(value & 0xF);
+				texture_data[texture_index + x + 1] = GetCLUT(value >> 4);
+			}
+		}
+		break;
+	}
 	case SCEGU_PFIDX8: {
 		uint8_t* buffer = reinterpret_cast<uint8_t*>(psp->VirtualToPhysical(texture.buffer));
 		for (int y = 0; y < texture.height; y++) {
+			int texture_index = y * texture.width;
+			int clut_index = y * texture.pitch;
 			for (int x = 0; x < texture.width; x++) {
-				uint8_t index = buffer[y * texture.pitch + x];
-				texture_data[y * texture.width + x] = GetCLUT(index);
+				uint8_t index = buffer[clut_index + x];
+				texture_data[texture_index + x] = GetCLUT(index);
 			}
 		}
 		break;
@@ -535,9 +571,11 @@ std::vector<Color> SoftwareRenderer::DecodeTexture() {
 	case SCEGU_PFIDX32: {
 		uint32_t* buffer = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(texture.buffer));
 		for (int y = 0; y < texture.height; y++) {
+			int texture_index = y * texture.width;
+			int clut_index = y * texture.pitch;
 			for (int x = 0; x < texture.width; x++) {
-				uint32_t index = buffer[y * texture.pitch + x];
-				texture_data[y * texture.width + x] = GetCLUT(index);
+				uint32_t index = buffer[clut_index + x];
+				texture_data[texture_index + x] = GetCLUT(index);
 			}
 		}
 		break;

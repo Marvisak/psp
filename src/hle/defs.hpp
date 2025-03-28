@@ -42,6 +42,10 @@ constexpr auto SCEGU_PRIM_RECTANGLES = 6;
 constexpr auto SCEGU_NEAREST = 0;
 constexpr auto SCEGU_LINEAR = 1;
 
+constexpr auto SCEGU_LOD_AUTO = 0;
+constexpr auto SCEGU_LOD_CONSTANT = 1;
+constexpr auto SCEGU_LOD_SLOPE = 2;
+
 constexpr auto SCEGU_PF5650 = 0;
 constexpr auto SCEGU_PF5551 = 1;
 constexpr auto SCEGU_PF4444 = 2;

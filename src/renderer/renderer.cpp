@@ -74,6 +74,7 @@ void Renderer::Step() {
 	case CMD_BCE: culling = command & 1; break;
 	case CMD_TME: textures_enabled = command & 1; break;
 	case CMD_ABE: blend = command & 1; break;
+	case CMD_ATE: alpha_test = command & 1; break;
 	case CMD_ZTE: depth_test = command & 1; break;
 	case CMD_DIVIDE: spdlog::debug("Renderer: unimplemented GE command CMD_DIVIDE"); break;
 	case CMD_WORLDN: world_matrix_num = command & 0xF; break;
@@ -121,6 +122,7 @@ void Renderer::Step() {
 	case CMD_CLOAD: CLoad(command); break;
 	case CMD_CLUT: CLUT(command); break;
 	case CMD_TFILTER: texture_minify_filter = command & 0x7; texture_magnify_filter = (command >> 8) & 0x7; break;
+	case CMD_TLEVEL: texture_level_mode = command & 0x3; texture_level_offset = static_cast<int8_t>((command >> 16) & 0xFF); break;
 	case CMD_TFUNC: TFunc(command); break;
 	case CMD_TFLUSH: break;
 	case CMD_FPF: FPF(command); break;
@@ -129,6 +131,7 @@ void Renderer::Step() {
 	case CMD_SCISSOR2: scissor_end_x = command & 0x1FF; scissor_end_y = command >> 10 & 0x1FF; break;
 	case CMD_MINZ: min_z = command & 0xFFFF; break;
 	case CMD_MAXZ: max_z = command & 0xFFFF; break;
+	case CMD_ATEST: alpha_test_func = command & 0x7; alpha_test_ref = (command >> 8) & 0xFF; alpha_test_mask = (command >> 16) & 0xFF; break;
 	case CMD_ZTEST: z_test_func = command & 0x7; break;
 	case CMD_BLEND: Blend(command); break;
 	case CMD_FIXA: blend_afix = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;
