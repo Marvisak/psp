@@ -40,6 +40,100 @@ static void HandleThreadEnd(int thid, int exit_reason) {
 	}
 }
 
+static void DelayThread(uint32_t usec, bool allow_callbacks) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+	psp->EatCycles(2000);
+
+	if (usec < 200) {
+		usec = 210;
+	}
+	else if (usec > 0x8000000000000000ULL) {
+		usec -= 0x8000000000000000ULL;
+	}
+
+	int thid = kernel->GetCurrentThread();
+	kernel->WaitCurrentThread(WaitReason::DELAY, allow_callbacks);
+	auto func = [thid](uint64_t _) {
+		PSP::GetInstance()->GetKernel()->WakeUpThread(thid, WaitReason::DELAY);
+	};
+
+	psp->Schedule(US_TO_CYCLES(usec), func);
+}
+
+static int WaitThreadEnd(int thid, uint32_t timeout_addr, bool allow_callbacks) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	int current_thread = kernel->GetCurrentThread();
+	if (thid == 0 || thid == current_thread) {
+		spdlog::warn("sceKernelWaitThreadEnd: trying to resume current thread");
+		return SCE_KERNEL_ERROR_ILLEGAL_THID;
+	}
+
+	auto thread = kernel->GetKernelObject<Thread>(thid);
+	if (!thread) {
+		spdlog::warn("sceKernelWaitThreadEnd: invalid thread {}", thid);
+		return SCE_KERNEL_ERROR_UNKNOWN_THID;
+	}
+
+	if (thread->GetState() == ThreadState::DORMANT) {
+		return thread->GetExitStatus();
+	}
+
+	struct ThreadEnd thread_end {};
+	thread_end.thid = current_thread;
+	thread_end.timeout_addr = timeout_addr;
+	if (timeout_addr) {
+		uint32_t timeout = psp->ReadMemory32(timeout_addr);
+		auto func = [timeout_addr, thid, current_thread](uint64_t _) {
+			auto psp = PSP::GetInstance();
+			auto kernel = psp->GetKernel();
+
+			psp->WriteMemory32(timeout_addr, 0);
+			if (kernel->WakeUpThread(current_thread, WaitReason::THREAD_END)) {
+				auto waiting_thread = kernel->GetKernelObject<Thread>(current_thread);
+				waiting_thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_TIMEOUT);
+			}
+
+			auto& map = waiting_thread_end[thid];
+			map.erase(std::remove_if(map.begin(), map.end(), [timeout_addr, current_thread](ThreadEnd data) {
+				return data.thid == current_thread && data.timeout_addr == timeout_addr;
+				}));
+			};
+		thread_end.timeout_event = psp->Schedule(US_TO_CYCLES(timeout), func);
+	}
+	kernel->WaitCurrentThread(WaitReason::THREAD_END, allow_callbacks);
+	waiting_thread_end[thid].push_back(thread_end);
+
+	return 0;
+}
+
+static int WaitSema(int semid, int need_count, uint32_t timeout_addr, bool allow_callbacks) {
+	auto psp = PSP::GetInstance();
+	auto kernel = PSP::GetInstance()->GetKernel();
+	auto semaphore = kernel->GetKernelObject<Semaphore>(semid);
+
+	psp->EatCycles(900);
+	if (need_count <= 0) {
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+	psp->EatCycles(500);
+
+	if (!semaphore) {
+		spdlog::warn("sceKernelWaitSemaCB: invalid semaphore {}", semid);
+		return SCE_KERNEL_ERROR_UNKNOWN_SEMID;
+	}
+
+	if (need_count > semaphore->GetMaxCount()) {
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+
+	semaphore->Wait(need_count, allow_callbacks, timeout_addr);
+
+	return SCE_KERNEL_ERROR_OK;
+}
+
 void ReturnFromThread(CPU* cpu) {
 	auto kernel = PSP::GetInstance()->GetKernel();
 
@@ -101,7 +195,6 @@ static int sceKernelCreateThread(const char* name, uint32_t entry, int init_prio
 
 	return thid;
 }
-
 
 static int sceKernelDeleteThread(int thid) {
 	auto kernel = PSP::GetInstance()->GetKernel();
@@ -438,48 +531,12 @@ static int sceKernelSleepThreadCB() {
 }
 
 static int sceKernelDelayThread(uint32_t usec) {
-	auto psp = PSP::GetInstance();
-	auto kernel = psp->GetKernel();
-
-	psp->EatCycles(2000);
-	if (usec < 200) {
-		usec = 210;
-	}
-	else if (usec > 0x8000000000000000ULL) {
-		usec -= 0x8000000000000000ULL;
-	}
-
-	int thid = kernel->GetCurrentThread();
-	kernel->WaitCurrentThread(WaitReason::DELAY, false);
-	auto func = [thid](uint64_t _) {
-		PSP::GetInstance()->GetKernel()->WakeUpThread(thid, WaitReason::DELAY);
-	};
-
-	psp->Schedule(US_TO_CYCLES(usec), func);
-
+	DelayThread(usec, false);
 	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelDelayThreadCB(uint32_t usec) {
-	auto psp = PSP::GetInstance();
-	auto kernel = psp->GetKernel();
-	psp->EatCycles(2000);
-
-	if (usec < 200) {
-		usec = 210;
-	}
-	else if (usec > 0x8000000000000000ULL) {
-		usec -= 0x8000000000000000ULL;
-	}
-
-	int thid = kernel->GetCurrentThread();
-	kernel->WaitCurrentThread(WaitReason::DELAY, true);
-	auto func = [thid](uint64_t _) {
-		PSP::GetInstance()->GetKernel()->WakeUpThread(thid, WaitReason::DELAY);
-	};
-
-	psp->Schedule(US_TO_CYCLES(usec), func);
-
+	DelayThread(usec, true);
 	return SCE_KERNEL_ERROR_OK;
 }
 
@@ -544,56 +601,11 @@ static int sceKernelResumeThread(int thid) {
 }
 
 static int sceKernelWaitThreadEnd(int thid, uint32_t timeout_addr) {
-	auto psp = PSP::GetInstance();
-	auto kernel = psp->GetKernel();
-
-	int current_thread = kernel->GetCurrentThread();
-	if (thid == 0 || thid == current_thread) {
-		spdlog::warn("sceKernelWaitThreadEnd: trying to resume current thread");
-		return SCE_KERNEL_ERROR_ILLEGAL_THID;
-	}
-
-	auto thread = kernel->GetKernelObject<Thread>(thid);
-	if (!thread) {
-		spdlog::warn("sceKernelWaitThreadEnd: invalid thread {}", thid);
-		return SCE_KERNEL_ERROR_UNKNOWN_THID;
-	}
-
-	if (thread->GetState() == ThreadState::DORMANT) {
-		return thread->GetExitStatus();
-	}
-
-	struct ThreadEnd thread_end {};
-	thread_end.thid = current_thread;
-	thread_end.timeout_addr = timeout_addr;
-	if (timeout_addr) {
-		uint32_t timeout = psp->ReadMemory32(timeout_addr);
-		auto func = [timeout_addr, thid, current_thread](uint64_t _) {
-			auto psp = PSP::GetInstance();
-			auto kernel = psp->GetKernel();
-
-			psp->WriteMemory32(timeout_addr, 0);
-			if (kernel->WakeUpThread(current_thread, WaitReason::THREAD_END)) {
-				auto waiting_thread = kernel->GetKernelObject<Thread>(current_thread);
-				waiting_thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_TIMEOUT);
-			}
-
-			auto& map = waiting_thread_end[thid];
-			map.erase(std::remove_if(map.begin(), map.end(), [timeout_addr, current_thread](ThreadEnd data) {
-				return data.thid == current_thread && data.timeout_addr == timeout_addr;
-			}));
-		};
-		thread_end.timeout_event = psp->Schedule(US_TO_CYCLES(timeout), func);
-	}
-	kernel->WaitCurrentThread(WaitReason::THREAD_END, false);
-	waiting_thread_end[thid].push_back(thread_end);
-
-	return 0;
+	return WaitThreadEnd(thid, timeout_addr, false);
 }
 
 static int sceKernelWaitThreadEndCB(int thid, uint32_t timeout_addr) {
-	spdlog::error("sceKernelWaitThreadEndCB({}, {:x})", thid, timeout_addr);
-	return 0;
+	return WaitThreadEnd(thid, timeout_addr, true);
 }
 
 static int sceKernelWakeupThread(int thid) {
@@ -683,53 +695,11 @@ static int sceKernelCancelSema(int semid, int set_count, uint32_t num_wait_threa
 }
 
 static int sceKernelWaitSema(int semid, int need_count, uint32_t timeout_addr) {
-	auto psp = PSP::GetInstance();
-	auto kernel = PSP::GetInstance()->GetKernel();
-	auto semaphore = kernel->GetKernelObject<Semaphore>(semid);
-
-	psp->EatCycles(900);
-	if (need_count <= 0) {
-		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
-	}
-	psp->EatCycles(500);
-
-	if (!semaphore) {
-		spdlog::warn("sceKernelWaitSema: invalid semaphore {}", semid);
-		return SCE_KERNEL_ERROR_UNKNOWN_SEMID;
-	}
-
-	if (need_count > semaphore->GetMaxCount()) {
-		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
-	}
-
-	semaphore->Wait(need_count, false, timeout_addr);
-
-	return SCE_KERNEL_ERROR_OK;
+	return WaitSema(semid, need_count, timeout_addr, false);
 }
 
 static int sceKernelWaitSemaCB(int semid, int need_count, uint32_t timeout_addr) {
-	auto psp = PSP::GetInstance();
-	auto kernel = PSP::GetInstance()->GetKernel();
-	auto semaphore = kernel->GetKernelObject<Semaphore>(semid);
-
-	psp->EatCycles(900);
-	if (need_count <= 0) {
-		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
-	}
-	psp->EatCycles(500);
-
-	if (!semaphore) {
-		spdlog::warn("sceKernelWaitSemaCB: invalid semaphore {}", semid);
-		return SCE_KERNEL_ERROR_UNKNOWN_SEMID;
-	}
-
-	if (need_count > semaphore->GetMaxCount()) {
-		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
-	}
-
-	semaphore->Wait(need_count, true, timeout_addr);
-
-	return SCE_KERNEL_ERROR_OK;
+	return WaitSema(semid, need_count, timeout_addr, true);
 }
 
 static int sceKernelPollSema(int semid, int need_count) {
