@@ -415,8 +415,8 @@ void Renderer::Prim(uint32_t opcode) {
 		}
 		break;
 	case SCEGU_PRIM_RECTANGLES:
-		if (count >= 2) {
-			DrawRectangle(vertices[0], vertices[1]);
+		for (int i = 0; i < vertices.size() - 1; i += 2) {
+			DrawRectangle(vertices[i], vertices[i + 1]);
 		}
 		break;
 	default:
