@@ -40,6 +40,17 @@ static void HandleThreadEnd(int thid, int exit_reason) {
 	}
 }
 
+static int SleepThread(bool allow_callbacks) {
+	auto kernel = PSP::GetInstance()->GetKernel();
+	auto thread = kernel->GetKernelObject<Thread>(kernel->GetCurrentThread());
+	if (thread->GetWakeupCount() > 0) {
+		thread->DecWakeupCount();
+	} else {
+		kernel->WaitCurrentThread(WaitReason::SLEEP, allow_callbacks);
+	}
+	return SCE_KERNEL_ERROR_OK;
+}
+
 static void DelayThread(uint32_t usec, bool allow_callbacks) {
 	auto psp = PSP::GetInstance();
 	auto kernel = psp->GetKernel();
@@ -260,13 +271,32 @@ static int sceKernelStartThread(int thid, int arg_size, uint32_t arg_block_addr)
 }
 
 static int sceKernelExitThread(int exit_status) {
-	spdlog::error("sceKernelExitThread({})", exit_status);
-	return 0;
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	int thid = kernel->GetCurrentThread();
+	auto thread = kernel->GetKernelObject<Thread>(thid);
+
+	HandleThreadEnd(thid, exit_status);
+	kernel->RemoveThreadFromQueue(thid);
+	thread->SetState(ThreadState::DORMANT);
+	thread->SetWaitReason(WaitReason::NONE);
+	thread->SetExitStatus(exit_status);
+	kernel->RescheduleNextCycle();
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelExitDeleteThread(int exit_status) {
-	spdlog::error("sceKernelExitDeleteThread({})", exit_status);
-	return 0;
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	int thid = kernel->GetCurrentThread();
+	auto thread = kernel->GetKernelObject<Thread>(thid);
+	HandleThreadEnd(thid, exit_status);
+	kernel->RemoveThreadFromQueue(thid);
+	kernel->RemoveKernelObject(thid);
+	kernel->RescheduleNextCycle();
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelTerminateThread(int thid) {
@@ -521,13 +551,11 @@ static int sceKernelCheckCallback() {
 
 
 static int sceKernelSleepThread() {
-	PSP::GetInstance()->GetKernel()->WaitCurrentThread(WaitReason::SLEEP, false);
-	return SCE_KERNEL_ERROR_OK;
+	return SleepThread(false);
 }
 
 static int sceKernelSleepThreadCB() {
-	PSP::GetInstance()->GetKernel()->WaitCurrentThread(WaitReason::SLEEP, true);
-	return SCE_KERNEL_ERROR_OK;
+	return SleepThread(true);
 }
 
 static int sceKernelDelayThread(uint32_t usec) {
@@ -617,8 +645,12 @@ static int sceKernelWakeupThread(int thid) {
 		return SCE_KERNEL_ERROR_UNKNOWN_THID;
 	}
 
-	kernel->WakeUpThread(thid, WaitReason::SLEEP);
-	kernel->RescheduleNextCycle();
+	if (kernel->WakeUpThread(thid, WaitReason::SLEEP)) {
+		kernel->RescheduleNextCycle();
+	}
+	else {
+		thread->IncWakeupCount();
+	}
 
 	return SCE_KERNEL_ERROR_OK;
 }

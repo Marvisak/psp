@@ -39,6 +39,10 @@ public:
 
 	void SwitchState() const;
 	void SaveState();
+	
+	int GetWakeupCount() const { return wakeup_count; }
+	void DecWakeupCount() { wakeup_count--; }
+	void IncWakeupCount() { wakeup_count++; }
 
 	int GetModule() const { return modid; }
 	int GetInitPriority() const { return init_priority; }
@@ -78,6 +82,7 @@ private:
 	ThreadState state = ThreadState::DORMANT;
 	WaitReason wait_reason = WaitReason::NONE;
 	bool allow_callbacks = true;
+	int wakeup_count = 0;
 
 	int modid = 0;
 	uint32_t gp = 0;
