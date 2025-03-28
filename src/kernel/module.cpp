@@ -8,22 +8,51 @@
 
 Module::Module(std::string file_path) : file_path(file_path) {}
 
+const char ELF_MAGIC[4] = { 0x7F, 'E', 'L', 'F' };
+const char PBP_MAGIC[4] = { 0x00, 'P', 'B', 'P'};
+
 bool Module::Load() {
-	auto psp = PSP::GetInstance();
-	auto kernel = psp->GetKernel();
+	auto kernel = PSP::GetInstance()->GetKernel();
 
 	auto fid = kernel->OpenFile(file_path, SCE_FREAD);
 	auto file = kernel->GetKernelObject<File>(fid);
 
-	auto file_size = file->Seek(0, SCE_SEEK_END);
-	file->Seek(0, SCE_SEEK_SET);
+	char magic[4];
+	file->Read(magic, sizeof(magic));
 
 	std::string data{};
-	data.resize(file_size);
-	file->Read(data.data(), file_size);
+	if (memcmp(magic, ELF_MAGIC, sizeof(ELF_MAGIC)) == 0) {
+		auto file_size = file->Seek(0, SCE_SEEK_END);
+		file->Seek(0, SCE_SEEK_SET);
+
+		data.resize(file_size);
+		file->Read(data.data(), file_size);
+	} else if (memcmp(magic, PBP_MAGIC, sizeof(PBP_MAGIC)) == 0) {
+		file->Seek(0x20, SCE_SEEK_SET);
+
+		uint32_t data_psp_offset = 0;
+		uint32_t data_psar_offset = 0;
+		file->Read(&data_psp_offset, sizeof(data_psp_offset));
+		file->Read(&data_psar_offset, sizeof(data_psar_offset));
+		uint32_t data_size = data_psar_offset - data_psp_offset;
+
+		data.resize(data_size);
+		file->Seek(data_psp_offset, SCE_SEEK_SET);
+		file->Read(data.data(), data_size);
+	} else {
+		spdlog::error("Module: unknown file magic");
+		return false;
+	}
+
 	kernel->RemoveKernelObject(fid);
 	std::istringstream ss(data);
 
+	return LoadELF(std::move(ss));
+}
+
+bool Module::LoadELF(std::istringstream ss) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
 	if (!elfio.load(ss, true)) {
 		spdlog::error("Module: cannot parse ELF file");
 		return false;

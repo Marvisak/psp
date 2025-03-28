@@ -53,6 +53,7 @@ class Module : public KernelObject {
 public:
 	Module(std::string file_path);
 	bool Load();
+	bool LoadELF(std::istringstream ss);
 
 	uint32_t GetOffset() const { return offset; }
 	uint32_t GetEntrypoint() const { return entrypoint; }
