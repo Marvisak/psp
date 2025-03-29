@@ -43,6 +43,7 @@ public:
 	uint8_t GetFilter(float ds, float dt);
 
 	Color Blend(Color src, Color dest);
+	Color BlendTexture(Color texture, Color blending);
 	glm::uvec2 FilterTexture(uint8_t filter, glm::vec2 uv);
 	Color GetCLUT(uint32_t index);
 	std::vector<Color> DecodeTexture();

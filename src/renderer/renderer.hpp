@@ -189,18 +189,19 @@ protected:
 	uint8_t blend_operation = 0;
 	uint8_t blend_source = 0;
 	uint8_t blend_destination = 0;
-	glm::u8vec4 blend_afix{};
-	glm::u8vec4 blend_bfix{};
+	glm::ivec4 blend_afix{};
+	glm::ivec4 blend_bfix{};
 
 	uint8_t alpha_test_func = 0;
 	uint8_t alpha_test_ref = 0;
 	uint8_t alpha_test_mask = 0;
 
-	bool material_ambient = false;
+	bool material_update = false;
 	bool material_diffuse = false;
 	bool material_specular = false;
 
 	uint32_t ambient_color = 0x0;
+	uint8_t ambient_alpha = 0x0;
 
 	std::array<uint8_t, 1024> clut{};
 	uint32_t clut_addr = 0x0;
@@ -212,12 +213,14 @@ protected:
 	std::array<Texture, 8> textures{};
 	bool textures_enabled = false;
 	bool texture_alpha = false;
+	bool fragment_double = false;
 	uint8_t texture_format = 0;
 	uint8_t texture_function = 0;
 	uint8_t texture_magnify_filter = 0;
 	uint8_t texture_minify_filter = 0;
 	uint8_t texture_level_mode = 0;
 	int8_t texture_level_offset = 0;
+	glm::ivec4 environment_texture{};
 
 	float u_scale = 0;
 	float v_scale = 0;
@@ -321,6 +324,7 @@ enum GECommand {
 	CMD_SHADE = 0x50,
 	CMD_MATERIAL = 0x53,
 	CMD_MAC = 0x55,
+	CMD_MAA = 0x58,
 	CMD_MK = 0x5B,
 	CMD_CULL = 0x9B,
 	CMD_FBP = 0x9C,
@@ -346,7 +350,9 @@ enum GECommand {
 	CMD_TFILTER = 0xC6,
 	CMD_TLEVEL = 0xC8,
 	CMD_TFUNC = 0xC9,
+	CMD_TEC = 0xCA,
 	CMD_TFLUSH = 0xCB,
+	CMD_TSYNC = 0xCC,
 	CMD_FPF = 0xD2,
 	CMD_CMODE = 0xD3,
 	CMD_SCISSOR1 = 0xD4,

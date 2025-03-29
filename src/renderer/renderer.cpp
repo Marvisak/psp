@@ -96,8 +96,9 @@ void Renderer::Step() {
 	case CMD_OFFSETX: viewport_offset_x = command & 0xFFFFFF; break;
 	case CMD_OFFSETY: viewport_offset_y = command & 0xFFFFFF; break;
 	case CMD_SHADE: gouraud_shading = command & 1; break;
-	case CMD_MATERIAL: material_ambient = command & 1; break;
+	case CMD_MATERIAL: material_update = command & 1; break;
 	case CMD_MAC: ambient_color = command & 0xFFFFFF; break;
+	case CMD_MAA: ambient_alpha = command & 0xFF; break;
 	case CMD_MK: spdlog::warn("Renderer: unimplemented GE command CMD_MK"); break;
 	case CMD_CULL: cull_type = command & 0x1; break;
 	case CMD_FBP: fbp &= 0xFF000000; fbp |= command & 0xFFFFFF; break;
@@ -124,7 +125,9 @@ void Renderer::Step() {
 	case CMD_TFILTER: texture_minify_filter = command & 0x7; texture_magnify_filter = (command >> 8) & 0x7; break;
 	case CMD_TLEVEL: texture_level_mode = command & 0x3; texture_level_offset = static_cast<int8_t>((command >> 16) & 0xFF); break;
 	case CMD_TFUNC: TFunc(command); break;
+	case CMD_TEC: environment_texture = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;
 	case CMD_TFLUSH: break;
+	case CMD_TSYNC: break;
 	case CMD_FPF: FPF(command); break;
 	case CMD_CMODE: clear_mode = command & 1; break;
 	case CMD_SCISSOR1: scissor_start_x = command & 0x1FF; scissor_start_y = command >> 10 & 0x1FF; break;
@@ -266,29 +269,30 @@ Vertex Renderer::ParseVertex() {
 		}
 	}
 
-	if (color_format != FORMAT_NONE) {
-		switch (color_format) {
-		case SCEGU_COLOR_PF5650:
-			vaddr = ALIGN(vaddr, 2);
-			v.color = BGR565ToABGR8888(psp->ReadMemory16(vaddr));
-			vaddr += 2;
-			break;
-		case SCEGU_COLOR_PF5551:
-			vaddr = ALIGN(vaddr, 2);
-			v.color = ABGR1555ToABGR8888(psp->ReadMemory16(vaddr));
-			vaddr += 2;
-			break;
-		case SCEGU_COLOR_PF4444:
-			vaddr = ALIGN(vaddr, 2);
-			v.color = ABGR4444ToABGR8888(psp->ReadMemory16(vaddr));
-			vaddr += 2;
-			break;
-		case SCEGU_COLOR_PF8888:
-			vaddr = ALIGN(vaddr, 4);
-			v.color.abgr = psp->ReadMemory32(vaddr);
-			vaddr += 4;
-			break;
-		}
+	switch (color_format) {
+	case FORMAT_NONE:
+		v.color = (ambient_alpha << 24) | ambient_color;
+		break;
+	case SCEGU_COLOR_PF5650:
+		vaddr = ALIGN(vaddr, 2);
+		v.color = BGR565ToABGR8888(psp->ReadMemory16(vaddr));
+		vaddr += 2;
+		break;
+	case SCEGU_COLOR_PF5551:
+		vaddr = ALIGN(vaddr, 2);
+		v.color = ABGR1555ToABGR8888(psp->ReadMemory16(vaddr));
+		vaddr += 2;
+		break;
+	case SCEGU_COLOR_PF4444:
+		vaddr = ALIGN(vaddr, 2);
+		v.color = ABGR4444ToABGR8888(psp->ReadMemory16(vaddr));
+		vaddr += 2;
+		break;
+	case SCEGU_COLOR_PF8888:
+		vaddr = ALIGN(vaddr, 4);
+		v.color.abgr = psp->ReadMemory32(vaddr);
+		vaddr += 4;
+		break;
 	}
 
 	if (normal_format != FORMAT_NONE) {
@@ -481,11 +485,7 @@ void Renderer::TMode(uint32_t opcode) {
 }
 
 void Renderer::TFunc(uint32_t opcode) {
-	if ((opcode & 0x10000) != 0) {
-		spdlog::error("Renderer: fragment color not implemented");
-		return;
-	}
-
+	fragment_double = opcode & 0x10000;
 	texture_alpha = (opcode & 0x100) != 0;
 	texture_function = opcode & 7;
 }

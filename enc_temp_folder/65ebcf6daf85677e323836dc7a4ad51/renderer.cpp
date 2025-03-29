@@ -543,7 +543,7 @@ Color SoftwareRenderer::BlendTexture(Color texture, Color blending) {
 		break;
 	}
 
-	return {
+	return { 
 		static_cast<uint8_t>(std::clamp(result.a, 0, 255)),
 		static_cast<uint8_t>(std::clamp(result.b, 0, 255)),
 		static_cast<uint8_t>(std::clamp(result.g, 0, 255)),
