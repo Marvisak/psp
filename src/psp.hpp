@@ -87,4 +87,4 @@ private:
 	std::unique_ptr<uint8_t[]> vram;
 };
 
-ScePspDateTime UnixTimestampToDateTime(tm* time);
+void UnixTimestampToDateTime(tm* time, ScePspDateTime* out);

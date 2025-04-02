@@ -29,9 +29,9 @@ void DirectoryFileSystem::GetStatInternal(std::filesystem::path path, SceIoStat*
 
 	struct stat buf;
 	stat(path.string().c_str(), &buf);
-	data->atime = UnixTimestampToDateTime(std::localtime(&buf.st_atime));
-	data->mtime = UnixTimestampToDateTime(std::localtime(&buf.st_ctime));
-	data->ctime = UnixTimestampToDateTime(std::localtime(&buf.st_mtime));
+	UnixTimestampToDateTime(std::localtime(&buf.st_atime), &data->atime);
+	UnixTimestampToDateTime(std::localtime(&buf.st_ctime), &data->mtime);
+	UnixTimestampToDateTime(std::localtime(&buf.st_mtime), &data->ctime);
 	data->mode |= buf.st_mode & 0x1FF;
 	data->size = buf.st_size;
 }

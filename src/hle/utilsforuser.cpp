@@ -3,6 +3,10 @@
 #include <spdlog/spdlog.h>
 #include <windows.h>
 
+static time_t TIME_START{};
+
+void RtcTimeOfDay(SceKernelTimeval* tv);
+
 static int sceKernelDcacheWritebackRange(uint32_t addr, uint32_t size) {
 	spdlog::error("sceKernelDcacheWritebackRange({:x}, {})", addr, size);
 	return 0;
@@ -27,27 +31,7 @@ static int sceKernelLibcGettimeofday(uint32_t time_addr, uint32_t timezone_addr)
 	auto psp = PSP::GetInstance();
 	auto time = reinterpret_cast<SceKernelTimeval*>(psp->VirtualToPhysical(time_addr));
 	if (time) {
-#ifdef _WIN32
-		FILETIME ft;
-		ULARGE_INTEGER uli{};
-
-		GetSystemTimeAsFileTime(&ft);
-
-		uli.LowPart = ft.dwLowDateTime;
-		uli.HighPart = ft.dwHighDateTime;
-
-		uli.QuadPart -= 116444736000000000ULL;
-		uli.QuadPart /= 10;
-
-		time->tv_sec = static_cast<uint32_t>(uli.QuadPart / 1000000);
-		time->tv_usec = static_cast<uint32_t>(uli.QuadPart % 1000000);
-#else
-		timeval curr_time;
-		gettimeofday(&curr_time, nullptr);
-
-		time.tv_sec = curr_time.tv_sec;
-		time.tv_usec = curr_time.tv_usec;
-#endif
+		RtcTimeOfDay(time);
 	}
 
 	psp->EatCycles(1885);
@@ -59,7 +43,7 @@ static int sceKernelLibcGettimeofday(uint32_t time_addr, uint32_t timezone_addr)
 static uint32_t sceKernelLibcTime(uint32_t time_addr) {
 	auto psp = PSP::GetInstance();
 
-	uint32_t t = time(nullptr);
+	uint32_t t = TIME_START + CYCLES_TO_US(psp->GetCycles());
 	if (time_addr != 0) {
 		if (!psp->VirtualToPhysical(time_addr)) {
 			return 0;
@@ -80,6 +64,8 @@ static uint32_t sceKernelLibcClock() {
 }
 
 FuncMap RegisterUtilsForUser() {
+	time(&TIME_START);
+
 	FuncMap funcs;
 	funcs[0x3EE30821] = HLE_UU_R(sceKernelDcacheWritebackRange);
 	funcs[0xB435DEC5] = HLE_R(sceKernelDcacheWritebackInvalidateAll);

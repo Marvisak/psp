@@ -234,15 +234,12 @@ void PSP::ExecuteEvents() {
 		}
 	}
 }
-ScePspDateTime UnixTimestampToDateTime(tm* time) {
-	ScePspDateTime datetime{};
-	datetime.year = time->tm_year + 1900;
-	datetime.month = time->tm_mon + 1;
-	datetime.day = time->tm_mday;
-	datetime.hour = time->tm_hour;
-	datetime.minute = time->tm_min;
-	datetime.second = time->tm_sec;
-	datetime.microsecond = 0;
-
-	return datetime;
+void UnixTimestampToDateTime(tm* time, ScePspDateTime* out) {
+	out->year = time->tm_year + 1900;
+	out->month = time->tm_mon + 1;
+	out->day = time->tm_mday;
+	out->hour = time->tm_hour;
+	out->minute = time->tm_min;
+	out->second = time->tm_sec;
+	out->microsecond = 0;
 }

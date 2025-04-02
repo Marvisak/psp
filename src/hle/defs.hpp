@@ -109,6 +109,7 @@ constexpr auto SCE_KERNEL_TH_CLEAR_STACK = 0x200000;
 constexpr auto SCE_KERNEL_TH_LOW_STACK = 0x400000;
 constexpr auto SCE_KERNEL_TH_USER = 0x80000000;
 
+constexpr auto SCE_OK = 0;
 constexpr auto SCE_ERROR_BUSY = 0x80000021;
 constexpr auto SCE_ERROR_INVALID_ID = 0x80000100;
 constexpr auto SCE_ERROR_INVALID_POINTER = 0x80000103;
