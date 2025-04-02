@@ -35,6 +35,18 @@ constexpr auto SCE_DISPLAY_PIXEL_RGBA8888 = 3;
 constexpr auto SCE_DISPLAY_UPDATETIMING_NEXTHSYNC = 0;
 constexpr auto SCE_DISPLAY_UPDATETIMING_NEXTVSYNC = 1;
 
+constexpr auto SCE_CTRL_MODE_DIGITALONLY = 0;
+constexpr auto SCE_CTRL_MODE_DIGITALANALOG = 1;
+
+constexpr auto SCE_CTRL_UP = (1 << 4);
+constexpr auto SCE_CTRL_RIGHT = (1 << 5);
+constexpr auto SCE_CTRL_DOWN = (1 << 6);
+constexpr auto SCE_CTRL_LEFT = (1 << 7);
+constexpr auto SCE_CTRL_TRIANGLE = (1 << 12);
+constexpr auto SCE_CTRL_CIRCLE = (1 << 13);
+constexpr auto SCE_CTRL_CROSS = (1 << 14);
+constexpr auto SCE_CTRL_SQUARE = (1 << 15);
+
 constexpr auto SCEGU_PRIM_TRIANGLES = 3;
 constexpr auto SCEGU_PRIM_TRIANGLE_FAN = 5;
 constexpr auto SCEGU_PRIM_RECTANGLES = 6;
@@ -116,6 +128,7 @@ constexpr auto SCE_ERROR_INVALID_POINTER = 0x80000103;
 constexpr auto SCE_ERROR_INVALID_SIZE = 0x80000104;
 constexpr auto SCE_ERROR_INVALID_MODE = 0x80000107;
 constexpr auto SCE_ERROR_INVALID_FORMAT = 0x80000108;
+constexpr auto SCE_ERROR_INVALID_VALUE = 0x800001FE;
 
 constexpr auto SCE_ERROR_ERRNO_ENOENT = 0x80010002;
 constexpr auto SCE_ERROR_ERRNO_EEXIST = 0x80010011;
@@ -277,4 +290,20 @@ struct SceKernelSemaInfo {
 struct SceKernelTimeval {
 	uint32_t tv_sec;
 	uint32_t tv_usec;
+};
+
+struct SceCtrlData {
+	uint32_t timestamp;
+	uint32_t buttons;
+	uint8_t analog_x;
+	uint8_t analog_y;
+
+	uint8_t reserved[6];
+};
+
+struct SceCtrlLatch {
+	uint32_t make;
+	uint32_t break_;
+	uint32_t press;
+	uint32_t release;
 };

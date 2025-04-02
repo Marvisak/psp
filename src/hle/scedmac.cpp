@@ -2,7 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
-uint64_t dmac_finish = 0;
+uint64_t DMAC_FINISH = 0;
 
 static int sceDmacMemcpy(uint32_t dst_addr, uint32_t src_addr, uint32_t size) {
 	if (size == 0) {
@@ -24,7 +24,7 @@ static int sceDmacMemcpy(uint32_t dst_addr, uint32_t src_addr, uint32_t size) {
 
 	if (size >= 272) {
 		int delay = size / 236;
-		dmac_finish = psp->GetCycles() + US_TO_CYCLES(delay);
+		DMAC_FINISH = psp->GetCycles() + US_TO_CYCLES(delay);
 		HLEDelay(delay);
 	}
 	return 0;
@@ -46,7 +46,7 @@ static int sceDmacTryMemcpy(uint32_t dst_addr, uint32_t src_addr, uint32_t size)
 		return SCE_ERROR_INVALID_POINTER;
 	}
 
-	if (dmac_finish > psp->GetCycles()) {
+	if (DMAC_FINISH > psp->GetCycles()) {
 		return SCE_ERROR_BUSY;
 	}
 
@@ -54,7 +54,7 @@ static int sceDmacTryMemcpy(uint32_t dst_addr, uint32_t src_addr, uint32_t size)
 
 	if (size >= 272) {
 		int delay = size / 236;
-		dmac_finish = psp->GetCycles() + US_TO_CYCLES(delay);
+		DMAC_FINISH = psp->GetCycles() + US_TO_CYCLES(delay);
 		HLEDelay(delay);
 	}
 	return 0;

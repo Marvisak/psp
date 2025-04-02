@@ -112,12 +112,11 @@ void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 		uint32_t frame_buffer_index = y * fbw;
 		uint32_t z_buffer_index = y * zbw;
-		for (int x = scissor_min_x; x < scissor_max_x; x++) {
+		for (int x = scissor_min_x; x < scissor_max_x; x++, uv.x += du) {
 			if (!through && (max.z < min_z || max.z > max_z)) {
 				return;
 			}
 
-			uv.x += du;
 			if (!clear_mode && depth_test) {
 				if (!Test(z_test_func, max.z, z_buffer_start[z_buffer_index + x])) {
 					continue;
@@ -129,7 +128,7 @@ void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 				glm::uvec2 tex_pos = FilterTexture(filter, uv);
 				Color texel = texture[tex_pos.y * textures[0].width + tex_pos.x];
 				color = BlendTexture(texel, color);
-			} 
+			}
 
 			if (!clear_mode && alpha_test) {
 				if (!Test(alpha_test_func, color.a & alpha_test_mask, alpha_test_ref & alpha_test_mask)) {

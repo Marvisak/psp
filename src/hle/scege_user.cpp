@@ -4,7 +4,6 @@
 
 #include "../kernel/thread.hpp"
 
-
 static uint32_t sceGeEdramGetAddr() {
 	PSP::GetInstance()->EatCycles(150);
 	return VRAM_START;

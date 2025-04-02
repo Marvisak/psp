@@ -5,17 +5,20 @@
 #include "defs.hpp"
 #include "../kernel/thread.hpp"
 
+void SampleController(bool vblank, uint64_t cycles_late);
+
 struct Frame {
 	uint32_t buffer;
 	int width;
 	int format;
 };
 
-Frame current_frame{};
-Frame latched_frame{};
-bool frame_latched = false;
+Frame CURRENT_FRAME{};
+Frame LATCHED_FRAME{};
+bool FRAME_LATCHED = false;
 
-std::vector<int> vblank_threads{};
+int VBLANK_COUNT = 0;
+std::vector<int> VBLANK_THREADS{};
 
 static void VBlankEndHandler(uint64_t cycles_late) {
 	PSP::GetInstance()->SetVBlank(false);
@@ -24,18 +27,21 @@ static void VBlankEndHandler(uint64_t cycles_late) {
 static void VBlankHandler(uint64_t cycles_late) {
 	auto psp = PSP::GetInstance();
 
-	for (auto thid : vblank_threads) {
+	for (auto thid : VBLANK_THREADS) {
 		psp->GetKernel()->WakeUpThread(thid, WaitReason::VBLANK);
 	}
-	vblank_threads.clear();
+	VBLANK_THREADS.clear();
 
-	if (frame_latched) {
-		current_frame = latched_frame;
-		frame_latched = false;
+	if (FRAME_LATCHED) {
+		CURRENT_FRAME = LATCHED_FRAME;
+		FRAME_LATCHED = false;
 	}
 
 	psp->GetRenderer()->Frame();
 	psp->SetVBlank(true);
+	VBLANK_COUNT++;
+
+	SampleController(true, 0);
 
 	uint64_t frame_cycles = MS_TO_CYCLES(1001.0 / static_cast<double>(REFRESH_RATE));
 	uint64_t cycles = frame_cycles - cycles_late;
@@ -45,7 +51,7 @@ static void VBlankHandler(uint64_t cycles_late) {
 
 static void VBlankWait() {
 	auto kernel = PSP::GetInstance()->GetKernel();
-	vblank_threads.push_back(kernel->GetCurrentThread());
+	VBLANK_THREADS.push_back(kernel->GetCurrentThread());
 	kernel->WaitCurrentThread(WaitReason::VBLANK, false);
 }
 
@@ -75,13 +81,13 @@ static int sceDisplayGetFrameBuf(uint32_t frame_buffer_addr, uint32_t frame_widt
 	auto psp = PSP::GetInstance();
 
 	if (mode == SCE_DISPLAY_UPDATETIMING_NEXTHSYNC) {
-		psp->WriteMemory32(frame_buffer_addr, current_frame.buffer);
-		psp->WriteMemory32(frame_width_addr, current_frame.width);
-		psp->WriteMemory32(pixel_format_addr, current_frame.format);
+		psp->WriteMemory32(frame_buffer_addr, CURRENT_FRAME.buffer);
+		psp->WriteMemory32(frame_width_addr, CURRENT_FRAME.width);
+		psp->WriteMemory32(pixel_format_addr, CURRENT_FRAME.format);
 	} else {
-		psp->WriteMemory32(frame_buffer_addr, latched_frame.buffer);
-		psp->WriteMemory32(frame_width_addr, latched_frame.width);
-		psp->WriteMemory32(pixel_format_addr, latched_frame.format);
+		psp->WriteMemory32(frame_buffer_addr, LATCHED_FRAME.buffer);
+		psp->WriteMemory32(frame_width_addr, LATCHED_FRAME.width);
+		psp->WriteMemory32(pixel_format_addr, LATCHED_FRAME.format);
 	}
 
 	return 0;
@@ -102,7 +108,7 @@ static int sceDisplaySetFrameBuf(uint32_t frame_buffer_address, int frame_width,
 		return SCE_ERROR_INVALID_FORMAT;
 	}
 
-	if (mode == SCE_DISPLAY_UPDATETIMING_NEXTHSYNC && (pixel_format != latched_frame.format || frame_width != latched_frame.width)) {
+	if (mode == SCE_DISPLAY_UPDATETIMING_NEXTHSYNC && (pixel_format != LATCHED_FRAME.format || frame_width != LATCHED_FRAME.width)) {
 		return SCE_ERROR_INVALID_MODE;
 	}
 
@@ -118,18 +124,18 @@ static int sceDisplaySetFrameBuf(uint32_t frame_buffer_address, int frame_width,
 	}
 	
 	if (mode == SCE_DISPLAY_UPDATETIMING_NEXTHSYNC) {
-		current_frame.buffer = frame_buffer_address;
-		current_frame.width = frame_width;
-		current_frame.format = pixel_format;
+		CURRENT_FRAME.buffer = frame_buffer_address;
+		CURRENT_FRAME.width = frame_width;
+		CURRENT_FRAME.format = pixel_format;
 	} else {
-		latched_frame.buffer = frame_buffer_address;
-		latched_frame.width = frame_width;
-		latched_frame.format = pixel_format;
+		LATCHED_FRAME.buffer = frame_buffer_address;
+		LATCHED_FRAME.width = frame_width;
+		LATCHED_FRAME.format = pixel_format;
 
-		current_frame.width = frame_width;
-		current_frame.format = pixel_format;
+		CURRENT_FRAME.width = frame_width;
+		CURRENT_FRAME.format = pixel_format;
 
-		frame_latched = true;
+		FRAME_LATCHED = true;
 	}
 
 	psp->GetRenderer()->SetFrameBuffer(frame_buffer_address, frame_width, pixel_format);
@@ -163,6 +169,13 @@ static float sceDisplayGetFramePerSec() {
 	return 59.9400599f;
 }
 
+static int sceDisplayGetVcount() {
+	auto psp = PSP::GetInstance();
+	psp->EatCycles(150);
+	psp->GetKernel()->RescheduleNextCycle();
+	return VBLANK_COUNT;
+}
+
 FuncMap RegisterSceDisplay() {
 	VBlankHandler(0);
 
@@ -175,5 +188,6 @@ FuncMap RegisterSceDisplay() {
 	funcs[0x984C27E7] = HLE_R(sceDisplayWaitVblankStart);
 	funcs[0x4D4E10EC] = HLE_R(sceDisplayIsVblank);
 	funcs[0xDBA6C4C4] = HLE_RF(sceDisplayGetFramePerSec);
+	funcs[0x9C6EAAD7] = HLE_R(sceDisplayGetVcount);
 	return funcs;
 }

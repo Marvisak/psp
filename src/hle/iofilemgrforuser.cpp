@@ -7,7 +7,7 @@
 #include "../kernel/filesystem/file.hpp"
 #include "../kernel/filesystem/dirlisting.hpp"
 
-std::array<int, 64> FILE_DESCRIPTORS;
+std::array<int, 64> FILE_DESCRIPTORS{};
 std::string CWD{};
 
 static void IODelay(int usec) {
@@ -260,7 +260,7 @@ static int sceIoGetstat(const char* name, uint32_t buf_addr) {
 static int sceIoDevctl(const char* devname, int cmd, uint32_t arg_addr, int arg_len, uint32_t buf_addr, int buf_len) {
 	auto psp = PSP::GetInstance();
 	if (!strcmp(devname, "kemulator:") || !strcmp(devname, "emulator:")) {
-			switch (cmd) {
+		switch (cmd) {
 		case 1:
 			if (buf_addr)
 				psp->WriteMemory32(buf_addr, 1);

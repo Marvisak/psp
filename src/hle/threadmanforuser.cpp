@@ -13,14 +13,14 @@ struct ThreadEnd {
 	std::shared_ptr<ScheduledEvent> timeout_event;
 };
 
-std::unordered_map<int, std::vector<ThreadEnd>> waiting_thread_end{};
+std::unordered_map<int, std::vector<ThreadEnd>> WAITING_THREAD_END{};
 
 static void HandleThreadEnd(int thid, int exit_reason) {
 	auto psp = PSP::GetInstance();
 	auto kernel = psp->GetKernel();
 
-	if (waiting_thread_end.contains(thid)) {
-		for (auto& thread_end : waiting_thread_end[thid]) {
+	if (WAITING_THREAD_END.contains(thid)) {
+		for (auto& thread_end : WAITING_THREAD_END[thid]) {
 			auto thread = kernel->GetKernelObject<Thread>(thread_end.thid);
 			if (!thread) {
 				continue;
@@ -36,7 +36,7 @@ static void HandleThreadEnd(int thid, int exit_reason) {
 				thread->SetReturnValue(exit_reason);
 			}
 		}
-		waiting_thread_end.erase(thid);
+		WAITING_THREAD_END.erase(thid);
 	}
 }
 
@@ -107,7 +107,7 @@ static int WaitThreadEnd(int thid, uint32_t timeout_addr, bool allow_callbacks) 
 				waiting_thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_TIMEOUT);
 			}
 
-			auto& map = waiting_thread_end[thid];
+			auto& map = WAITING_THREAD_END[thid];
 			map.erase(std::remove_if(map.begin(), map.end(), [timeout_addr, current_thread](ThreadEnd data) {
 				return data.thid == current_thread && data.timeout_addr == timeout_addr;
 				}));
@@ -115,7 +115,7 @@ static int WaitThreadEnd(int thid, uint32_t timeout_addr, bool allow_callbacks) 
 		thread_end.timeout_event = psp->Schedule(US_TO_CYCLES(timeout), func);
 	}
 	kernel->WaitCurrentThread(WaitReason::THREAD_END, allow_callbacks);
-	waiting_thread_end[thid].push_back(thread_end);
+	WAITING_THREAD_END[thid].push_back(thread_end);
 
 	return 0;
 }
