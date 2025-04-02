@@ -38,8 +38,7 @@ public:
 	void Step();
 
 	bool LoadExec(std::string path);
-	void* VirtualToPhysical(uint32_t addr);
-	uint32_t GetMaxSize(uint32_t addr);
+	bool LoadMemStick(std::string path);
 
 	void Exit();
 	void ForceExit();
@@ -49,12 +48,16 @@ public:
 	bool IsVBlank() const { return vblank; }
 	void SetVBlank(bool vblank) { this->vblank = vblank; }
 	
+	void* VirtualToPhysical(uint32_t addr);
+	uint32_t GetMaxSize(uint32_t addr);
+
 	uint8_t ReadMemory8(uint32_t addr);
 	uint16_t ReadMemory16(uint32_t addr);
 	uint32_t ReadMemory32(uint32_t addr);
 	void WriteMemory8(uint32_t addr, uint8_t value);
 	void WriteMemory16(uint32_t addr, uint16_t value);
 	void WriteMemory32(uint32_t addr, uint32_t value);
+	void WriteMemory64(uint32_t addr, uint64_t value);
 
 	std::shared_ptr<ScheduledEvent> Schedule(uint64_t cycles, SchedulerFunc func);
 	void Unschedule(std::shared_ptr<ScheduledEvent> event);
@@ -83,3 +86,5 @@ private:
 	std::unique_ptr<uint8_t[]> ram;
 	std::unique_ptr<uint8_t[]> vram;
 };
+
+ScePspDateTime UnixTimestampToDateTime(tm* time);

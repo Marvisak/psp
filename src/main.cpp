@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
 #include <elfio/elfio.hpp>
@@ -11,6 +12,9 @@ int main(int argc, char* argv[]) {
 
     std::string elf_path;
     app.add_option("-f,--file", elf_path, "Path to the game ELF")->check(CLI::ExistingPath)->required();
+
+    std::string memstick_path = (std::filesystem::current_path().parent_path() / "memstick").string();
+    app.add_option("-m,--memstick", elf_path, "Path to the memory stick folder");
     
     spdlog::level::level_enum level = spdlog::level::info;
     std::map<std::string, spdlog::level::level_enum> levels{
@@ -40,8 +44,13 @@ int main(int argc, char* argv[]) {
     spdlog::set_level(level);
     
     PSP psp(renderer_type);
-    if (!psp.LoadExec(elf_path))
+    if (!psp.LoadExec(elf_path)) {
         return 1;
+    }
+
+    if (!psp.LoadMemStick(memstick_path)) {
+        return 1;
+    }
 
     if (enable_debugger) {
        Debugger debugger(gdb_port);

@@ -193,9 +193,13 @@ int Kernel::OpenFile(std::string path, int flags) {
 
 int Kernel::OpenDirectory(std::string path) {
 	int drive_end = path.find('/');
-	if (drive_end == -1) drive_end = path.size();
-	std::string relative_path = drive_end == path.size() ? "" : path.substr(drive_end + 1);
+	std::string relative_path = path.substr(drive_end + 1);
 	std::string drive = path.substr(0, drive_end);
+	if (drive_end == -1) {
+		relative_path = "";
+		drive = path;
+	}
+
 	if (!DoesDriveExist(drive)) {
 		spdlog::error("Kernel: unknown drive {}", drive);
 		return SCE_KERNEL_ERROR_NODEV;
@@ -245,6 +249,7 @@ int Kernel::RemoveFile(std::string path) {
 	int drive_end = path.find('/');
 	std::string relative_path = path.substr(drive_end + 1);
 	std::string drive = path.substr(0, drive_end);
+
 	if (!DoesDriveExist(drive)) {
 		spdlog::error("Kernel: unknown drive {}", drive);
 		return SCE_KERNEL_ERROR_NODEV;
@@ -261,6 +266,11 @@ int Kernel::RemoveDirectory(std::string path) {
 	int drive_end = path.find('/');
 	std::string relative_path = path.substr(drive_end + 1);
 	std::string drive = path.substr(0, drive_end);
+	if (drive_end == -1) {
+		relative_path = "";
+		drive = path;
+	}
+
 	if (!DoesDriveExist(drive)) {
 		spdlog::error("Kernel: unknown drive {}", drive);
 		return SCE_KERNEL_ERROR_NODEV;
@@ -270,6 +280,25 @@ int Kernel::RemoveDirectory(std::string path) {
 	if (!file_system->RemoveDirectory(relative_path)) {
 		return SCE_ERROR_ERRNO_ENOENT;
 	}
+	return 0;
+}
+
+int Kernel::FixPath(std::string path, std::string& out) {
+	int drive_end = path.find('/');
+	std::string relative_path = path.substr(drive_end + 1);
+	std::string drive = path.substr(0, drive_end);
+	if (drive_end == -1) {
+		relative_path = "";
+		drive = path;
+	}
+
+	if (!DoesDriveExist(drive)) {
+		spdlog::error("Kernel: unknown drive {}", drive);
+		return SCE_KERNEL_ERROR_NODEV;
+	}
+
+	auto& file_system = drives[drive];
+	out = drive + "/" + file_system->FixPath(relative_path);
 	return 0;
 }
 
@@ -290,10 +319,7 @@ int Kernel::Rename(std::string old_path, std::string new_path) {
 	}
 
 	auto& file_system = drives[old_drive];
-	if (!file_system->Rename(old_relative_path, new_relative_path)) {
-		return SCE_ERROR_ERRNO_ENOENT;
-	}
-	return 0;
+	return file_system->Rename(old_relative_path, new_relative_path);
 }
 
 bool Kernel::WakeUpThread(int thid, WaitReason reason) {

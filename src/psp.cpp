@@ -7,6 +7,12 @@
 #include "kernel/module.hpp"
 #include "hle/hle.hpp"
 
+std::vector<std::string> MEMORY_STICK_REQUIRED_FOLDERS = {
+	"PSP",
+	"PSP/GAME",
+	"PSP/SAVEDATA",
+};
+
 PSP::PSP(RendererType renderer_type) {
 	instance = this;
 	ram = std::make_unique<uint8_t[]>(USER_MEMORY_END - KERNEL_MEMORY_START);
@@ -96,10 +102,34 @@ bool PSP::LoadExec(std::string path) {
 	kernel->Mount("host0:", file_system);
 
 	int uid = kernel->LoadModule(executable_path);
-	if (uid == -1)
+	if (uid == -1) {
 		return false;
+	}
 	kernel->ExecModule(uid);
 
+	return true;
+}
+
+bool PSP::LoadMemStick(std::string path) {
+	std::filesystem::path fs_path{ path };
+	if (std::filesystem::is_regular_file(fs_path)) {
+		spdlog::error("Kernel: memory stick path is a file");
+		return false;
+	}
+
+	if (!std::filesystem::is_directory(fs_path)) {
+		std::filesystem::create_directory(fs_path);
+	}
+
+	for (const auto& dir_path : MEMORY_STICK_REQUIRED_FOLDERS) {
+		auto dir_path_fs = fs_path / dir_path;
+		if (!std::filesystem::is_directory(dir_path_fs)) {
+			std::filesystem::create_directory(dir_path_fs);
+		}
+	}
+
+	auto file_system = std::make_shared<DirectoryFileSystem>(fs_path);
+	kernel->Mount("ms0:", file_system);
 	return true;
 }
 
@@ -165,6 +195,10 @@ void PSP::WriteMemory32(uint32_t addr, uint32_t value) {
 	*reinterpret_cast<uint32_t*>(VirtualToPhysical(addr)) = value;
 }
 
+void PSP::WriteMemory64(uint32_t addr, uint64_t value) {
+	*reinterpret_cast<uint64_t*>(VirtualToPhysical(addr)) = value;
+}
+
 std::shared_ptr<ScheduledEvent> PSP::Schedule(uint64_t cycles, SchedulerFunc func) {
 	auto event = std::make_shared<ScheduledEvent>();
 	event->cycle_trigger = this->cycles + cycles;
@@ -199,4 +233,16 @@ void PSP::ExecuteEvents() {
 			i--;
 		}
 	}
+}
+ScePspDateTime UnixTimestampToDateTime(tm* time) {
+	ScePspDateTime datetime{};
+	datetime.year = time->tm_year + 1900;
+	datetime.month = time->tm_mon + 1;
+	datetime.day = time->tm_mday;
+	datetime.hour = time->tm_hour;
+	datetime.minute = time->tm_min;
+	datetime.second = time->tm_sec;
+	datetime.microsecond = 0;
+
+	return datetime;
 }

@@ -53,6 +53,7 @@ list(APPEND sources
 	src/hle/scepower.cpp
 	src/hle/sceatrac3plus.cpp
 	src/hle/sceumduser.cpp
+	src/hle/scertc.cpp
 )
 
 add_executable(psp ${sources})

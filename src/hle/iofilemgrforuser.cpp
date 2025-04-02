@@ -40,13 +40,15 @@ static int ResolveFD(int fd) {
 	return 0;
 }
 
+static bool IsPathAbsolute(std::string path) {
+	return !path.empty() && (path.find(":/") != -1 || path.back() == ':');
+}
+
 static std::string HandleCWD(std::string path) {
-	if (path.find(":/") != -1) {
+	if (IsPathAbsolute(path)) {
 		return path;
 	}
-	else {
-		return CWD + path;
-	}
+	return CWD + "/" + path;
 }
 
 static int sceIoOpen(const char* file_name, int flags, int mode) {
@@ -172,9 +174,16 @@ static int sceIoLseek32(int fd, int offset, int whence) {
 	return file->Seek(offset, whence);
 }
 
-static int sceIoRename(const char* new_name, const char* old_name) {
+static int sceIoRename(const char* old_name, const char* new_name) {
 	IODelay(1000);
-	return PSP::GetInstance()->GetKernel()->Rename(HandleCWD(new_name), HandleCWD(old_name));
+
+	auto old_path = HandleCWD(old_name);
+
+	std::string new_path = new_name;
+	new_path = new_path.substr(new_path.find_last_of('/') + 1);
+	new_path = old_path.substr(0, old_path.find_last_of('/') + 1) + new_path;
+
+	return PSP::GetInstance()->GetKernel()->Rename(old_path, new_path);
 }
 
 static int sceIoRemove(const char* file_name) {
@@ -235,16 +244,7 @@ static int sceIoDclose(int fd) {
 
 static int sceIoChdir(const char* dirname) {
 	std::string path = HandleCWD(dirname);
-	std::string drive = path.substr(0, path.find('/'));
-	if (!PSP::GetInstance()->GetKernel()->DoesDriveExist(drive)) {
-		return SCE_KERNEL_ERROR_NODEV;
-	}
-
-	if (!path.ends_with("/")) {
-		path += "/";
-	}
-	CWD = path;
-	return 0;
+	return PSP::GetInstance()->GetKernel()->FixPath(path, CWD);
 }
 
 static int sceIoGetstat(const char* name, uint32_t buf_addr) {

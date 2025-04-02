@@ -14,12 +14,13 @@ public:
 	std::unique_ptr<DirectoryListing> OpenDirectory(std::string path);
 	void CreateDirectory(std::string path);
 	bool GetStat(std::string path, SceIoStat* data);
-	bool Rename(std::string old_path, std::string new_path);
+	int Rename(std::string old_path, std::string new_path);
 	bool RemoveFile(std::string path);
 	bool RemoveDirectory(std::string path);
+	std::string FixPath(std::string path) const;
 private:
-	bool IsValidPath(std::filesystem::path path) const;
 	void GetStatInternal(std::filesystem::path path, SceIoStat* stat) const;
+	void VFATPath(std::string& path);
 
 	std::filesystem::path root;
 };

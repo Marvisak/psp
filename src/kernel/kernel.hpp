@@ -89,6 +89,7 @@ public:
 	int Rename(std::string old_path, std::string new_path);
 	int RemoveFile(std::string path);
 	int RemoveDirectory(std::string path);
+	int FixPath(std::string path, std::string& out);
 
 	bool WakeUpThread(int thid, WaitReason reason);
 	void WaitCurrentThread(WaitReason reason, bool allow_callbacks);

@@ -7,16 +7,11 @@
 #include <spdlog/spdlog.h>
 
 #include "../../../hle/defs.hpp"
+#include "../../../psp.hpp"
+
 #include "directoryfile.hpp"
 
 DirectoryFileSystem::DirectoryFileSystem(std::filesystem::path path) : root(path) {}
-
-bool DirectoryFileSystem::IsValidPath(std::filesystem::path path) const {
-	std::filesystem::path full_path = std::filesystem::weakly_canonical(path);
-	std::filesystem::path canonical_root = std::filesystem::weakly_canonical(root);
-
-	return std::mismatch(canonical_root.begin(), canonical_root.end(), full_path.begin()).first == canonical_root.end();
-}
 
 void DirectoryFileSystem::GetStatInternal(std::filesystem::path path, SceIoStat* data) const {
 	if (std::filesystem::is_directory(path)) {
@@ -34,22 +29,74 @@ void DirectoryFileSystem::GetStatInternal(std::filesystem::path path, SceIoStat*
 
 	struct stat buf;
 	stat(path.string().c_str(), &buf);
-	data->atime = UnixTimestampToDateTime(buf.st_atime);
-	data->mtime = UnixTimestampToDateTime(buf.st_ctime);
-	data->ctime = UnixTimestampToDateTime(buf.st_mtime);
+	data->atime = UnixTimestampToDateTime(std::localtime(&buf.st_atime));
+	data->mtime = UnixTimestampToDateTime(std::localtime(&buf.st_ctime));
+	data->ctime = UnixTimestampToDateTime(std::localtime(&buf.st_mtime));
 	data->mode |= buf.st_mode & 0x1FF;
 	data->size = buf.st_size;
 }
 
+void DirectoryFileSystem::VFATPath(std::string& path) {
+	std::string FAT_UPPER_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&'(){}-_`~";
+	std::string FAT_LOWER_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&'(){}-_`~";
+	std::string LOWER_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&'(){}-_`~";
+
+	auto lower_char = path.find_first_of(LOWER_CHARS);
+	if (lower_char == path.npos) {
+		return;
+	}
+
+	bool apply_hack = false;
+	auto dot_pos = path.find('.');
+	if (dot_pos == path.npos && path.size() <= 8) {
+		auto bad_char = path.find_first_not_of(FAT_LOWER_CHARS);
+		if (bad_char == path.npos) {
+			apply_hack = true;
+		}
+	} else {
+		std::string base = path.substr(0, dot_pos);
+		std::string ext = path.substr(dot_pos + 1);
+
+		if (base.size() <= 8 && ext.size() <= 3) {
+			auto base_non_lower = base.find_first_not_of(FAT_LOWER_CHARS);
+			auto base_non_upper = base.find_first_not_of(FAT_UPPER_CHARS);
+			auto ext_non_lower = ext.find_first_not_of(FAT_LOWER_CHARS);
+			auto ext_non_upper = ext.find_first_not_of(FAT_UPPER_CHARS);
+
+			bool base_apply_hack = base_non_lower == base.npos || base_non_upper == base.npos;
+			bool ext_apply_hack = ext_non_lower == ext.npos || ext_non_upper == ext.npos;
+			apply_hack = base_apply_hack && ext_apply_hack;
+		}
+	}
+
+	if (apply_hack) {
+		std::transform(path.begin(), path.end(), path.begin(), toupper);
+	}
+}
+
+std::string DirectoryFileSystem::FixPath(std::string path) const {
+	if (!path.empty() && path.front() == '/') {
+		path = path.substr(1);
+	}
+
+	if (path.empty()) {
+		return path;
+	}
+
+	auto relative_path = std::filesystem::relative(root / path, root);
+	std::string cleaned_path = relative_path.lexically_normal().generic_string();
+	return cleaned_path;
+}
+
 std::unique_ptr<File> DirectoryFileSystem::OpenFile(std::string path, int flags) {
-	std::filesystem::path full_path = root / path;
-	if (!IsValidPath(full_path)) {
-		spdlog::warn("DirectoryFileSystem: {} is outside the root directory", path);
+	std::filesystem::path full_path = root / FixPath(path);
+	if ((flags & SCE_FCREAT) == 0 && !std::filesystem::exists(full_path)) {
+		spdlog::warn("DirectoryFileSystem: file {} doesn't exist", path);
 		return nullptr;
 	}
 
-	if ((flags & SCE_FCREAT) == 0 && !std::filesystem::exists(full_path)) {
-		spdlog::warn("DirectoryFileSystem: file {} doesn't exist", path);
+	if (!std::filesystem::exists(full_path.parent_path())) {
+		spdlog::warn("DirectoryFileSystem: parent folder of {} doesn't exist", path);
 		return nullptr;
 	}
 
@@ -62,12 +109,7 @@ std::unique_ptr<File> DirectoryFileSystem::OpenFile(std::string path, int flags)
 }
 
 std::unique_ptr<DirectoryListing> DirectoryFileSystem::OpenDirectory(std::string path) {
-	std::filesystem::path full_path = root / path;
-	if (!IsValidPath(full_path)) {
-		spdlog::warn("DirectoryFileSystem: {} is outside the root directory", path);
-		return nullptr;
-	}
-
+	std::filesystem::path full_path = root / FixPath(path);
 	if (!std::filesystem::is_directory(full_path)) {
 		return nullptr;
 	}
@@ -85,7 +127,8 @@ std::unique_ptr<DirectoryListing> DirectoryFileSystem::OpenDirectory(std::string
 		GetStatInternal(file.path().string(), &entry.stat);
 
 		auto file_name = file.path().filename().string();
-		strncpy(entry.name, file_name.c_str(), 255);
+		VFATPath(file_name);
+		SDL_strlcpy(entry.name, file_name.c_str(), 256);
 
 		directory->AddEntry(entry);
 	}
@@ -94,22 +137,12 @@ std::unique_ptr<DirectoryListing> DirectoryFileSystem::OpenDirectory(std::string
 }
 
 void DirectoryFileSystem::CreateDirectory(std::string path) {
-	std::filesystem::path full_path = root / path;
-	if (!IsValidPath(full_path)) {
-		spdlog::warn("DirectoryFileSystem: {} is outside the root directory", path);
-		return;
-	}
-
+	std::filesystem::path full_path = root / FixPath(path);
 	std::filesystem::create_directory(full_path);
 }
 
 bool DirectoryFileSystem::GetStat(std::string path, SceIoStat* data) {
-	std::filesystem::path full_path = root / path;
-	if (!IsValidPath(full_path)) {
-		spdlog::warn("DirectoryFileSystem: {} is outside the root directory", path);
-		return false;
-	}
-
+	std::filesystem::path full_path = root / FixPath(path);
 	if (!std::filesystem::exists(full_path)) {
 		return false;
 	}
@@ -118,25 +151,15 @@ bool DirectoryFileSystem::GetStat(std::string path, SceIoStat* data) {
 	return true;
 }
 
-bool DirectoryFileSystem::Rename(std::string old_path, std::string new_path) {
-	std::filesystem::path full_old_path = root / old_path;
-	if (!IsValidPath(full_old_path)) {
-		spdlog::warn("DirectoryFileSystem: {} is outside the root directory", old_path);
-		return false;
-	}
-
+int DirectoryFileSystem::Rename(std::string old_path, std::string new_path) {
+	std::filesystem::path full_old_path = root / FixPath(old_path);
 	if (!std::filesystem::exists(full_old_path)) {
-		return false;
+		return SCE_ERROR_ERRNO_ENOENT;
 	}
 
-	std::filesystem::path full_new_path = root / new_path;
-	if (!IsValidPath(full_new_path)) {
-		spdlog::warn("DirectoryFileSystem: {} is outside the root directory", new_path);
-		return false;
-	}
-
+	std::filesystem::path full_new_path = root / FixPath(new_path);
 	if (std::filesystem::exists(full_new_path)) {
-		return false;
+		return SCE_ERROR_ERRNO_EEXIST;
 	}
 
 	try {
@@ -145,18 +168,13 @@ bool DirectoryFileSystem::Rename(std::string old_path, std::string new_path) {
 	catch (std::filesystem::filesystem_error e) {
 		// Most likely due to it being open somewhere
 		spdlog::warn("DirectoryFileSystem: tried renaming {} but it cannot be renamed", old_path);
-		return false;
+		return SCE_ERROR_ERRNO_EEXIST;
 	}
-	return true;
+	return 0;
 }
 
 bool DirectoryFileSystem::RemoveFile(std::string path) {
-	std::filesystem::path full_path = root / path;
-	if (!IsValidPath(full_path)) {
-		spdlog::warn("DirectoryFileSystem: {} is outside the root directory", path);
-		return false;
-	}
-
+	std::filesystem::path full_path = root / FixPath(path);
 	if (!std::filesystem::is_regular_file(full_path)) {
 		return false;
 	}
@@ -172,12 +190,7 @@ bool DirectoryFileSystem::RemoveFile(std::string path) {
 }
 
 bool DirectoryFileSystem::RemoveDirectory(std::string path) {
-	std::filesystem::path full_path = root / path;
-	if (!IsValidPath(full_path)) {
-		spdlog::warn("DirectoryFileSystem: {} is outside the root directory", path);
-		return false;
-	}
-
+	std::filesystem::path full_path = root / FixPath(path);
 	if (!std::filesystem::is_directory(full_path)) {
 		return false;
 	}
