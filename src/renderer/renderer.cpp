@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 
 #include <format>
+#include <thread>
 #include <spdlog/spdlog.h>
 #include <glm/packing.hpp>
 
@@ -14,7 +15,7 @@ static void WakeUpRenderer(uint64_t cycles_late) {
 Renderer::Renderer() {
 	window = SDL_CreateWindow("PSP", BASE_WIDTH * 2, BASE_HEIGHT * 2, SDL_WINDOW_RESIZABLE);
 	SDL_SetWindowMinimumSize(window, BASE_WIDTH, BASE_HEIGHT);
-	second_ticks = SDL_GetTicks();
+	second_timer = std::chrono::steady_clock::now();
 }
 
 Renderer::~Renderer() {
@@ -32,13 +33,19 @@ void Renderer::Frame() {
 	}
 
 	frames++;
-	uint64_t ticks = SDL_GetTicks();
-	if (ticks >= second_ticks) {
+	auto now = std::chrono::steady_clock::now();
+	if (now >= second_timer) {
 		std::string title = std::format("PSP | {} FPS", frames);
 		SDL_SetWindowTitle(window, title.c_str());
-		second_ticks += 1000;
+		second_timer = now + std::chrono::seconds(1);
 		frames = 0;
 	}
+
+	auto frame_time = now - last_frame_time;
+	if (frame_time < FRAME_DURATION) {
+		std::this_thread::sleep_for(FRAME_DURATION - frame_time);
+	}
+	last_frame_time = std::chrono::steady_clock::now();
 }
 
 void Renderer::Step() {

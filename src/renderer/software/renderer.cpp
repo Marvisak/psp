@@ -16,8 +16,6 @@ SoftwareRenderer::~SoftwareRenderer() {
 }
 
 void SoftwareRenderer::Frame() {
-	Renderer::Frame();
-
 	SDL_RenderClear(renderer);
 	if (texture && frame_buffer) {
 		void* framebuffer = PSP::GetInstance()->VirtualToPhysical(frame_buffer);
@@ -34,6 +32,8 @@ void SoftwareRenderer::Frame() {
 			it++;
 		}
 	}
+
+	Renderer::Frame();
 }
 
 void SoftwareRenderer::SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format) {

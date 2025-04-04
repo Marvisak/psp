@@ -4,6 +4,8 @@
 #include <limits>
 #include <cstdint>
 
+#include "hle/defs.hpp"
+
 #define IMM26(opcode) (opcode & 0x3FFFFFF)
 #define IMM16(opcode) (opcode & 0xFFFF)
 #define IMM5(opcode) (opcode >> 6 & 0x1F)
@@ -34,8 +36,14 @@ public:
 	void SetHI(uint32_t value) { hi = value; }
 	void SetLO(uint32_t value) { lo = value; }
 
-	void SetRegister(int index, uint32_t value);
-	uint32_t GetRegister(int index);
+	void SetRegister(int index, uint32_t value) {
+		regs[index] = value;
+		regs[MIPS_REG_ZERO] = 0;
+	}
+
+	uint32_t GetRegister(int index) {
+		return regs[index];
+	}
 
 	void SetFPURegister(int index, float value) { fpu_regs[index] = value; }
 private:

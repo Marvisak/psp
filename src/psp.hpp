@@ -51,13 +51,33 @@ public:
 	void* VirtualToPhysical(uint32_t addr);
 	uint32_t GetMaxSize(uint32_t addr);
 
-	uint8_t ReadMemory8(uint32_t addr);
-	uint16_t ReadMemory16(uint32_t addr);
-	uint32_t ReadMemory32(uint32_t addr);
-	void WriteMemory8(uint32_t addr, uint8_t value);
-	void WriteMemory16(uint32_t addr, uint16_t value);
-	void WriteMemory32(uint32_t addr, uint32_t value);
-	void WriteMemory64(uint32_t addr, uint64_t value);
+	uint8_t ReadMemory8(uint32_t addr) {
+		return *reinterpret_cast<uint8_t*>(VirtualToPhysical(addr));
+	}
+
+	uint16_t ReadMemory16(uint32_t addr) {
+		return *reinterpret_cast<uint16_t*>(VirtualToPhysical(addr));
+	}
+
+	uint32_t ReadMemory32(uint32_t addr) {
+		return *reinterpret_cast<uint32_t*>(VirtualToPhysical(addr));
+	}
+
+	void WriteMemory8(uint32_t addr, uint8_t value) {
+		*reinterpret_cast<uint8_t*>(VirtualToPhysical(addr)) = value;
+	}
+
+	void WriteMemory16(uint32_t addr, uint16_t value) {
+		*reinterpret_cast<uint16_t*>(VirtualToPhysical(addr)) = value;
+	}
+
+	void WriteMemory32(uint32_t addr, uint32_t value) {
+		*reinterpret_cast<uint32_t*>(VirtualToPhysical(addr)) = value;
+	}
+
+	void WriteMemory64(uint32_t addr, uint64_t value) {
+		*reinterpret_cast<uint64_t*>(VirtualToPhysical(addr)) = value;
+	}
 
 	std::shared_ptr<ScheduledEvent> Schedule(uint64_t cycles, SchedulerFunc func);
 	void Unschedule(std::shared_ptr<ScheduledEvent> event);

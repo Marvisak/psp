@@ -170,35 +170,6 @@ void PSP::ForceExit() {
 	earliest_event_cycles = 0;
 }
 
-uint8_t PSP::ReadMemory8(uint32_t addr) {
-	return *reinterpret_cast<uint8_t*>(VirtualToPhysical(addr));
-}
-
-uint16_t PSP::ReadMemory16(uint32_t addr) {
-	return *reinterpret_cast<uint16_t*>(VirtualToPhysical(addr));
-}
-
-
-uint32_t PSP::ReadMemory32(uint32_t addr) {
-	return *reinterpret_cast<uint32_t*>(VirtualToPhysical(addr));
-}
-
-void PSP::WriteMemory8(uint32_t addr, uint8_t value) {
-	*reinterpret_cast<uint8_t*>(VirtualToPhysical(addr)) = value;
-}
-
-void PSP::WriteMemory16(uint32_t addr, uint16_t value) {
-	*reinterpret_cast<uint16_t*>(VirtualToPhysical(addr)) = value;
-}
-
-void PSP::WriteMemory32(uint32_t addr, uint32_t value) {
-	*reinterpret_cast<uint32_t*>(VirtualToPhysical(addr)) = value;
-}
-
-void PSP::WriteMemory64(uint32_t addr, uint64_t value) {
-	*reinterpret_cast<uint64_t*>(VirtualToPhysical(addr)) = value;
-}
-
 std::shared_ptr<ScheduledEvent> PSP::Schedule(uint64_t cycles, SchedulerFunc func) {
 	auto event = std::make_shared<ScheduledEvent>();
 	event->cycle_trigger = this->cycles + cycles;

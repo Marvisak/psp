@@ -3,6 +3,7 @@
 #include <array>
 #include <deque>
 #include <vector>
+#include <chrono>
 
 #include <SDL3/SDL.h>
 #include <glm/vec2.hpp>
@@ -43,6 +44,7 @@ struct Vertex {
 constexpr auto BASE_WIDTH = 480;
 constexpr auto BASE_HEIGHT = 272;
 constexpr auto REFRESH_RATE = 60;
+constexpr auto FRAME_DURATION = std::chrono::duration<double, std::milli>(1000 / REFRESH_RATE);
 
 struct DisplayList {
 	uint32_t start_addr;
@@ -266,7 +268,8 @@ protected:
 
 	SDL_Window* window;
 	int frames = 0;
-	uint64_t second_ticks = 0;
+	std::chrono::steady_clock::time_point last_frame_time{};
+	std::chrono::steady_clock::time_point second_timer{};
 };
 
 enum GECommand {

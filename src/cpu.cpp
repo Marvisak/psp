@@ -155,15 +155,6 @@ bool CPU::RunInstruction() {
 	return true;
 }
 
-uint32_t CPU::GetRegister(int index) {
-	return regs[index];
-}
-
-void CPU::SetRegister(int index, uint32_t value) {
-	regs[index] = value;
-	regs[MIPS_REG_ZERO] = 0;
-}
-
 void CPU::ADDIU(uint32_t opcode) {
 	uint32_t value = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
 	SetRegister(RT(opcode), value);
