@@ -25,6 +25,15 @@ void SoftwareRenderer::Frame() {
 		SDL_RenderTexture(renderer, texture, nullptr, nullptr);
 		SDL_RenderPresent(renderer);
 	}
+
+	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
+		it->second.unused_frames++;
+		if (it->second.unused_frames >= TEXTURE_CACHE_CLEAR_FRAMES) {
+			texture_cache.erase(it++);
+		} else {
+			it++;
+		}
+	}
 }
 
 void SoftwareRenderer::SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format) {
@@ -88,7 +97,7 @@ void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 	bool use_texture = !clear_mode && textures_enabled;
 
 	uint8_t filter = -1;
-	std::vector<Color> texture{};
+	TextureCacheEntry texture{};
 	if (use_texture) {
 		texture = DecodeTexture();
 		filter = GetFilter(static_cast<float>(textures[0].width) / width, static_cast<float>(textures[0].height) / height);
@@ -126,7 +135,10 @@ void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 			Color color = end.color;
 			if (use_texture) {
 				glm::uvec2 tex_pos = FilterTexture(filter, uv);
-				Color texel = texture[tex_pos.y * textures[0].width + tex_pos.x];
+				Color texel = texture.data[tex_pos.y * textures[0].width + tex_pos.x];
+				if (texture.clut) {
+					texel = GetCLUT(texel.abgr);
+				}
 				color = BlendTexture(texel, color);
 			}
 
@@ -197,7 +209,7 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	}
 
 	bool use_texture = !clear_mode && textures_enabled;
-	std::vector<Color> texture{};
+	TextureCacheEntry texture{};
 	if (use_texture) {
 		texture = DecodeTexture();
 	}
@@ -245,7 +257,10 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 						v2.uv.y * w1 + v0.uv.y * w2 + v1.uv.y * w3,
 					};
 					glm::uvec2 tex_pos = FilterTexture(true, uv);
-					Color texel = texture[tex_pos.y * textures[0].width + tex_pos.x];
+					Color texel = texture.data[tex_pos.y * textures[0].width + tex_pos.x];
+					if (texture.clut) {
+						texel = GetCLUT(texel.abgr);
+					}
 					color = BlendTexture(texel, color);
 				} else if (gouraud_shading) {
 					color.r = v2.color.r * w1 + v0.color.r * w2 + v1.color.r * w3;
@@ -275,6 +290,23 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 void SoftwareRenderer::DrawTriangleFan(std::vector<Vertex> vertices) {
 	for (int i = 1; i < vertices.size() - 1; i++) {
 		DrawTriangle(vertices[0], vertices[i], vertices[i + 1]);
+	}
+}
+
+void SoftwareRenderer::ClearTextureCache() {
+	texture_cache.clear();
+}
+
+void SoftwareRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
+	addr &= 0x3FFFFFFF;
+	uint32_t addr_end = addr + size;
+	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
+		uint32_t texture_end = it->first + it->second.size / 2;
+		if (addr <= texture_end && addr_end >= it->first) {
+			texture_cache.erase(it++);
+		} else {
+			it++;
+		}
 	}
 }
 
@@ -567,12 +599,17 @@ glm::uvec2 SoftwareRenderer::FilterTexture(uint8_t filter, glm::vec2 uv) {
 	return pos;
 }
 
-std::vector<Color> SoftwareRenderer::DecodeTexture() {
-	std::vector<Color> texture_data{};
-	
+TextureCacheEntry SoftwareRenderer::DecodeTexture() {
 	auto& texture = textures[0];
-	uint32_t size = texture.width * texture.height;
-	texture_data.resize(size);
+	if (texture_cache.contains(texture.buffer)) {
+		auto& cache = texture_cache[texture.buffer];
+		cache.unused_frames = 0;
+		return cache;
+	}
+
+	TextureCacheEntry cache{};
+	cache.size = texture.width * texture.height;
+	cache.data.resize(cache.size);
 
 	auto psp = PSP::GetInstance();
 	switch (texture_format) {
@@ -584,11 +621,11 @@ std::vector<Color> SoftwareRenderer::DecodeTexture() {
 			for (int x = 0; x < texture.width; x++) {
 				uint16_t color = buffer[y * texture.pitch + x];
 				if (texture_format == SCEGU_PF5650) {
-					texture_data[y * texture.width + x] = BGR565ToABGR8888(color);
+					cache.data[y * texture.width + x] = BGR565ToABGR8888(color);
 				} else if (texture_format == SCEGU_PF5551) {
-					texture_data[y * texture.width + x] = ABGR1555ToABGR8888(color);
+					cache.data[y * texture.width + x] = ABGR1555ToABGR8888(color);
 				} else if (texture_format == SCEGU_PF4444) {
-					texture_data[y * texture.width + x] = ABGR4444ToABGR8888(color);
+					cache.data[y * texture.width + x] = ABGR4444ToABGR8888(color);
 				}
 			}
 		}
@@ -597,44 +634,48 @@ std::vector<Color> SoftwareRenderer::DecodeTexture() {
 	case SCEGU_PF8888: {
 		uint32_t* buffer = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(texture.buffer));
 		for (int y = 0; y < texture.height; y++) {
-			memcpy(&texture_data.data()[y * texture.width], &buffer[y * texture.pitch], texture.width * 4);
+			memcpy(&cache.data.data()[y * texture.width], &buffer[y * texture.pitch], texture.width * 4);
 		}
 		break;
 	}
 	case SCEGU_PFIDX4: {
+		cache.clut = true;
 		uint8_t* buffer = reinterpret_cast<uint8_t*>(psp->VirtualToPhysical(texture.buffer));
-
 		for (int y = 0; y < texture.height; y++) {
 			int texture_index = y * texture.width;
 			int clut_index = y * texture.pitch / 2;
 			for (int x = 0; x < texture.width; x += 2, clut_index++) {
 				uint8_t value = buffer[clut_index];
-				texture_data[texture_index + x] = GetCLUT(value & 0xF);
-				texture_data[texture_index + x + 1] = GetCLUT(value >> 4);
+				cache.data[texture_index + x] = value & 0xF;
+				if ((x + 1) < texture.width) {
+					cache.data[texture_index + x + 1] = value >> 4;
+				}
 			}
 		}
 		break;
 	}
 	case SCEGU_PFIDX8: {
+		cache.clut = true;
 		uint8_t* buffer = reinterpret_cast<uint8_t*>(psp->VirtualToPhysical(texture.buffer));
 		for (int y = 0; y < texture.height; y++) {
 			int texture_index = y * texture.width;
 			int clut_index = y * texture.pitch;
 			for (int x = 0; x < texture.width; x++) {
 				uint8_t index = buffer[clut_index + x];
-				texture_data[texture_index + x] = GetCLUT(index);
+				cache.data[texture_index + x] = index;
 			}
 		}
 		break;
 	}
 	case SCEGU_PFIDX32: {
+		cache.clut = true;
 		uint32_t* buffer = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(texture.buffer));
 		for (int y = 0; y < texture.height; y++) {
 			int texture_index = y * texture.width;
 			int clut_index = y * texture.pitch;
 			for (int x = 0; x < texture.width; x++) {
 				uint32_t index = buffer[clut_index + x];
-				texture_data[texture_index + x] = GetCLUT(index);
+				cache.data[texture_index + x] = index;
 			}
 		}
 		break;
@@ -644,7 +685,7 @@ std::vector<Color> SoftwareRenderer::DecodeTexture() {
 		for (int y = 0; y < texture.height; y += 4) {
 			const DXT1Block* block = block_start + (y / 4) * (texture.pitch / 4);
 			for (int x = 0; x < texture.width; x += 4) {
-				Color* dst = &texture_data.data()[y * texture.width + x];
+				Color* dst = &cache.data.data()[y * texture.width + x];
 
 				glm::ivec4 colors[4];
 				DecodeDXTColors(block, colors, false);
@@ -659,7 +700,7 @@ std::vector<Color> SoftwareRenderer::DecodeTexture() {
 		for (int y = 0; y < texture.height; y += 4) {
 			const DXT3Block* block = block_start + (y / 4) * (texture.pitch / 4);
 			for (int x = 0; x < texture.width; x += 4) {
-				Color* dst = &texture_data.data()[y * texture.width + x];
+				Color* dst = &cache.data.data()[y * texture.width + x];
 
 				glm::ivec4 colors[4];
 				DecodeDXTColors(&block->color, colors, true);
@@ -674,7 +715,7 @@ std::vector<Color> SoftwareRenderer::DecodeTexture() {
 		for (int y = 0; y < texture.height; y += 4) {
 			const DXT5Block* block = block_start + (y / 4) * (texture.pitch / 4);
 			for (int x = 0; x < texture.width; x += 4) {
-				Color* dst = &texture_data.data()[y * texture.width + x];
+				Color* dst = &cache.data.data()[y * texture.width + x];
 
 				glm::ivec4 colors[4];
 				DecodeDXTColors(&block->color, colors, true);
@@ -687,6 +728,7 @@ std::vector<Color> SoftwareRenderer::DecodeTexture() {
 	default:
 		spdlog::error("SoftwareRenderer: unknown texture format {}", texture_format);
 	}
+	texture_cache[texture.buffer] = cache;
 
-	return texture_data;
+	return cache;
 }

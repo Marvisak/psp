@@ -60,6 +60,13 @@ struct Texture {
 	uint32_t width;
 };
 
+struct Transfer {
+	uint32_t buffer;
+	uint32_t pitch;
+	uint16_t x;
+	uint16_t y;
+};
+
 class Renderer {
 public:
 	~Renderer();
@@ -69,6 +76,8 @@ public:
 	virtual void DrawRectangle(Vertex start, Vertex end) = 0;
 	virtual void DrawTriangle(Vertex v0, Vertex v1, Vertex v2) = 0;
 	virtual void DrawTriangleFan(std::vector<Vertex> vertices) = 0;
+	virtual void ClearTextureCache() = 0;
+	virtual void ClearTextureCache(uint32_t addr, uint32_t size) = 0;
 
 	void Step();
 	bool ShouldRun() { return !waiting && !queue.empty(); }
@@ -132,6 +141,7 @@ public:
 	void TFunc(uint32_t opcode);
 	void FPF(uint32_t opcode);
 	void Blend(uint32_t opcode);
+	void XStart(uint32_t opcode);
 protected:
 	Renderer();
 
@@ -172,6 +182,11 @@ protected:
 	bool bounding_box_success = false;
 
 	bool gouraud_shading = false;
+
+	Transfer transfer_source{};
+	Transfer transfer_dest{};
+	uint32_t transfer_width = 0;
+	uint32_t transfer_height = 0;
 
 	uint32_t zbp = 0;
 	uint16_t zbw = 0;
@@ -335,6 +350,10 @@ enum GECommand {
 	CMD_TBW0 = 0xA8,
 	CMD_CBP = 0xB0,
 	CMD_CBW = 0xB1,
+	CMD_XBP1 = 0xB2,
+	CMD_XBW1 = 0xB3,
+	CMD_XBP2 = 0xB4,
+	CMD_XBW2 = 0xB5,
 	CMD_TSIZE0 = 0xB8,
 	CMD_TSIZE1 = 0xB9,
 	CMD_TSIZE2 = 0xBA,
@@ -370,4 +389,8 @@ enum GECommand {
 	CMD_DITH4 = 0xE5,
 	CMD_ZMSK = 0xE7,
 	CMD_PMSK2 = 0xE9,
+	CMD_XSTART = 0xEA,
+	CMD_XPOS1 = 0xEB,
+	CMD_XPOS2 = 0xEC,
+	CMD_XSIZE = 0xEE,
 };

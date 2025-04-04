@@ -109,6 +109,10 @@ void Renderer::Step() {
 	case CMD_TBW0: textures[0].buffer &= 0x00FFFFFF; textures[0].buffer |= (command & 0xFF0000) << 8; textures[0].pitch = command & 0x07FC; break;
 	case CMD_CBP: clut_addr &= 0x0F000000; clut_addr |= command & 0xFFFFF0; break;
 	case CMD_CBW: clut_addr &= 0x00FFFFFF; clut_addr |= (command & 0xF0000) << 8; break;
+	case CMD_XBP1: transfer_source.buffer &= 0xFF000000; transfer_source.buffer |= command & 0xFFFFF0; break;
+	case CMD_XBW1: transfer_source.buffer &= 0x00FFFFFF; transfer_source.buffer |= (command & 0xFF0000) << 8; transfer_source.pitch = command & 0x07F8; break;
+	case CMD_XBP2: transfer_dest.buffer &= 0xFF000000; transfer_dest.buffer |= command & 0xFFFFF0; break;
+	case CMD_XBW2: transfer_dest.buffer &= 0x00FFFFFF; transfer_dest.buffer |= (command & 0xFF0000) << 8; transfer_dest.pitch = command & 0x07F8; break;
 	case CMD_TSIZE0:
 	case CMD_TSIZE1:
 	case CMD_TSIZE2:
@@ -145,6 +149,10 @@ void Renderer::Step() {
 	case CMD_DITH4: spdlog::warn("Renderer: unimplemented GE command CMD_DITH4"); break;
 	case CMD_ZMSK: depth_write = !(command & 1); break;
 	case CMD_PMSK2: spdlog::warn("Renderer: unimplemented GE command CMD_PMSK2"); break;
+	case CMD_XSTART: XStart(command); break;
+	case CMD_XPOS1: transfer_source.x = command & 0x3FF; transfer_source.y = (command >> 10) & 0x3FF; break;
+	case CMD_XPOS2: transfer_dest.x = command & 0x3FF; transfer_dest.y = (command >> 10) & 0x3FF; break;
+	case CMD_XSIZE: transfer_width = command & 0x3FF; transfer_height = (command >> 10) & 0x3FF; break;
 	default:
 		spdlog::error("Renderer: unknown GE command {:x}", command >> 24);
 		break;
@@ -533,4 +541,25 @@ void Renderer::Blend(uint32_t opcode) {
 	blend_source = opcode & 0xF;
 	blend_destination = opcode >> 4 & 0xF;
 	blend_operation = opcode >> 8 & 0xF;
+}
+
+void Renderer::XStart(uint32_t opcode) {
+	auto psp = PSP::GetInstance();
+	auto src = psp->VirtualToPhysical(transfer_source.buffer);
+	auto dest = psp->VirtualToPhysical(transfer_dest.buffer);
+
+	int bpp = 0;
+	for (int y = 0; y <= transfer_height; y++) {
+		uint32_t src_index = (transfer_source.y + y) * transfer_source.pitch + transfer_source.x;
+		uint32_t dest_index = (transfer_dest.y + y) * transfer_dest.pitch + transfer_dest.x;
+		if (opcode & 1) {
+			bpp = 4;
+			memcpy(reinterpret_cast<uint32_t*>(dest) + dest_index, reinterpret_cast<uint32_t*>(src) + src_index, (transfer_width + 1) * 4);
+		} else {
+			bpp = 2;
+			memcpy(reinterpret_cast<uint16_t*>(dest) + dest_index, reinterpret_cast<uint16_t*>(src) + src_index, (transfer_width + 1) * 2);
+		}
+	}
+
+	executed_cycles = ((transfer_height + 1) * (transfer_width + 1) * bpp * 16) / 10;
 }

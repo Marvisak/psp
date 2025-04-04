@@ -445,21 +445,26 @@ void CPU::LBU(uint32_t opcode) {
 
 void CPU::LH(uint32_t opcode) {
 	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+
+#ifndef NDEBUG
 	if (addr % 2 != 0) {
 		spdlog::error("CPU: Exception or smth, LH");
 		return;
 	}
+#endif
 
-	uint32_t value = static_cast<int32_t>(PSP::GetInstance()->ReadMemory16(addr));
+	uint32_t value = static_cast<int16_t>(PSP::GetInstance()->ReadMemory16(addr));
 	SetRegister(RT(opcode), value);
 }
 
 void CPU::LHU(uint32_t opcode) {
 	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+#ifndef NDEBUG
 	if (addr % 2 != 0) {
 		spdlog::error("CPU: Exception or smth, LHU");
 		return;
 	}
+#endif
 
 	uint32_t value = PSP::GetInstance()->ReadMemory16(addr);
 	SetRegister(RT(opcode), value);
@@ -472,10 +477,12 @@ void CPU::LUI(uint32_t opcode) {
 
 void CPU::LW(uint32_t opcode) {
 	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+#ifndef NDEBUG
 	if (addr % 4 != 0) {
 		spdlog::error("CPU: Exception or smth, LW");
 		return;
 	}
+#endif
 
 	uint32_t value = PSP::GetInstance()->ReadMemory32(addr);
 	SetRegister(RT(opcode), value);
@@ -483,10 +490,12 @@ void CPU::LW(uint32_t opcode) {
 
 void CPU::LWC1(uint32_t opcode) {
 	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+#ifndef NDEBUG
 	if (addr % 4 != 0) {
 		spdlog::error("CPU: Exception or smth, LWC1");
 		return;
 	}
+#endif
 
 	uint32_t value = PSP::GetInstance()->ReadMemory32(addr);
 	fpu_regs[RT(opcode)] = std::bit_cast<float>(value);
@@ -538,10 +547,12 @@ void CPU::SEH(uint32_t opcode) {
 
 void CPU::SH(uint32_t opcode) {
 	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+#ifndef NDEBUG
 	if (addr % 2 != 0) {
 		spdlog::error("CPU: Exception or smth, SH");
 		return;
 	}
+#endif
 
 	uint32_t value = GetRegister(RT(opcode));
 	PSP::GetInstance()->WriteMemory16(addr, value);
@@ -617,10 +628,12 @@ void CPU::SUBU(uint32_t opcode) {
 
 void CPU::SW(uint32_t opcode) {
 	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+#ifndef NDEBUG
 	if (addr % 4 != 0) {
 		spdlog::error("CPU: Exception or smth, SW");
 		return;
 	}
+#endif
 
 	uint32_t value = GetRegister(RT(opcode));
 	PSP::GetInstance()->WriteMemory32(addr, value);
@@ -628,10 +641,12 @@ void CPU::SW(uint32_t opcode) {
 
 void CPU::SWC1(uint32_t opcode) {
 	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+#ifndef NDEBUG
 	if (addr % 4 != 0) {
 		spdlog::error("CPU: Exception or smth, SWC1");
 		return;
 	}
+#endif
 
 	auto value = std::bit_cast<uint32_t>(fpu_regs[RT(opcode)]);
 	PSP::GetInstance()->WriteMemory32(addr, value);

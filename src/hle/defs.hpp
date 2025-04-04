@@ -38,10 +38,14 @@ constexpr auto SCE_DISPLAY_UPDATETIMING_NEXTVSYNC = 1;
 constexpr auto SCE_CTRL_MODE_DIGITALONLY = 0;
 constexpr auto SCE_CTRL_MODE_DIGITALANALOG = 1;
 
+constexpr auto SCE_CTRL_SELECT = (1 << 0);
+constexpr auto SCE_CTRL_START = (1 << 3);
 constexpr auto SCE_CTRL_UP = (1 << 4);
 constexpr auto SCE_CTRL_RIGHT = (1 << 5);
 constexpr auto SCE_CTRL_DOWN = (1 << 6);
 constexpr auto SCE_CTRL_LEFT = (1 << 7);
+constexpr auto SCE_CTRL_L = (1 << 8);
+constexpr auto SCE_CTRL_R = (1 << 9);
 constexpr auto SCE_CTRL_TRIANGLE = (1 << 12);
 constexpr auto SCE_CTRL_CIRCLE = (1 << 13);
 constexpr auto SCE_CTRL_CROSS = (1 << 14);

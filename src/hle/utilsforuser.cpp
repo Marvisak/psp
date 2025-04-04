@@ -8,22 +8,36 @@ static time_t TIME_START{};
 void RtcTimeOfDay(SceKernelTimeval* tv);
 
 static int sceKernelDcacheWritebackRange(uint32_t addr, uint32_t size) {
-	spdlog::error("sceKernelDcacheWritebackRange({:x}, {})", addr, size);
+	auto psp = PSP::GetInstance();
+	if (size > 0 && addr != 0) {
+		psp->GetRenderer()->ClearTextureCache(addr, size);
+	}
+	psp->EatCycles(165);
 	return 0;
 }
 
 static int sceKernelDcacheWritebackInvalidateAll() {
-	spdlog::error("sceKernelDcacheWritebackInvalidateAll()");
+	auto psp = PSP::GetInstance();
+	psp->GetRenderer()->ClearTextureCache();
+	psp->EatCycles(1165);
+	psp->GetKernel()->RescheduleNextCycle();
 	return 0;
 }
 
 static int sceKernelDcacheWritebackAll() {
-	spdlog::error("sceKernelDcacheWritebackAll()");
+	auto psp = PSP::GetInstance();
+	psp->GetRenderer()->ClearTextureCache();
+	psp->EatCycles(3524);
+	psp->GetKernel()->RescheduleNextCycle();
 	return 0;
 }
 
-static int sceKernelDcacheWritebackInvalidateRange() {
-	spdlog::error("sceKernelDcacheWritebackInvalidateRange()");
+static int sceKernelDcacheWritebackInvalidateRange(uint32_t addr, uint32_t size) {
+	auto psp = PSP::GetInstance();
+	if (size > 0 && addr != 0) {
+		psp->GetRenderer()->ClearTextureCache(addr, size);
+	}
+	psp->EatCycles(165);
 	return 0;
 }
 
@@ -70,7 +84,7 @@ FuncMap RegisterUtilsForUser() {
 	funcs[0x3EE30821] = HLE_UU_R(sceKernelDcacheWritebackRange);
 	funcs[0xB435DEC5] = HLE_R(sceKernelDcacheWritebackInvalidateAll);
 	funcs[0x79D1C3FA] = HLE_R(sceKernelDcacheWritebackAll);
-	funcs[0x34B9FA9E] = HLE_R(sceKernelDcacheWritebackInvalidateRange);
+	funcs[0x34B9FA9E] = HLE_UU_R(sceKernelDcacheWritebackInvalidateRange);
 	funcs[0x71EC4271] = HLE_UU_R(sceKernelLibcGettimeofday);
 	funcs[0x27CC57F0] = HLE_U_R(sceKernelLibcTime);
 	funcs[0x91E4F6A7] = HLE_R(sceKernelLibcClock);

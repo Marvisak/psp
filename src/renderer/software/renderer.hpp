@@ -1,8 +1,11 @@
 #pragma once
 
 #include <algorithm>
+#include <unordered_map>
 
 #include "../renderer.hpp"
+
+constexpr auto TEXTURE_CACHE_CLEAR_FRAMES = 120;
 
 struct DXT1Block {
 	uint8_t lines[4];
@@ -23,6 +26,13 @@ struct DXT5Block {
 	uint8_t alpha2;
 };
 
+struct TextureCacheEntry {
+	bool clut;
+	int	unused_frames;
+	uint32_t size;
+	std::vector<Color> data;
+};
+
 class SoftwareRenderer : public Renderer {
 public:
 	SoftwareRenderer();
@@ -33,6 +43,8 @@ public:
 	void DrawRectangle(Vertex start, Vertex end);
 	void DrawTriangle(Vertex v0, Vertex v1, Vertex v2);
 	void DrawTriangleFan(std::vector<Vertex> vertices);
+	void ClearTextureCache();
+	void ClearTextureCache(uint32_t addr, uint32_t size);
 
 	void DecodeDXTColors(const DXT1Block* block, glm::ivec4 palette[4], bool skip_alpha);
 	void WriteDXT1(const DXT1Block* block, glm::ivec4 palette[4], Color* dst, int pitch);
@@ -46,11 +58,13 @@ public:
 	Color BlendTexture(Color texture, Color blending);
 	glm::uvec2 FilterTexture(uint8_t filter, glm::vec2 uv);
 	Color GetCLUT(uint32_t index);
-	std::vector<Color> DecodeTexture();
+	TextureCacheEntry DecodeTexture();
 private:
 	SDL_PixelFormat frame_format = SDL_PIXELFORMAT_UNKNOWN;
 	uint32_t frame_buffer = 0;
 	int frame_width = 0;
+
+	std::unordered_map<uint32_t, TextureCacheEntry> texture_cache{};
 
 	SDL_Renderer* renderer = nullptr;
 	SDL_Texture* texture = nullptr;
