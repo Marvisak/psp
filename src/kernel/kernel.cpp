@@ -4,6 +4,8 @@
 
 #include "../hle/defs.hpp"
 #include "../psp.hpp"
+
+#include "mutex.hpp"
 #include "module.hpp"
 #include "thread.hpp"
 #include "callback.hpp"
@@ -35,14 +37,23 @@ int Kernel::AddKernelObject(std::unique_ptr<KernelObject> obj) {
 	for (int i = next_uid; i < objects.size(); i++) {
 		if (!objects[i]) {
 			obj->SetUID(i);
+			sorted_objects[obj->GetType()].push_back(i);
 			objects[i] = std::move(obj);
 			++next_uid %= objects.size();
-			if (next_uid == 0) next_uid++;
+			if (next_uid == 0) {
+				next_uid++;
+			}
 			return i;
 		}
 	}
 	spdlog::error("Kernel: unable to assing uid to object");
 	return 0;
+}
+
+void Kernel::RemoveKernelObject(int uid) {
+	auto& object_map = sorted_objects[objects[uid]->GetType()];
+	object_map.erase(std::remove(object_map.begin(), object_map.end(), uid), object_map.end());
+	objects[uid] = nullptr;
 }
 
 int Kernel::LoadModule(std::string path) {
@@ -167,6 +178,11 @@ void Kernel::ExecuteCallback(int cbid) {
 int Kernel::CreateSemaphore(std::string name, uint32_t attr, int init_count, int max_count) {
 	auto semaphore = std::make_unique<Semaphore>(name, attr, init_count, max_count);
 	return AddKernelObject(std::move(semaphore));
+}
+
+int Kernel::CreateMutex(std::string name, uint32_t attr, int init_count) {
+	auto mutex = std::make_unique<Mutex>(name, attr, init_count);
+	return AddKernelObject(std::move(mutex));
 }
 
 void Kernel::Mount(std::string mount_point, std::shared_ptr<FileSystem> file_system) {

@@ -11,7 +11,9 @@ SoftwareRenderer::SoftwareRenderer() : Renderer() {
 }
 
 SoftwareRenderer::~SoftwareRenderer() {
-	if (texture) SDL_DestroyTexture(texture);
+	if (texture) {
+		SDL_DestroyTexture(texture);
+	}
 	SDL_DestroyRenderer(renderer);
 }
 

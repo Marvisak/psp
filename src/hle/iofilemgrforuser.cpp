@@ -117,11 +117,21 @@ static int sceIoWrite(int fd, uint32_t buf_addr, uint32_t size) {
 
 	if (fd == STDOUT) {
 		std::string out(reinterpret_cast<char*>(data), size);
-		spdlog::info(out);
+		if (out.ends_with('\n')) {
+			out.pop_back();
+		}
+		if (!out.empty()) {
+			spdlog::info(out);
+		}
 		return size;
 	} else if (fd == STDERR) {
 		std::string out(reinterpret_cast<char*>(data), size);
-		spdlog::error(out);
+		if (out.ends_with('\n')) {
+			out.pop_back();
+		}
+		if (!out.empty()) {
+			spdlog::error(out);
+		}
 		return size;
 	}
 

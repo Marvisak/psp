@@ -30,6 +30,7 @@ list(APPEND sources
 	src/kernel/callback.cpp
 	src/kernel/memory_block.cpp
 	src/kernel/semaphore.cpp
+	src/kernel/mutex.cpp
 
 	src/kernel/filesystem/directory/directoryfs.cpp
 	src/kernel/filesystem/directory/directoryfile.cpp

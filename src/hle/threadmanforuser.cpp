@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 
 #include "defs.hpp"
+#include "../kernel/mutex.hpp"
 #include "../kernel/thread.hpp"
 #include "../kernel/callback.hpp"
 #include "../kernel/semaphore.hpp"
@@ -37,6 +38,14 @@ static void HandleThreadEnd(int thid, int exit_reason) {
 			}
 		}
 		WAITING_THREAD_END.erase(thid);
+	}
+
+	auto mtxids = kernel->GetKernelObjects(KernelObjectType::MUTEX);
+	for (auto mtxid : mtxids) {
+		auto mutex = kernel->GetKernelObject<Mutex>(mtxid);
+		if (mutex->GetOwner() == thid) {
+			mutex->Unlock();
+		}
 	}
 }
 
@@ -132,7 +141,7 @@ static int WaitSema(int semid, int need_count, uint32_t timeout_addr, bool allow
 	psp->EatCycles(500);
 
 	if (!semaphore) {
-		spdlog::warn("sceKernelWaitSemaCB: invalid semaphore {}", semid);
+		spdlog::warn("WaitSema: invalid semaphore {}", semid);
 		return SCE_KERNEL_ERROR_UNKNOWN_SEMID;
 	}
 
@@ -141,6 +150,43 @@ static int WaitSema(int semid, int need_count, uint32_t timeout_addr, bool allow
 	}
 
 	semaphore->Wait(need_count, allow_callbacks, timeout_addr);
+
+	return SCE_KERNEL_ERROR_OK;
+}
+
+static int LockMutex(int mtxid, int lock_count, uint32_t timeout_addr, bool allow_callbacks) {
+	auto psp = PSP::GetInstance();
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	auto mutex = kernel->GetKernelObject<Mutex>(mtxid);
+	if (!mutex) {
+		spdlog::warn("LockMutex: invalid mutex {}", mtxid);
+		return SCE_KERNEL_ERROR_UNKNOWN_MUTEXID;
+	}
+
+	if (lock_count <= 0) {
+		spdlog::warn("LockMutex: invalid lock count {}", lock_count);
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+
+	if (mutex->GetCount() + lock_count < 0) {
+		spdlog::warn("LockMutex: lock overflow {}", lock_count);
+		return SCE_KERNEL_ERROR_MUTEX_LOCK_OVF;
+	}
+
+	if ((mutex->GetAttr() & SCE_KERNEL_MA_RECURSIVE) == 0) {
+		if (lock_count > 1) {
+			spdlog::warn("LockMutex: recursive lock on non-recursive mutex {}", lock_count);
+			return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+		}
+
+		if (mutex->GetOwner() == kernel->GetCurrentThread()) {
+			spdlog::warn("LockMutex: recursive lock on non-recursive mutex {}", lock_count);
+			return SCE_KERNEL_ERROR_MUTEX_RECURSIVE;
+		}
+	}
+
+	mutex->Lock(lock_count, allow_callbacks, timeout_addr);
 
 	return SCE_KERNEL_ERROR_OK;
 }
@@ -821,43 +867,174 @@ static int sceKernelReferMsgPipeStatus(int mppid, uint32_t info_addr) {
 	return 0;
 }
 static int sceKernelCreateMutex(const char* name, uint32_t attr, int init_count, uint32_t opt_param_addr) {
-	spdlog::error("sceKernelCreateMutex('{}', {:x}, {}, {:x})", name, attr, init_count, opt_param_addr);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	if (!name) {
+		spdlog::warn("sceKernelCreateMutex: name is NULL");
+		return SCE_KERNEL_ERROR_ERROR;
+	}
+
+	if (attr & ~0xBFF) {
+		spdlog::warn("sceKernelCreateMutex: invalid attr {:x}", attr);
+		return SCE_KERNEL_ERROR_ILLEGAL_ATTR;
+	}
+
+	if (init_count < 0 || ((attr & SCE_KERNEL_MA_RECURSIVE) == 0 && init_count > 1)) {
+		spdlog::warn("sceKernelCreateMutex: invalid count {}", init_count);
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+
+	return kernel->CreateMutex(name, attr, init_count);
 }
 
 static int sceKernelDeleteMutex(int mtxid) {
-	spdlog::error("sceKernelDeleteMutex({})", mtxid);
-	return 0;
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	auto mutex = kernel->GetKernelObject<Mutex>(mtxid);
+	if (!mutex) {
+		spdlog::warn("sceKernelDeleteMutex: invalid mutex {}", mtxid);
+		return SCE_KERNEL_ERROR_UNKNOWN_MUTEXID;
+	}
+
+	kernel->RemoveKernelObject(mtxid);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelLockMutex(int mtxid, int lock_count, uint32_t timeout_addr) {
-	spdlog::error("sceKernelLockMutex({}, {}, {:x})", mtxid, lock_count, timeout_addr);
-	return 0;
+	return LockMutex(mtxid, lock_count, timeout_addr, false);
 }
 
 static int sceKernelLockMutexCB(int mtxid, int lock_count, uint32_t timeout_addr) {
-	spdlog::error("sceKernelLockMutexCB({}, {}, {:x})", mtxid, lock_count, timeout_addr);
-	return 0;
+	return LockMutex(mtxid, lock_count, timeout_addr, true);
 }
 
 static int sceKernelTryLockMutex(int mtxid, int lock_count) {
-	spdlog::error("sceKernelTryLockMutex({}, {})", mtxid, lock_count);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	auto mutex = kernel->GetKernelObject<Mutex>(mtxid);
+	if (!mutex) {
+		spdlog::warn("LockMutex: invalid mutex {}", mtxid);
+		return SCE_KERNEL_ERROR_UNKNOWN_MUTEXID;
+	}
+
+	if (lock_count <= 0) {
+		spdlog::warn("LockMutex: invalid lock count {}", lock_count);
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+
+	if (mutex->GetCount() + lock_count < 0) {
+		spdlog::warn("LockMutex: lock overflow {}", lock_count);
+		return SCE_KERNEL_ERROR_MUTEX_LOCK_OVF;
+	}
+
+	if ((mutex->GetAttr() & SCE_KERNEL_MA_RECURSIVE) == 0) {
+		if (lock_count > 1) {
+			spdlog::warn("LockMutex: recursive lock on non-recursive mutex {}", lock_count);
+			return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+		}
+
+		if (mutex->GetOwner() == kernel->GetCurrentThread()) {
+			spdlog::warn("LockMutex: recursive lock on non-recursive mutex {}", lock_count);
+			return SCE_KERNEL_ERROR_MUTEX_RECURSIVE;
+		}
+	}
+
+	if (!mutex->TryLock(lock_count)) {
+		return SCE_KERNEL_ERROR_MUTEX_FAILED_TO_OWN;
+	}
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelUnlockMutex(int mtxid, int unlock_count) {
-	spdlog::error("sceKernelUnlockMutex({}, {})", mtxid, unlock_count);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	auto mutex = kernel->GetKernelObject<Mutex>(mtxid);
+	if (!mutex) {
+		spdlog::warn("sceKernelUnlockMutex: invalid mutex {}", mtxid);
+		return SCE_KERNEL_ERROR_UNKNOWN_MUTEXID;
+	}
+
+	if (unlock_count <= 0) {
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+
+	if ((mutex->GetAttr() & SCE_KERNEL_MA_RECURSIVE) == 0 && unlock_count > 1) {
+		spdlog::warn("sceKernelUnlockMutex: recursive unlock on non-recursive mutex {}", mtxid);
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+
+	if (mutex->GetCount() == 0 || mutex->GetOwner() != kernel->GetCurrentThread()) {
+		spdlog::warn("sceKernelUnlockMutex: trying to unlock not owned mutex {}", mtxid);
+		return SCE_KERNEL_ERROR_MUTEX_NOT_OWNED;
+	}
+
+	if (mutex->GetCount() < unlock_count) {
+		spdlog::warn("sceKernelUnlockMutex: unlock underflow {}", mtxid);
+		return SCE_KERNEL_ERROR_MUTEX_UNLOCK_UDF;
+	}
+
+	mutex->Unlock(unlock_count);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelCancelMutex(int mtxid, int new_count, uint32_t num_wait_threads_addr) {
-	spdlog::error("sceKernelCancelMutex({}, {}, {:x})", mtxid, new_count, num_wait_threads_addr);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	auto mutex = kernel->GetKernelObject<Mutex>(mtxid);
+	if (!mutex) {
+		spdlog::warn("sceKernelCancelMutex: invalid mutex {}", mtxid);
+		return SCE_KERNEL_ERROR_UNKNOWN_MUTEXID;
+	}
+
+	if ((mutex->GetAttr() & SCE_KERNEL_MA_RECURSIVE) == 0 && new_count > 1) {
+		spdlog::warn("sceKernelCancelMutex: recursive lock on non-recursive mutex {}", new_count);
+		return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
+	}
+
+	int num_wait_threads = mutex->Cancel(new_count);
+	if (num_wait_threads_addr) {
+		psp->WriteMemory32(num_wait_threads_addr, num_wait_threads);
+	}
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelReferMutexStatus(int mtxid, uint32_t info_addr) {
-	spdlog::error("sceKernelReferMutexStatus({}, {:x})", mtxid, info_addr);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	auto info = reinterpret_cast<SceKernelMutexInfo*>(psp->VirtualToPhysical(info_addr));
+	if (!info) {
+		spdlog::warn("sceKernelReferMutexStatus: invalid info pointer {:x}", info_addr);
+		return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
+	}
+
+	auto mutex = kernel->GetKernelObject<Mutex>(mtxid);
+	if (!mutex) {
+		spdlog::warn("sceKernelReferMutexStatus: invalid semaphore {}", mtxid);
+		return SCE_KERNEL_ERROR_UNKNOWN_MUTEXID;
+	}
+
+	SceKernelMutexInfo new_info{};
+	new_info.size = sizeof(new_info);
+	SDL_strlcpy(new_info.name, mutex->GetName().data(), SceUID_NAME_MAX + 1);
+	new_info.attr = mutex->GetAttr();
+	new_info.init_count = mutex->GetInitCount();
+	new_info.current_count = mutex->GetCount();
+	new_info.current_owner = mutex->GetOwner();
+	new_info.num_wait_threads = mutex->GetNumWaitThreads();
+
+	auto wanted_size = std::min<size_t>(new_info.size, info->size);
+	memcpy(info, &new_info, wanted_size);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelCreateLwMutex(uint32_t work_addr, const char* name, uint32_t attr, int init_count, uint32_t opt_param_addr) {
@@ -889,6 +1066,14 @@ static uint64_t sceKernelGetSystemTimeWide() {
 	auto psp = PSP::GetInstance();
 	uint64_t time = CYCLES_TO_US(psp->GetCycles());
 	psp->EatCycles(250);
+	psp->GetKernel()->RescheduleNextCycle();
+	return time;
+}
+
+static uint32_t sceKernelGetSystemTimeLow() {
+	auto psp = PSP::GetInstance();
+	uint64_t time = CYCLES_TO_US(psp->GetCycles());
+	psp->EatCycles(165);
 	psp->GetKernel()->RescheduleNextCycle();
 	return time;
 }
@@ -953,5 +1138,6 @@ FuncMap RegisterThreadManForUser() {
 	funcs[0xAA73C935] = HLE_I_R(sceKernelExitThread);
 	funcs[0x809CE29B] = HLE_I_R(sceKernelExitDeleteThread);
 	funcs[0x82BC5777] = HLE_64R(sceKernelGetSystemTimeWide);
+	funcs[0x369ED59D] = HLE_R(sceKernelGetSystemTimeLow);
 	return funcs;
 }

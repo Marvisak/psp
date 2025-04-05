@@ -1,5 +1,7 @@
 #include "hle.hpp"
 
+#include <map>
+
 #include <spdlog/spdlog.h>
 
 #include "../kernel/thread.hpp"
@@ -23,6 +25,22 @@ const std::map<SDL_Scancode, uint32_t> KEYBOARD_BUTTONS {
 	{SDL_SCANCODE_X, SCE_CTRL_CIRCLE},
 	{SDL_SCANCODE_Z, SCE_CTRL_CROSS},
 	{SDL_SCANCODE_A, SCE_CTRL_SQUARE},
+};
+
+
+const std::map<SDL_GamepadButton, uint32_t> CONTROLLER_BUTTONS {
+	{SDL_GAMEPAD_BUTTON_BACK, SCE_CTRL_SELECT},
+	{SDL_GAMEPAD_BUTTON_START, SCE_CTRL_START},
+	{SDL_GAMEPAD_BUTTON_DPAD_UP, SCE_CTRL_UP},
+	{SDL_GAMEPAD_BUTTON_DPAD_RIGHT, SCE_CTRL_RIGHT},
+	{SDL_GAMEPAD_BUTTON_DPAD_DOWN, SCE_CTRL_DOWN},
+	{SDL_GAMEPAD_BUTTON_DPAD_LEFT, SCE_CTRL_LEFT},
+	{SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, SCE_CTRL_L},
+	{SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, SCE_CTRL_R},
+	{SDL_GAMEPAD_BUTTON_NORTH, SCE_CTRL_TRIANGLE},
+	{SDL_GAMEPAD_BUTTON_EAST, SCE_CTRL_CIRCLE},
+	{SDL_GAMEPAD_BUTTON_SOUTH, SCE_CTRL_CROSS},
+	{SDL_GAMEPAD_BUTTON_WEST, SCE_CTRL_SQUARE},
 };
 
 std::deque<ControllerThread> WAITING_THREADS{};
@@ -49,6 +67,15 @@ static uint32_t GetButtons() {
 		}
 	}
 
+	auto controller = PSP::GetInstance()->GetController();
+	if (controller) {
+		for (auto& [button, key] : CONTROLLER_BUTTONS) {
+			if (SDL_GetGamepadButton(controller, button)) {
+				buttons |= key;
+			}
+		}
+	}
+
 	return buttons;
 }
 
@@ -63,8 +90,19 @@ void SampleController(bool vblank, uint64_t cycles_late) {
 	SceCtrlData data{};
 	data.timestamp = CYCLES_TO_US(psp->GetCycles());
 	data.buttons = GetButtons();
+
 	data.analog_x = 128;
 	data.analog_y = 128;
+
+	auto controller = psp->GetController();
+	if (CTRL_MODE == SCE_CTRL_MODE_DIGITALANALOG && controller) {
+		// Maybe implement some deadzones?
+		int16_t x = SDL_GetGamepadAxis(controller, SDL_GAMEPAD_AXIS_LEFTX);
+		int16_t y = SDL_GetGamepadAxis(controller, SDL_GAMEPAD_AXIS_LEFTY);
+		data.analog_x = (x + 32768) / 256;
+		data.analog_y = (y + 32768) / 256;
+	}
+
 
 	uint32_t changed_buttons = data.buttons ^ PREVIOUS_BUTTONS;
 	LATCH.make |= data.buttons & changed_buttons;

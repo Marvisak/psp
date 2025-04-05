@@ -1,11 +1,11 @@
 #pragma once
 
+#include <unordered_map>
 #include <type_traits>
 #include <fstream>
 #include <memory>
 #include <vector>
 #include <array>
-#include <map>
 
 #include "../hle/defs.hpp"
 #include "memory.hpp"
@@ -23,6 +23,7 @@ enum class KernelObjectType {
 	FILE,
 	DIRECTORY,
 	SEMAPHORE,
+	MUTEX
 };
 
 class KernelObject {
@@ -48,7 +49,9 @@ public:
 	~Kernel();
 
 	int AddKernelObject(std::unique_ptr<KernelObject> obj);
-	void RemoveKernelObject(int uid) { objects[uid] = nullptr; }
+	void RemoveKernelObject(int uid);
+	std::vector<int> GetKernelObjects(KernelObjectType type) { return sorted_objects[type]; }
+
 	template <class T>
 	requires std::is_base_of_v<KernelObject, T>
 	T* GetKernelObject(int uid) {
@@ -79,6 +82,7 @@ public:
 	void ExecuteCallback(int cbid);
 
 	int CreateSemaphore(std::string name, uint32_t attr, int init_count, int max_count);
+	int CreateMutex(std::string name, uint32_t attr, int init_count);
 
 	void Mount(std::string mount_point, std::shared_ptr<FileSystem> file_system);
 	bool DoesDriveExist(std::string mount_point) { return drives.contains(mount_point); }
@@ -110,9 +114,10 @@ private:
 	bool force_reschedule = false;
 	int sdk_version = 0;
 
-	std::map<std::string, std::shared_ptr<FileSystem>> drives;
+	std::unordered_map<std::string, std::shared_ptr<FileSystem>> drives;
 	std::unique_ptr<MemoryAllocator> user_memory;
 	std::unique_ptr<MemoryAllocator> kernel_memory;
 	std::array<std::unique_ptr<KernelObject>, UID_COUNT> objects{};
+	std::unordered_map<KernelObjectType, std::vector<int>> sorted_objects{};
 	std::array<std::vector<int>, 128> thread_ready_queue{};
 };

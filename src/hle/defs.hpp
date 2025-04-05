@@ -25,6 +25,9 @@ constexpr auto SceUID_NAME_MAX = 31;
 constexpr auto SCE_KERNEL_SA_THFIFO = 0x0;
 constexpr auto SCE_KERNEL_SA_THPRI = 0x100;
 
+constexpr auto SCE_KERNEL_MA_THPRI = 0x100;
+constexpr auto SCE_KERNEL_MA_RECURSIVE = 0x200;
+
 constexpr auto SCE_DISPLAY_MODE_LCD = 0;
 
 constexpr auto SCE_DISPLAY_PIXEL_RGB565 = 0;
@@ -150,6 +153,12 @@ constexpr auto SCE_KERNEL_ERROR_ILLEGAL_STACK_SIZE = 0x80020194;
 constexpr auto SCE_KERNEL_ERROR_ILLEGAL_THID = 0x80020197;
 constexpr auto SCE_KERNEL_ERROR_UNKNOWN_THID = 0x80020198;
 constexpr auto SCE_KERNEL_ERROR_UNKNOWN_SEMID = 0x80020199;
+constexpr auto SCE_KERNEL_ERROR_UNKNOWN_MUTEXID = 0x800201C3;
+constexpr auto SCE_KERNEL_ERROR_MUTEX_FAILED_TO_OWN = 0x800201C4;
+constexpr auto SCE_KERNEL_ERROR_MUTEX_NOT_OWNED = 0x800201C5;
+constexpr auto SCE_KERNEL_ERROR_MUTEX_LOCK_OVF = 0x800201C6;
+constexpr auto SCE_KERNEL_ERROR_MUTEX_UNLOCK_UDF = 0x800201C7;
+constexpr auto SCE_KERNEL_ERROR_MUTEX_RECURSIVE = 0x800201C8;
 constexpr auto SCE_KERNEL_ERROR_UNKNOWN_CBID = 0x800201A1;
 constexpr auto SCE_KERNEL_ERROR_DORMANT = 0x800201A2;
 constexpr auto SCE_KERNEL_ERROR_SUSPEND = 0x800201A3;
@@ -288,6 +297,16 @@ struct SceKernelSemaInfo {
 	int init_count;
 	int current_count;
 	int max_count;
+	int num_wait_threads;
+};
+
+struct SceKernelMutexInfo {
+	uint32_t size;
+	char name[SceUID_NAME_MAX + 1];
+	uint32_t attr;
+	int init_count;
+	int current_count;
+	int current_owner;
 	int num_wait_threads;
 };
 

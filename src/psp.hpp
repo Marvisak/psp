@@ -33,12 +33,15 @@ struct ScheduledEvent {
 class PSP {
 public:
 	PSP(RendererType renderer_type);
+	~PSP();
 
 	void Run();
 	void Step();
 
 	bool LoadExec(std::string path);
 	bool LoadMemStick(std::string path);
+
+	SDL_Gamepad* GetController() { return controller; }
 
 	void Exit();
 	void ForceExit();
@@ -95,6 +98,8 @@ private:
 	std::unique_ptr<Renderer> renderer;
 	std::unique_ptr<Kernel> kernel;
 	std::unique_ptr<CPU> cpu;
+
+	SDL_Gamepad* controller{};
 
 	int exit_callback = -1;
 	bool vblank = false;

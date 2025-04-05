@@ -20,10 +20,23 @@ PSP::PSP(RendererType renderer_type) {
 	kernel = std::make_unique<Kernel>();
 	cpu = std::make_unique<CPU>();
 
-	if (!SDL_Init(SDL_INIT_VIDEO)) {
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
 		spdlog::error("PSP: SDL init error {}", SDL_GetError());
 		return;
 	}
+
+	int num_joysticks = 0;
+	auto joysticks = SDL_GetGamepads(&num_joysticks);
+	if (num_joysticks > 0 && joysticks) {
+		controller = SDL_OpenGamepad(joysticks[0]);
+		auto name = SDL_GetGamepadName(controller);
+		if (name) {
+			spdlog::info("PSP: using {}", name);
+		} else {
+			spdlog::info("PSP: using unknown controller");
+		}
+	}
+	SDL_free(joysticks);
 
 	switch (renderer_type) {
 	case RendererType::SOFTWARE:
@@ -31,6 +44,12 @@ PSP::PSP(RendererType renderer_type) {
 		break;
 	}
 	RegisterHLE();
+}
+
+PSP::~PSP() {
+	if (controller) {
+		SDL_CloseGamepad(controller);
+	}
 }
 
 void PSP::Run() {

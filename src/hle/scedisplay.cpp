@@ -49,10 +49,10 @@ static void VBlankHandler(uint64_t cycles_late) {
 	psp->Schedule(MS_TO_CYCLES(0.7315), VBlankEndHandler);
 }
 
-static void VBlankWait() {
+static void VBlankWait(bool allow_callbacks) {
 	auto kernel = PSP::GetInstance()->GetKernel();
 	VBLANK_THREADS.push_back(kernel->GetCurrentThread());
-	kernel->WaitCurrentThread(WaitReason::VBLANK, false);
+	kernel->WaitCurrentThread(WaitReason::VBLANK, allow_callbacks);
 }
 
 static int sceDisplaySetMode(int mode, int display_width, int display_height) {
@@ -64,7 +64,7 @@ static int sceDisplaySetMode(int mode, int display_width, int display_height) {
 		return SCE_ERROR_INVALID_SIZE;
 	}
 
-	VBlankWait();
+	VBlankWait(false);
 	return 0;
 }
 
@@ -144,14 +144,27 @@ static int sceDisplaySetFrameBuf(uint32_t frame_buffer_address, int frame_width,
 }
 
 static int sceDisplayWaitVblankStart() {
-	VBlankWait();
+	VBlankWait(false);
 	return 0;
 }
 
 static int sceDisplayWaitVblank() {
 	auto psp = PSP::GetInstance();
 	if (!psp->IsVBlank()) {
-		VBlankWait();
+		VBlankWait(false);
+		return 0;
+	}
+	else {
+		psp->EatCycles(1110);
+		psp->GetKernel()->RescheduleNextCycle();
+		return 1;
+	}
+}
+
+static int sceDisplayWaitVblankCB() {
+	auto psp = PSP::GetInstance();
+	if (!psp->IsVBlank()) {
+		VBlankWait(true);
 		return 0;
 	}
 	else {
@@ -185,6 +198,7 @@ FuncMap RegisterSceDisplay() {
 	funcs[0xEEDA2E54] = HLE_UUUI_R(sceDisplayGetFrameBuf);
 	funcs[0x289D82FE] = HLE_UIII_R(sceDisplaySetFrameBuf);
 	funcs[0x36CDFADE] = HLE_R(sceDisplayWaitVblank);
+	funcs[0x8EB9EC49] = HLE_R(sceDisplayWaitVblankCB);
 	funcs[0x984C27E7] = HLE_R(sceDisplayWaitVblankStart);
 	funcs[0x4D4E10EC] = HLE_R(sceDisplayIsVblank);
 	funcs[0xDBA6C4C4] = HLE_RF(sceDisplayGetFramePerSec);

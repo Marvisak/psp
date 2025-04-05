@@ -38,7 +38,7 @@ void Semaphore::HandleQueue() {
 
 	while (!waiting_threads.empty()) {
 		auto& sema_thread = waiting_threads.front();
-		if (sema_thread.need_count > this->count) {
+		if (sema_thread.need_count > count) {
 			break;
 		}
 
@@ -48,7 +48,7 @@ void Semaphore::HandleQueue() {
 			psp->Unschedule(sema_thread.timeout_event);
 		}
 
-		this->count -= sema_thread.need_count;
+		count -= sema_thread.need_count;
 		if (kernel->WakeUpThread(sema_thread.thid, WaitReason::SEMAPHORE)) {
 			kernel->RescheduleNextCycle();
 		}
@@ -72,7 +72,7 @@ void Semaphore::Wait(int need_count, bool allow_callbacks, uint32_t timeout_addr
 	kernel->WaitCurrentThread(WaitReason::SEMAPHORE, allow_callbacks);
 
 	int thid = kernel->GetCurrentThread();
-	struct SemaphoreThread sema_thread {};
+	SemaphoreThread sema_thread {};
 	sema_thread.thid = thid;
 	sema_thread.need_count = need_count;
 	sema_thread.timeout_addr = timeout_addr;
@@ -104,7 +104,6 @@ void Semaphore::Wait(int need_count, bool allow_callbacks, uint32_t timeout_addr
 		sema_thread.timeout_event = psp->Schedule(US_TO_CYCLES(timeout), func);
 	}
 
-	auto current_thread = kernel->GetKernelObject<Thread>(thid);
 	waiting_threads.push_back(sema_thread);
 }
 
@@ -121,9 +120,9 @@ int Semaphore::Cancel(int new_count) {
 	auto kernel = psp->GetKernel();
 
 	if (new_count >= 0) {
-		this->count = new_count;
+		count = new_count;
 	} else if (new_count == -1) {
-		this->count = init_count;
+		count = init_count;
 	}
 
 	for (auto& sema_thread : waiting_threads) {
