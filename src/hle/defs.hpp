@@ -330,3 +330,10 @@ struct SceCtrlLatch {
 	uint32_t press;
 	uint32_t release;
 };
+
+struct SceGeCbParam {
+	uint32_t signal_func;
+	uint32_t signal_cookie;
+	uint32_t finish_func;
+	uint32_t finish_cookie;
+};

@@ -129,7 +129,9 @@ void Thread::SaveState() {
 
 void Thread::WakeUpForCallback() {
 	pending_wait = wait;
-	state = ThreadState::READY;
+	if (state != ThreadState::RUN) {
+		state = ThreadState::READY;
+	}
 	wait = nullptr;
 }
 

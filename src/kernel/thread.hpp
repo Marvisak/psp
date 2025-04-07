@@ -7,6 +7,7 @@
 #include "module.hpp"
 
 enum class ThreadState {
+	RUN = 1,
 	READY = 2,
 	WAIT = 4,
 	SUSPEND = 8,

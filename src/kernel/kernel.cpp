@@ -85,7 +85,7 @@ int Kernel::Reschedule() {
 	CheckCallbacks();
 
 	auto current_thread_obj = GetKernelObject<Thread>(current_thread);
-	bool current_thread_valid = !force_reschedule && current_thread_obj && current_thread_obj->GetState() == ThreadState::READY;
+	bool current_thread_valid = !force_reschedule && current_thread_obj && current_thread_obj->GetState() == ThreadState::RUN;
 	reschedule_next_cycle = false;
 	force_reschedule = false;
 	for (int priority = 0; priority < thread_ready_queue.size(); priority++) {
@@ -116,6 +116,9 @@ int Kernel::Reschedule() {
 		}
 
 		if (current_thread_obj) {
+			if (current_thread_valid) {
+				current_thread_obj->SetState(ThreadState::READY);
+			}
 			current_thread_obj->SaveState();
 		}
 
