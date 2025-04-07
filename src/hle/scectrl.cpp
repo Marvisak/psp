@@ -8,6 +8,7 @@
 
 struct ControllerThread {
 	int thid;
+	std::shared_ptr<WaitObject> wait;
 	uint32_t buffer_addr;
 	bool negative;
 };
@@ -133,7 +134,9 @@ void SampleController(bool vblank, uint64_t cycles_late) {
 
 		auto thread = kernel->GetKernelObject<Thread>(waiting_thread.thid);
 		thread->SetReturnValue(1);
-		kernel->WakeUpThread(waiting_thread.thid, WaitReason::CTRL);
+
+		waiting_thread.wait->ended = true;
+		kernel->WakeUpThread(waiting_thread.thid);
 		WAITING_THREADS.pop_front();
 	}
 }
@@ -174,10 +177,9 @@ static int sceCtrlReadBufferPositive(uint32_t data_addr, int bufs) {
 		ControllerThread waiting_thread{};
 		waiting_thread.thid = kernel->GetCurrentThread();
 		waiting_thread.buffer_addr = data_addr;
+		waiting_thread.wait = kernel->WaitCurrentThread(WaitReason::CTRL, false);
 		waiting_thread.negative = false;
 		WAITING_THREADS.push_back(waiting_thread);
-
-		kernel->WaitCurrentThread(WaitReason::CTRL, false);
 		return 0;
 	}
 

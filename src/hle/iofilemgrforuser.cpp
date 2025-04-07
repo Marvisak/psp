@@ -15,10 +15,11 @@ static void IODelay(int usec) {
 	auto kernel = psp->GetKernel();
 
 	int thid = kernel->GetCurrentThread();
-	kernel->WaitCurrentThread(WaitReason::IO, false);
-	auto func = [thid](uint64_t _) {
-		PSP::GetInstance()->GetKernel()->WakeUpThread(thid, WaitReason::IO);
-		};
+	auto wait = kernel->WaitCurrentThread(WaitReason::IO, false);
+	auto func = [wait, thid](uint64_t _) {
+		wait->ended = true;
+		PSP::GetInstance()->GetKernel()->WakeUpThread(thid);
+	};
 	psp->Schedule(US_TO_CYCLES(usec), func);
 }
 

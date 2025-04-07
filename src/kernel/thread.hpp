@@ -30,6 +30,11 @@ enum class WaitReason {
 	HLE_DELAY = 20
 };
 
+struct WaitObject {
+	bool ended;
+	WaitReason reason;
+};
+
 class Thread : public KernelObject {
 public:
 	Thread(Module* module, std::string name, uint32_t entry_addr, int priority, uint32_t stack_size, uint32_t attr, uint32_t return_addr);
@@ -40,9 +45,23 @@ public:
 	void CreateStack();
 	void FillStack();
 
-	void SwitchState() const;
+	void SwitchState();
 	void SaveState();
 	
+	bool IsCallbackPending(int cbid) const { return std::find(pending_callbacks.begin(), pending_callbacks.end(), cbid) != pending_callbacks.end(); }
+	bool IsCallbackRunning(int cbid) const { return std::find(current_callbacks.begin(), current_callbacks.end(), cbid) != current_callbacks.end(); }
+	bool HasPendingCallback() const { return !pending_callbacks.empty(); }
+	void AddPendingCallback(int cbid) { pending_callbacks.push_back(cbid); }
+	int GetCurrentCallback() const {
+		if (current_callbacks.empty()) {
+			return -1;
+		}
+		return current_callbacks.front();
+	}
+
+	void WakeUpForCallback();
+	void RestoreFromCallback(std::shared_ptr<WaitObject> wait);
+
 	int GetWakeupCount() const { return wakeup_count; }
 	void DecWakeupCount() { wakeup_count--; }
 	void IncWakeupCount() { wakeup_count++; }
@@ -67,8 +86,21 @@ public:
 	uint32_t GetExitStatus() const { return exit_status; }
 	void SetExitStatus(int exit_status) { this->exit_status = exit_status; }
 
-	WaitReason GetWaitReason() const { return wait_reason; }
-	void SetWaitReason(WaitReason wait_reason) { this->wait_reason = wait_reason; }
+	void ClearWait() { wait = nullptr; }
+	WaitReason GetWaitReason() {
+		if (!wait || wait->ended) {
+			wait = nullptr;
+			return WaitReason::NONE;
+		}
+		return wait->reason;
+	}
+
+	std::shared_ptr<WaitObject> Wait(WaitReason reason) {
+		wait = std::make_shared<WaitObject>();
+		wait->reason = reason;
+		wait->ended = false;
+		return wait;
+	}
 
 	ThreadState GetState() const { return state; }
 	void SetState(ThreadState state) { this->state = state; }
@@ -83,9 +115,13 @@ private:
 	std::string name = "root";
 
 	ThreadState state = ThreadState::DORMANT;
-	WaitReason wait_reason = WaitReason::NONE;
-	bool allow_callbacks = true;
+	std::shared_ptr<WaitObject> wait{};
 	int wakeup_count = 0;
+
+	bool allow_callbacks = false;
+	std::shared_ptr<WaitObject> pending_wait{};
+	std::deque<int> pending_callbacks{};
+	std::deque<int> current_callbacks{};
 
 	int modid = 0;
 	uint32_t gp = 0;

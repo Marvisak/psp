@@ -23,7 +23,8 @@ Mutex::~Mutex() {
 		}
 
 		thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_DELETE);
-		kernel->WakeUpThread(mutex_thread.thid, WaitReason::MUTEX);
+		mutex_thread.wait->ended = true;
+		kernel->WakeUpThread(mutex_thread.thid);
 		kernel->RescheduleNextCycle();
 	}
 }
@@ -56,7 +57,8 @@ void Mutex::Unlock() {
 		psp->Unschedule(mutex_thread.timeout_event);
 	}
 
-	if (kernel->WakeUpThread(mutex_thread.thid, WaitReason::MUTEX)) {
+	mutex_thread.wait->ended = true;
+	if (kernel->WakeUpThread(mutex_thread.thid)) {
 		kernel->RescheduleNextCycle();
 	}
 
@@ -77,17 +79,21 @@ void Mutex::Lock(int lock_count, bool allow_callbacks, uint32_t timeout_addr) {
 	auto psp = PSP::GetInstance();
 	auto kernel = psp->GetKernel();
 
+	int thid = kernel->GetCurrentThread();
 	if (TryLock(lock_count)) {
+		if (allow_callbacks) {
+			kernel->CheckCallbacksOnThread(thid);
+		}
 		return;
 	}
 
-	int thid = kernel->GetCurrentThread();
-	kernel->WaitCurrentThread(WaitReason::MUTEX, allow_callbacks);
+	auto wait = kernel->WaitCurrentThread(WaitReason::MUTEX, allow_callbacks);
 	
 	MutexThread mutex_thread{};
 	mutex_thread.thid = thid;
 	mutex_thread.lock_count = lock_count;
 	mutex_thread.timeout_addr = timeout_addr;
+	mutex_thread.wait = wait;
 
 	if (timeout_addr) {
 		uint32_t timeout = psp->ReadMemory32(timeout_addr);
@@ -97,12 +103,13 @@ void Mutex::Lock(int lock_count, bool allow_callbacks, uint32_t timeout_addr) {
 			timeout = 250;
 		}
 
-		auto func = [this, timeout_addr, thid](uint64_t _) {
+		auto func = [this, wait, timeout_addr, thid](uint64_t _) {
 			auto psp = PSP::GetInstance();
 			auto kernel = psp->GetKernel();
 
 			psp->WriteMemory32(timeout_addr, 0);
-			if (kernel->WakeUpThread(thid, WaitReason::MUTEX)) {
+			wait->ended = true;
+			if (kernel->WakeUpThread(thid)) {
 				auto waiting_thread = kernel->GetKernelObject<Thread>(thid);
 				waiting_thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_TIMEOUT);
 			}
@@ -160,7 +167,8 @@ int Mutex::Cancel(int new_count) {
 		}
 
 		thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_CANCEL);
-		kernel->WakeUpThread(mutex_thread.thid, WaitReason::MUTEX);
+		mutex_thread.wait->ended = true;
+		kernel->WakeUpThread(mutex_thread.thid);
 		kernel->RescheduleNextCycle();
 	}
 

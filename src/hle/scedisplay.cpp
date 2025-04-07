@@ -18,7 +18,13 @@ Frame LATCHED_FRAME{};
 bool FRAME_LATCHED = false;
 
 int VBLANK_COUNT = 0;
-std::vector<int> VBLANK_THREADS{};
+
+struct VBlankThread {
+	int thid;
+	std::shared_ptr<WaitObject> wait;
+};
+
+std::vector<VBlankThread> VBLANK_THREADS{};
 
 static void VBlankEndHandler(uint64_t cycles_late) {
 	PSP::GetInstance()->SetVBlank(false);
@@ -27,8 +33,9 @@ static void VBlankEndHandler(uint64_t cycles_late) {
 static void VBlankHandler(uint64_t cycles_late) {
 	auto psp = PSP::GetInstance();
 
-	for (auto thid : VBLANK_THREADS) {
-		psp->GetKernel()->WakeUpThread(thid, WaitReason::VBLANK);
+	for (auto& thread : VBLANK_THREADS) {
+		thread.wait->ended = true;
+		psp->GetKernel()->WakeUpThread(thread.thid);
 	}
 	VBLANK_THREADS.clear();
 
@@ -51,8 +58,12 @@ static void VBlankHandler(uint64_t cycles_late) {
 
 static void VBlankWait(bool allow_callbacks) {
 	auto kernel = PSP::GetInstance()->GetKernel();
-	VBLANK_THREADS.push_back(kernel->GetCurrentThread());
-	kernel->WaitCurrentThread(WaitReason::VBLANK, allow_callbacks);
+
+	VBlankThread thread{};
+	thread.thid = kernel->GetCurrentThread();
+	thread.wait = kernel->WaitCurrentThread(WaitReason::VBLANK, allow_callbacks);
+
+	VBLANK_THREADS.push_back(thread);
 }
 
 static int sceDisplaySetMode(int mode, int display_width, int display_height) {

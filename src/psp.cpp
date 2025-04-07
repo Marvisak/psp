@@ -4,6 +4,7 @@
 
 #include "kernel/filesystem/directory/directoryfs.hpp"
 #include "renderer/software/renderer.hpp"
+#include "kernel/callback.hpp"
 #include "kernel/module.hpp"
 #include "hle/hle.hpp"
 
@@ -177,14 +178,19 @@ uint32_t PSP::GetMaxSize(uint32_t addr) {
 
 void PSP::Exit() {
 	if (exit_callback != -1) {
-		kernel->ExecuteCallback(exit_callback);
-	} else {
-		ForceExit();
+		auto callback = kernel->GetKernelObject<Callback>(exit_callback);
+		if (!callback) {
+			spdlog::warn("PSP: invalid exit callback {}", exit_callback);
+		} else {
+			callback->Notify(0);
+			return;
+		}
 	}
+	ForceExit();
 }
 
 void PSP::ForceExit() {
-	renderer->Frame();
+	kernel->ClearSortedObjects();
 	close = true;
 	earliest_event_cycles = 0;
 }

@@ -20,8 +20,8 @@ extern std::unordered_map<std::string, FuncMap> hle_modules;
 extern std::vector<ImportData> hle_imports;
 
 void ReturnFromModule(CPU* _);
-void ReturnFromThread(CPU* _);
-void ReturnFromCallback(CPU* _);
+void ReturnFromThread(CPU* cpu);
+void ReturnFromCallback(CPU* cpu);
 
 void RegisterHLE();
 int GetHLEIndex(std::string module, uint32_t nid);

@@ -82,6 +82,8 @@ bool Kernel::ExecModule(int uid) {
 
 // TODO: Maybe add some cycle counting to this?
 int Kernel::Reschedule() {
+	CheckCallbacks();
+
 	auto current_thread_obj = GetKernelObject<Thread>(current_thread);
 	bool current_thread_valid = !force_reschedule && current_thread_obj && current_thread_obj->GetState() == ThreadState::READY;
 	reschedule_next_cycle = false;
@@ -125,6 +127,9 @@ int Kernel::Reschedule() {
 	if (!current_thread_valid) {
 		if (current_thread_obj) current_thread_obj->SaveState();
 		current_thread = -1;
+	} else if (current_thread_obj->HasPendingCallback()) {
+		current_thread_obj->SaveState();
+		current_thread_obj->SwitchState();
 	}
 
 	return current_thread;
@@ -164,15 +169,51 @@ int Kernel::CreateCallback(std::string name, uint32_t entry, uint32_t common) {
 	return AddKernelObject(std::move(callback));
 }
 
-void Kernel::ExecuteCallback(int cbid) {
-	auto callback = GetKernelObject<Callback>(cbid);
-	if (!callback) {
-		spdlog::warn("Kernel: attempted to execute invalid callback {}", cbid);
-		return;
-	}
+void Kernel::CheckCallbacks() {
+	auto callbacks = GetKernelObjects(KernelObjectType::CALLBACK);
+	for (auto cbid : callbacks) {
+		auto callback = GetKernelObject<Callback>(cbid);
+		if (callback->GetNotifyCount() == 0) {
+			continue;
+		}
 
-	current_callback = cbid;
-	callback->Execute();
+		auto thread = GetKernelObject<Thread>(callback->GetThread());
+		if (!thread->GetAllowCallbacks()) {
+			continue;
+		}
+
+		if (thread->IsCallbackPending(cbid) || thread->IsCallbackRunning(cbid)) {
+			continue;
+		}
+
+		thread->AddPendingCallback(cbid);
+		if (thread->GetState() != ThreadState::READY) {
+			AddThreadToQueue(callback->GetThread());
+		}
+		thread->WakeUpForCallback();
+	}
+}
+
+bool Kernel::CheckCallbacksOnThread(int thid) {
+	bool executed = false;
+	auto callbacks = GetKernelObjects(KernelObjectType::CALLBACK);
+	for (auto cbid : callbacks) {
+		auto callback = GetKernelObject<Callback>(cbid);
+		if (callback->GetNotifyCount() == 0 || callback->GetThread() != thid) {
+			continue;
+		}
+
+		auto thread = GetKernelObject<Thread>(thid);
+		if (thread->IsCallbackPending(cbid) || thread->IsCallbackRunning(cbid)) {
+			continue;
+		}
+
+		executed = true;
+		thread->AddPendingCallback(cbid);
+		thread->WakeUpForCallback();
+	}
+	RescheduleNextCycle();
+	return executed;
 }
 
 int Kernel::CreateSemaphore(std::string name, uint32_t attr, int init_count, int max_count) {
@@ -338,19 +379,21 @@ int Kernel::Rename(std::string old_path, std::string new_path) {
 	return file_system->Rename(old_relative_path, new_relative_path);
 }
 
-bool Kernel::WakeUpThread(int thid, WaitReason reason) {
+bool Kernel::WakeUpThread(int thid) {
 	Thread* thread = GetKernelObject<Thread>(thid);
-	if ((thread->GetState() != ThreadState::WAIT && thread->GetState() != ThreadState::WAIT_SUSPEND)
-		|| thread->GetWaitReason() != reason) { return false; }
+
+	if (thread->GetWaitReason() != WaitReason::NONE) {
+		return false;
+	}
 
 	if (thread->GetState() == ThreadState::WAIT_SUSPEND) {
 		thread->SetState(ThreadState::SUSPEND);
-	} else {
+	} else if (thread->GetState() == ThreadState::WAIT) {
 		thread->SetState(ThreadState::READY);
 		AddThreadToQueue(thid);
 	}
-	thread->SetWaitReason(WaitReason::NONE);
 
+	thread->SetAllowCallbacks(false);
 	if (GetCurrentThread() == -1) {
 		RescheduleNextCycle();
 	}
@@ -358,14 +401,15 @@ bool Kernel::WakeUpThread(int thid, WaitReason reason) {
 	return true;
 }
 
-void Kernel::WaitCurrentThread(WaitReason reason, bool allow_callbacks) {
+std::shared_ptr<WaitObject> Kernel::WaitCurrentThread(WaitReason reason, bool allow_callbacks) {
 	Thread* thread = GetKernelObject<Thread>(GetCurrentThread());
 
 	thread->SetState(ThreadState::WAIT);
 	RemoveThreadFromQueue(GetCurrentThread());
-	thread->SetWaitReason(reason);
 	thread->SetAllowCallbacks(allow_callbacks);
 	RescheduleNextCycle();
+
+	return thread->Wait(reason);
 }
 
 void Kernel::ExecHLEFunction(int import_index) {

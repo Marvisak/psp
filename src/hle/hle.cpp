@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 
 #include "../kernel/thread.hpp"
+#include "../kernel/callback.hpp"
 
 std::unordered_map<std::string, FuncMap> hle_modules{};
 std::vector<ImportData> hle_imports{
@@ -63,10 +64,21 @@ void ReturnFromModule(CPU* _) {
 	kernel->RescheduleNextCycle();
 }
 
-void ReturnFromCallback(CPU* _) {
+void ReturnFromCallback(CPU* cpu) {
 	auto kernel = PSP::GetInstance()->GetKernel();
-	int cbid = kernel->GetCurrentCallback();
-	spdlog::error("Exiting callbacks not implemenented");
+	int thid = kernel->GetCurrentThread();
+	auto thread = kernel->GetKernelObject<Thread>(thid);
+
+	uint32_t return_value = cpu->GetRegister(MIPS_REG_V0);
+
+	int cbid = thread->GetCurrentCallback();
+	auto callback = kernel->GetKernelObject<Callback>(cbid);
+	auto wait = callback->Return();
+	thread->RestoreFromCallback(wait);
+
+	if (return_value != 0) {
+		kernel->RemoveKernelObject(cbid);
+	}
 }
 
 void HLEDelay(int usec) {
@@ -74,9 +86,10 @@ void HLEDelay(int usec) {
 	auto kernel = psp->GetKernel();
 
 	int thid = kernel->GetCurrentThread();
-	kernel->WaitCurrentThread(WaitReason::HLE_DELAY, false);
-	auto func = [thid](uint64_t _) {
-		PSP::GetInstance()->GetKernel()->WakeUpThread(thid, WaitReason::HLE_DELAY);
-		};
+	auto wait = kernel->WaitCurrentThread(WaitReason::HLE_DELAY, false);
+	auto func = [wait, thid](uint64_t _) {
+		wait->ended = true;
+		PSP::GetInstance()->GetKernel()->WakeUpThread(thid);
+	};
 	psp->Schedule(US_TO_CYCLES(usec), func);
 }

@@ -40,9 +40,7 @@ static int sceGeListSync(int id, int mode) {
 	auto kernel = psp->GetKernel();
 	int thid = kernel->GetCurrentThread();
 	if (mode == 0) {
-		if (psp->GetRenderer()->SyncThread(id, thid)) {
-			kernel->WaitCurrentThread(WaitReason::LIST_SYNC, false);
-		} else {
+		if (!psp->GetRenderer()->SyncThread(id, thid)) {
 			return SCE_ERROR_INVALID_ID;
 		}
 	} else if (mode == 1) {
@@ -59,7 +57,6 @@ static int sceGeDrawSync(int mode) {
 	auto kernel = psp->GetKernel();
 	int thid = kernel->GetCurrentThread();
 	if (mode == 0) {
-		kernel->WaitCurrentThread(WaitReason::DRAW_SYNC, false);
 		psp->GetRenderer()->SyncThread(thid);
 	} else if (mode == 1) {
 		spdlog::error("sceGeListSync: mode 1");

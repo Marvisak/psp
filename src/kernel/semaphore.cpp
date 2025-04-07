@@ -19,7 +19,8 @@ Semaphore::~Semaphore() {
 		}
 
 		thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_DELETE);
-		kernel->WakeUpThread(sema_thread.thid, WaitReason::SEMAPHORE);
+		sema_thread.wait->ended = true;
+		kernel->WakeUpThread(sema_thread.thid);
 		kernel->RescheduleNextCycle();
 	}
 }
@@ -49,7 +50,8 @@ void Semaphore::HandleQueue() {
 		}
 
 		count -= sema_thread.need_count;
-		if (kernel->WakeUpThread(sema_thread.thid, WaitReason::SEMAPHORE)) {
+		sema_thread.wait->ended = true;
+		if (kernel->WakeUpThread(sema_thread.thid)) {
 			kernel->RescheduleNextCycle();
 		}
 		waiting_threads.pop_front();
@@ -69,13 +71,14 @@ void Semaphore::Wait(int need_count, bool allow_callbacks, uint32_t timeout_addr
 		return;
 	}
 
-	kernel->WaitCurrentThread(WaitReason::SEMAPHORE, allow_callbacks);
+	auto wait = kernel->WaitCurrentThread(WaitReason::SEMAPHORE, allow_callbacks);
 
 	int thid = kernel->GetCurrentThread();
 	SemaphoreThread sema_thread {};
 	sema_thread.thid = thid;
 	sema_thread.need_count = need_count;
 	sema_thread.timeout_addr = timeout_addr;
+	sema_thread.wait = wait;
 
 	if (timeout_addr) {
 		uint32_t timeout = psp->ReadMemory32(timeout_addr);
@@ -85,12 +88,13 @@ void Semaphore::Wait(int need_count, bool allow_callbacks, uint32_t timeout_addr
 			timeout = 245;
 		}
 
-		auto func = [this, timeout_addr, thid](uint64_t _) {
+		auto func = [this, wait, timeout_addr, thid](uint64_t _) {
 			auto psp = PSP::GetInstance();
 			auto kernel = psp->GetKernel();
 
 			psp->WriteMemory32(timeout_addr, 0);
-			if (kernel->WakeUpThread(thid, WaitReason::SEMAPHORE)) {
+			wait->ended = true;
+			if (kernel->WakeUpThread(thid)) {
 				auto waiting_thread = kernel->GetKernelObject<Thread>(thid);
 				waiting_thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_TIMEOUT);
 			}
@@ -136,7 +140,8 @@ int Semaphore::Cancel(int new_count) {
 		}
 
 		thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_CANCEL);
-		kernel->WakeUpThread(sema_thread.thid, WaitReason::SEMAPHORE);
+		sema_thread.wait->ended = true;
+		kernel->WakeUpThread(sema_thread.thid);
 		kernel->RescheduleNextCycle();
 	}
 

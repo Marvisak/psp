@@ -11,6 +11,7 @@
 struct ThreadEnd {
 	int thid;
 	uint32_t timeout_addr;
+	std::shared_ptr<WaitObject> wait;
 	std::shared_ptr<ScheduledEvent> timeout_event;
 };
 
@@ -33,7 +34,8 @@ static void HandleThreadEnd(int thid, int exit_reason) {
 				psp->Unschedule(thread_end.timeout_event);
 			}
 
-			if (kernel->WakeUpThread(thread_end.thid, WaitReason::THREAD_END)) {
+			thread_end.wait->ended = true;
+			if (kernel->WakeUpThread(thread_end.thid)) {
 				thread->SetReturnValue(exit_reason);
 			}
 		}
@@ -49,7 +51,7 @@ static void HandleThreadEnd(int thid, int exit_reason) {
 	}
 }
 
-static int SleepThread(bool allow_callbacks) {
+static void SleepThread(bool allow_callbacks) {
 	auto kernel = PSP::GetInstance()->GetKernel();
 	auto thread = kernel->GetKernelObject<Thread>(kernel->GetCurrentThread());
 	if (thread->GetWakeupCount() > 0) {
@@ -57,7 +59,6 @@ static int SleepThread(bool allow_callbacks) {
 	} else {
 		kernel->WaitCurrentThread(WaitReason::SLEEP, allow_callbacks);
 	}
-	return SCE_KERNEL_ERROR_OK;
 }
 
 static void DelayThread(uint32_t usec, bool allow_callbacks) {
@@ -67,15 +68,15 @@ static void DelayThread(uint32_t usec, bool allow_callbacks) {
 
 	if (usec < 200) {
 		usec = 210;
-	}
-	else if (usec > 0x8000000000000000ULL) {
+	} else if (usec > 0x8000000000000000ULL) {
 		usec -= 0x8000000000000000ULL;
 	}
 
 	int thid = kernel->GetCurrentThread();
-	kernel->WaitCurrentThread(WaitReason::DELAY, allow_callbacks);
-	auto func = [thid](uint64_t _) {
-		PSP::GetInstance()->GetKernel()->WakeUpThread(thid, WaitReason::DELAY);
+	auto wait = kernel->WaitCurrentThread(WaitReason::DELAY, allow_callbacks);
+	auto func = [wait, thid](uint64_t _) {
+		wait->ended = true;
+		PSP::GetInstance()->GetKernel()->WakeUpThread(thid);
 	};
 
 	psp->Schedule(US_TO_CYCLES(usec), func);
@@ -98,20 +99,26 @@ static int WaitThreadEnd(int thid, uint32_t timeout_addr, bool allow_callbacks) 
 	}
 
 	if (thread->GetState() == ThreadState::DORMANT) {
+		if (allow_callbacks) {
+			kernel->CheckCallbacksOnThread(current_thread);
+		}
 		return thread->GetExitStatus();
 	}
 
 	struct ThreadEnd thread_end {};
+	auto wait = kernel->WaitCurrentThread(WaitReason::THREAD_END, allow_callbacks);
 	thread_end.thid = current_thread;
 	thread_end.timeout_addr = timeout_addr;
+	thread_end.wait = wait;
 	if (timeout_addr) {
 		uint32_t timeout = psp->ReadMemory32(timeout_addr);
-		auto func = [timeout_addr, thid, current_thread](uint64_t _) {
+		auto func = [wait, timeout_addr, thid, current_thread](uint64_t _) {
 			auto psp = PSP::GetInstance();
 			auto kernel = psp->GetKernel();
 
 			psp->WriteMemory32(timeout_addr, 0);
-			if (kernel->WakeUpThread(current_thread, WaitReason::THREAD_END)) {
+			wait->ended = true;
+			if (kernel->WakeUpThread(current_thread)) {
 				auto waiting_thread = kernel->GetKernelObject<Thread>(current_thread);
 				waiting_thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_TIMEOUT);
 			}
@@ -123,7 +130,6 @@ static int WaitThreadEnd(int thid, uint32_t timeout_addr, bool allow_callbacks) 
 			};
 		thread_end.timeout_event = psp->Schedule(US_TO_CYCLES(timeout), func);
 	}
-	kernel->WaitCurrentThread(WaitReason::THREAD_END, allow_callbacks);
 	WAITING_THREAD_END[thid].push_back(thread_end);
 
 	return 0;
@@ -199,7 +205,7 @@ void ReturnFromThread(CPU* cpu) {
 
 	auto thread = kernel->GetKernelObject<Thread>(thid);
 	thread->SetState(ThreadState::DORMANT);
-	thread->SetWaitReason(WaitReason::NONE);
+	thread->ClearWait();
 
 	int exit_status = cpu->GetRegister(MIPS_REG_V0);
 	thread->SetExitStatus(exit_status);
@@ -325,7 +331,7 @@ static int sceKernelExitThread(int exit_status) {
 	HandleThreadEnd(thid, exit_status);
 	kernel->RemoveThreadFromQueue(thid);
 	thread->SetState(ThreadState::DORMANT);
-	thread->SetWaitReason(WaitReason::NONE);
+	thread->ClearWait();
 	thread->SetExitStatus(exit_status);
 	kernel->RescheduleNextCycle();
 
@@ -367,7 +373,7 @@ static int sceKernelTerminateThread(int thid) {
 	HandleThreadEnd(thid, SCE_KERNEL_ERROR_THREAD_TERMINATED);
 	kernel->RemoveThreadFromQueue(thid);
 	thread->SetState(ThreadState::DORMANT);
-	thread->SetWaitReason(WaitReason::NONE);
+	thread->ClearWait();
 	thread->SetExitStatus(SCE_KERNEL_ERROR_THREAD_TERMINATED);
 
 	return SCE_KERNEL_ERROR_OK;
@@ -556,13 +562,30 @@ static int sceKernelCreateCallback(const char* name, uint32_t entry, uint32_t co
 }
 
 static int sceKernelDeleteCallback(int cbid) {
-	spdlog::error("sceKernelDeleteCallback({})", cbid);
-	return 0;
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	auto callback = kernel->GetKernelObject<Callback>(cbid);
+	if (!callback) {
+		spdlog::warn("sceKernelDeleteCallback: invalid callback {}", cbid);
+		return SCE_KERNEL_ERROR_UNKNOWN_CBID;
+	}
+
+	kernel->RemoveKernelObject(cbid);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelNotifyCallback(int cbid, int arg) {
-	spdlog::error("sceKernelNotifyCallback({})", cbid);
-	return 0;
+	auto psp = PSP::GetInstance();
+
+	auto callback = psp->GetKernel()->GetKernelObject<Callback>(cbid);
+	if (!callback) {
+		spdlog::warn("sceKernelNotifyCallback: invalid callback {}", cbid);
+		return SCE_KERNEL_ERROR_UNKNOWN_CBID;
+	}
+	callback->Notify(arg);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelReferCallbackStatus(int cbid, uint32_t info_addr) {
@@ -579,29 +602,35 @@ static int sceKernelReferCallbackStatus(int cbid, uint32_t info_addr) {
 		return SCE_KERNEL_ERROR_UNKNOWN_CBID;
 	}
 
-	info->size = sizeof(SceKernelCallbackInfo);
-	SDL_strlcpy(info->name, callback->GetName().data(), SceUID_NAME_MAX + 1);
-	info->callback = callback->GetEntry();
-	info->thread_id = callback->GetThread();
-	info->common = callback->GetCommon();
-	info->notify_count = callback->GetNotifyCount();
-	info->notify_arg = callback->GetNotifyArg();
+	SceKernelCallbackInfo new_info{};
+	new_info.size = sizeof(SceKernelCallbackInfo);
+	SDL_strlcpy(new_info.name, callback->GetName().data(), SceUID_NAME_MAX + 1);
+	new_info.callback = callback->GetEntry();
+	new_info.thread_id = callback->GetThread();
+	new_info.common = callback->GetCommon();
+	new_info.notify_count = callback->GetNotifyCount();
+	new_info.notify_arg = callback->GetNotifyArg();
+
+	auto wanted_size = std::min<size_t>(new_info.size, info->size);
+	memcpy(info, &new_info, wanted_size);
 
 	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelCheckCallback() {
-	spdlog::error("sceKernelCheckCallback()");
-	return 0;
+	auto kernel = PSP::GetInstance()->GetKernel();
+	int thid = kernel->GetCurrentThread();
+	return kernel->CheckCallbacksOnThread(thid);
 }
 
-
 static int sceKernelSleepThread() {
-	return SleepThread(false);
+	SleepThread(false);
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelSleepThreadCB() {
-	return SleepThread(true);
+	SleepThread(true);
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelDelayThread(uint32_t usec) {
@@ -691,10 +720,11 @@ static int sceKernelWakeupThread(int thid) {
 		return SCE_KERNEL_ERROR_UNKNOWN_THID;
 	}
 
-	if (kernel->WakeUpThread(thid, WaitReason::SLEEP)) {
+	if (thread->GetWaitReason() == WaitReason::SLEEP) {
+		thread->ClearWait();
+		kernel->WakeUpThread(thid);
 		kernel->RescheduleNextCycle();
-	}
-	else {
+	} else {
 		thread->IncWakeupCount();
 	}
 

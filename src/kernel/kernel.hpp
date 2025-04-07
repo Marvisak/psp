@@ -43,6 +43,7 @@ private:
 class FileSystem;
 class Thread;
 enum class WaitReason;
+struct WaitObject;
 class Kernel {
 public:
 	Kernel();
@@ -50,6 +51,7 @@ public:
 
 	int AddKernelObject(std::unique_ptr<KernelObject> obj);
 	void RemoveKernelObject(int uid);
+	void ClearSortedObjects() { sorted_objects.clear(); }
 	std::vector<int> GetKernelObjects(KernelObjectType type) { return sorted_objects[type]; }
 
 	template <class T>
@@ -79,7 +81,8 @@ public:
 	void StartThread(int thid, int arg_size, void* arg_block);
 
 	int CreateCallback(std::string name, uint32_t entry, uint32_t common);
-	void ExecuteCallback(int cbid);
+	void CheckCallbacks();
+	bool CheckCallbacksOnThread(int thid);
 
 	int CreateSemaphore(std::string name, uint32_t attr, int init_count, int max_count);
 	int CreateMutex(std::string name, uint32_t attr, int init_count);
@@ -95,20 +98,18 @@ public:
 	int RemoveDirectory(std::string path);
 	int FixPath(std::string path, std::string& out);
 
-	bool WakeUpThread(int thid, WaitReason reason);
-	void WaitCurrentThread(WaitReason reason, bool allow_callbacks);
+	bool WakeUpThread(int thid);
+	std::shared_ptr<WaitObject> WaitCurrentThread(WaitReason reason, bool allow_callbacks);
 
 	void ExecHLEFunction(int import_index);
 
 	int GetExecModule() const { return exec_module; }
 	int GetCurrentThread() const { return current_thread; }
-	int GetCurrentCallback() const { return current_callback; }
 	MemoryAllocator* GetUserMemory() { return user_memory.get(); }
 	MemoryAllocator* GetKernelMemory() { return kernel_memory.get(); }
 private:
 	int exec_module = -1;
 	int current_thread = -1;
-	int current_callback = -1;
 	int next_uid = 1;
 	bool reschedule_next_cycle = false;
 	bool force_reschedule = false;
@@ -117,7 +118,7 @@ private:
 	std::unordered_map<std::string, std::shared_ptr<FileSystem>> drives;
 	std::unique_ptr<MemoryAllocator> user_memory;
 	std::unique_ptr<MemoryAllocator> kernel_memory;
-	std::array<std::unique_ptr<KernelObject>, UID_COUNT> objects{};
 	std::unordered_map<KernelObjectType, std::vector<int>> sorted_objects{};
+	std::array<std::unique_ptr<KernelObject>, UID_COUNT> objects{};
 	std::array<std::vector<int>, 128> thread_ready_queue{};
 };

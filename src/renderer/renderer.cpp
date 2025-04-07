@@ -173,8 +173,9 @@ void Renderer::Step() {
 	}
 
 	if (queue.empty()) {
-		for (auto thid : waiting_threads) {
-			psp->GetKernel()->WakeUpThread(thid, WaitReason::DRAW_SYNC);
+		for (auto& thread : waiting_threads) {
+			thread.wait->ended = true;
+			psp->GetKernel()->WakeUpThread(thread.thid);
 		}
 		waiting_threads.clear();
 	}
@@ -217,16 +218,20 @@ bool Renderer::SyncThread(int id, int thid) {
 	}
 	auto& display_list = display_lists[id];
 	if (display_list.valid) {
-		display_list.waiting_threads.push_back(thid);
+		SyncWaitingThread thread{};
+		thread.thid = thid;
+		thread.wait = PSP::GetInstance()->GetKernel()->WaitCurrentThread(WaitReason::LIST_SYNC, false);
+		display_list.waiting_threads.push_back(thread);
 	}
 	return display_list.valid;
 }
 
 void Renderer::SyncThread(int thid) {
-	if (queue.empty()) {
-		PSP::GetInstance()->GetKernel()->WakeUpThread(thid, WaitReason::DRAW_SYNC);
-	} else {
-		waiting_threads.push_back(thid);
+	if (!queue.empty()) {
+		SyncWaitingThread thread{};
+		thread.thid = thid;
+		thread.wait = PSP::GetInstance()->GetKernel()->WaitCurrentThread(WaitReason::DRAW_SYNC, false);
+		waiting_threads.push_back(thread);
 	}
 }
 
@@ -447,8 +452,9 @@ void Renderer::End(DisplayList& dl, uint32_t opcode) {
 	executed_cycles += 60;
 	dl.valid = false;
 	queue.pop_front();
-	for (auto thid : dl.waiting_threads) {
-		PSP::GetInstance()->GetKernel()->WakeUpThread(thid, WaitReason::LIST_SYNC);
+	for (auto& thread : dl.waiting_threads) {
+		thread.wait->ended = true;
+		PSP::GetInstance()->GetKernel()->WakeUpThread(thread.thid);
 	}
 	dl.waiting_threads.clear();
 }

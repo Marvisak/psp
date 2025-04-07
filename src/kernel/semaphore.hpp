@@ -30,6 +30,7 @@ private:
 		int thid;
 		int need_count;
 		uint32_t timeout_addr;
+		std::shared_ptr<WaitObject> wait;
 		std::shared_ptr<ScheduledEvent> timeout_event;
 	};
 	std::deque<SemaphoreThread> waiting_threads;

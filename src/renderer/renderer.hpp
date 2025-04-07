@@ -46,13 +46,19 @@ constexpr auto BASE_HEIGHT = 272;
 constexpr auto REFRESH_RATE = 60;
 constexpr auto FRAME_DURATION = std::chrono::duration<double, std::milli>(1000 / REFRESH_RATE);
 
+struct WaitObject;
+struct SyncWaitingThread {
+	int thid;
+	std::shared_ptr<WaitObject> wait;
+};
+
 struct DisplayList {
 	uint32_t start_addr;
 	uint32_t current_addr;
 	uint32_t stall_addr;
 
 	bool valid;
-	std::vector<int> waiting_threads;
+	std::vector<SyncWaitingThread> waiting_threads;
 };
 
 struct Texture {
@@ -262,7 +268,7 @@ protected:
 	int next_id = 1;
 	std::deque<int> queue{};
 	std::array<DisplayList, 64> display_lists{};
-	std::vector<int> waiting_threads{};
+	std::vector<SyncWaitingThread> waiting_threads{};
 	bool waiting = false;
 	int executed_cycles = 0;
 
