@@ -83,6 +83,7 @@ public:
 	virtual void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format) = 0;
 	virtual void DrawRectangle(Vertex start, Vertex end) = 0;
 	virtual void DrawTriangle(Vertex v0, Vertex v1, Vertex v2) = 0;
+	virtual void DrawTriangleStrip(std::vector<Vertex> vertices) = 0;
 	virtual void DrawTriangleFan(std::vector<Vertex> vertices) = 0;
 	virtual void ClearTextureCache() = 0;
 	virtual void ClearTextureCache(uint32_t addr, uint32_t size) = 0;

@@ -42,6 +42,7 @@ public:
 	void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format);
 	void DrawRectangle(Vertex start, Vertex end);
 	void DrawTriangle(Vertex v0, Vertex v1, Vertex v2);
+	void DrawTriangleStrip(std::vector<Vertex> vertices);
 	void DrawTriangleFan(std::vector<Vertex> vertices);
 	void ClearTextureCache();
 	void ClearTextureCache(uint32_t addr, uint32_t size);

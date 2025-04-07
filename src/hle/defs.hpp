@@ -55,6 +55,7 @@ constexpr auto SCE_CTRL_CROSS = (1 << 14);
 constexpr auto SCE_CTRL_SQUARE = (1 << 15);
 
 constexpr auto SCEGU_PRIM_TRIANGLES = 3;
+constexpr auto SCEGU_PRIM_TRIANGLE_STRIP = 4;
 constexpr auto SCEGU_PRIM_TRIANGLE_FAN = 5;
 constexpr auto SCEGU_PRIM_RECTANGLES = 6;
 

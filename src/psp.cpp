@@ -112,13 +112,14 @@ bool PSP::LoadExec(std::string path) {
 		executable_path = "umd0:/" + fs_path.filename().string();
 		fs_path = fs_path.parent_path();
 	} else if (std::filesystem::is_directory(fs_path)) {
-		executable_path = "umd0:/PSP_GAME/SYSDIR/BOOT.BIN";
+		executable_path = "disc0:/PSP_GAME/SYSDIR/BOOT.BIN";
 		fs_path = path;
 	}
 
 	auto file_system = std::make_shared<DirectoryFileSystem>(fs_path);
 
 	kernel->Mount("umd0:", file_system);
+	kernel->Mount("disc0:", file_system);
 	kernel->Mount("host0:", file_system);
 
 	int uid = kernel->LoadModule(executable_path);

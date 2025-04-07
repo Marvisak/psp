@@ -433,6 +433,11 @@ void Renderer::Prim(uint32_t opcode) {
 			DrawTriangle(vertices[i], vertices[i + 1], vertices[i + 2]);
 		}
 		break;
+	case SCEGU_PRIM_TRIANGLE_STRIP: {
+		if (count >= 3) {
+			DrawTriangleStrip(vertices);
+		}
+	}
 	case SCEGU_PRIM_TRIANGLE_FAN: 
 		if (count >= 3) {
 			DrawTriangleFan(vertices);

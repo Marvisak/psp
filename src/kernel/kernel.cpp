@@ -417,6 +417,11 @@ std::shared_ptr<WaitObject> Kernel::WaitCurrentThread(WaitReason reason, bool al
 
 void Kernel::ExecHLEFunction(int import_index) {
 	auto& import_data = hle_imports[import_index];
+	auto& module = hle_modules[import_data.module];
+	if (!module.contains(import_data.nid)) {
+		spdlog::error("Kernel: calling unimplemented {} {:x}", import_data.module, import_data.nid);
+		return;
+	}
 	auto& func = hle_modules[import_data.module][import_data.nid];
 
 	auto cpu = PSP::GetInstance()->GetCPU();

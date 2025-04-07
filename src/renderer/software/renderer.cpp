@@ -289,6 +289,12 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	}
 }
 
+void SoftwareRenderer::DrawTriangleStrip(std::vector<Vertex> vertices) {
+	for (int i = 2; i < vertices.size(); i++) {
+		DrawTriangle(vertices[i - 2], vertices[i - 1], vertices[i]);
+	}
+}
+
 void SoftwareRenderer::DrawTriangleFan(std::vector<Vertex> vertices) {
 	for (int i = 1; i < vertices.size() - 1; i++) {
 		DrawTriangle(vertices[0], vertices[i], vertices[i + 1]);

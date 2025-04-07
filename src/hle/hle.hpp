@@ -124,6 +124,13 @@ FuncMap RegisterSceRtc();
 		)); \
 	}
 
+#define HLE_IC_R(func) [](CPU* cpu) { \
+		cpu->SetRegister(2, func( \
+			static_cast<int32_t>(cpu->GetRegister(4)), \
+			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu->GetRegister(5))) \
+		)); \
+	}
+
 #define HLE_UI_R(func) [](CPU* cpu) { \
 		cpu->SetRegister(2, func( \
 			cpu->GetRegister(4), \
@@ -192,6 +199,15 @@ FuncMap RegisterSceRtc();
 			static_cast<int32_t>(cpu->GetRegister(6)) \
 		)); \
 	}
+
+#define HLE_CIU_R(func) [](CPU* cpu) { \
+		cpu->SetRegister(2, func( \
+			reinterpret_cast<const char*>(PSP::GetInstance()->VirtualToPhysical(cpu->GetRegister(4))), \
+			static_cast<int32_t>(cpu->GetRegister(5)), \
+			cpu->GetRegister(6) \
+		)); \
+	}
+
 
 #define HLE_CUU_R(func) [](CPU* cpu) { \
 		cpu->SetRegister(2, func( \
@@ -304,6 +320,15 @@ FuncMap RegisterSceRtc();
 		)); \
 	}
 
+#define HLE_IUUUU_R(func)[](CPU* cpu) { \
+		cpu->SetRegister(2, func( \
+			static_cast<int32_t>(cpu->GetRegister(4)), \
+			cpu->GetRegister(5), \
+			cpu->GetRegister(6), \
+			cpu->GetRegister(7), \
+			cpu->GetRegister(8) \
+		)); \
+	}
 
 #define HLE_IUUIU_R(func)[](CPU* cpu) { \
 		cpu->SetRegister(2, func( \
