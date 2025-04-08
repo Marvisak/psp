@@ -53,11 +53,11 @@ public:
 	void WriteDXT5(const DXT5Block* block, glm::ivec4 palette[4], Color* dst, int pitch);
 
 	bool Test(uint8_t test, int src, int dst);
-	uint8_t GetFilter(float ds, float dt);
+	uint8_t GetFilter(float du, float dv);
 
 	Color Blend(Color src, Color dest);
 	Color BlendTexture(Color texture, Color blending);
-	glm::uvec2 FilterTexture(uint8_t filter, glm::vec2 uv);
+	Color FilterTexture(uint8_t filter, glm::vec2 uv, const std::vector<Color>& tex_data);
 	Color GetCLUT(uint32_t index);
 	TextureCacheEntry DecodeTexture();
 private:

@@ -96,10 +96,10 @@ void Renderer::Step() {
 	case CMD_TX: viewport_pos_x = std::bit_cast<float>(command << 8); break;
 	case CMD_TY: viewport_pos_y = std::bit_cast<float>(command << 8); break;
 	case CMD_TZ: viewport_pos_z = std::bit_cast<float>(command << 8); break;
-	case CMD_SU: u_offset = std::bit_cast<float>(command << 8); break;
-	case CMD_SV: v_offset = std::bit_cast<float>(command << 8); break;
-	case CMD_TU: u_scale = std::bit_cast<float>(command << 8); break;
-	case CMD_TV: v_scale = std::bit_cast<float>(command << 8); break;
+	case CMD_SU: u_scale = std::bit_cast<float>(command << 8); break;
+	case CMD_SV: v_scale = std::bit_cast<float>(command << 8); break;
+	case CMD_TU: u_offset = std::bit_cast<float>(command << 8); break;
+	case CMD_TV: v_offset = std::bit_cast<float>(command << 8); break;
 	case CMD_OFFSETX: viewport_offset_x = command & 0xFFFFFF; break;
 	case CMD_OFFSETY: viewport_offset_y = command & 0xFFFFFF; break;
 	case CMD_SHADE: gouraud_shading = command & 1; break;
@@ -134,6 +134,7 @@ void Renderer::Step() {
 	case CMD_CLOAD: CLoad(command); break;
 	case CMD_CLUT: CLUT(command); break;
 	case CMD_TFILTER: texture_minify_filter = command & 0x7; texture_magnify_filter = (command >> 8) & 0x7; break;
+	case CMD_TWRAP: u_clamp = (command & 1) != 0; v_clamp = (command & 0x100) != 0; break;
 	case CMD_TLEVEL: texture_level_mode = command & 0x3; texture_level_offset = static_cast<int8_t>((command >> 16) & 0xFF); break;
 	case CMD_TFUNC: TFunc(command); break;
 	case CMD_TEC: environment_texture = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;
@@ -261,8 +262,8 @@ Vertex Renderer::ParseVertex() {
 	if (uv_format != FORMAT_NONE) {
 		switch (uv_format) {
 		case FORMAT_BYTE:
-			v.uv.x = 0;
-			v.uv.y = 0;
+			v.uv.x = psp->ReadMemory8(vaddr) * (1.f / 128.f);
+			v.uv.y = psp->ReadMemory8(vaddr + 1) * (1.f / 128.f);
 			vaddr += 2;
 			break;
 		case FORMAT_SHORT:
@@ -270,23 +271,28 @@ Vertex Renderer::ParseVertex() {
 			v.uv.x = static_cast<float>(psp->ReadMemory16(vaddr));
 			v.uv.y = static_cast<float>(psp->ReadMemory16(vaddr + 2));
 			if (!through) {
-				v.uv *= (1.0f / 32768.f);
-				v.uv.x *= u_scale + u_offset;
-				v.uv.y *= v_scale + v_offset;
-			}
-			else {
-				v.uv.x /= textures[0].width;
-				v.uv.y /= textures[0].height;
+				v.uv.x *= (1.f / 32768.f) * u_scale;
+				v.uv.y *= (1.f / 32768.f) * v_scale;
+				v.uv.x += u_offset;
+				v.uv.y += v_offset;
 			}
 			vaddr += 4;
 			break;
 		case FORMAT_FLOAT:
 			vaddr = ALIGN(vaddr, 4);
-			v.uv.x = std::bit_cast<float>(psp->ReadMemory32(vaddr)) / textures[0].width;
-			v.uv.y = std::bit_cast<float>(psp->ReadMemory32(vaddr + 4)) / textures[0].height;
+			v.uv.x = std::bit_cast<float>(psp->ReadMemory32(vaddr));
+			v.uv.y = std::bit_cast<float>(psp->ReadMemory32(vaddr + 4));
 			vaddr += 8;
 			break;
 		}
+
+		if (!through) {
+			v.uv.x *= textures[0].width;
+			v.uv.y *= textures[0].height;
+		}
+		v.uv = glm::round(v.uv);
+		v.uv.x /= textures[0].width;
+		v.uv.y /= textures[0].height;
 	}
 
 	switch (color_format) {
@@ -437,6 +443,7 @@ void Renderer::Prim(uint32_t opcode) {
 		if (count >= 3) {
 			DrawTriangleStrip(vertices);
 		}
+		break;
 	}
 	case SCEGU_PRIM_TRIANGLE_FAN: 
 		if (count >= 3) {

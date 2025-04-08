@@ -98,11 +98,14 @@ void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 	bool use_texture = !clear_mode && textures_enabled;
 
+	float du = (end.uv.x - start.uv.x) / width;
+	float dv = (end.uv.y - start.uv.y) / height;
+
 	uint8_t filter = -1;
 	TextureCacheEntry texture{};
 	if (use_texture) {
 		texture = DecodeTexture();
-		filter = GetFilter(static_cast<float>(textures[0].width) / width, static_cast<float>(textures[0].height) / height);
+		filter = GetFilter(du, dv);
 	}
 
 	int scissor_min_x = ScissorTestX(min.x);
@@ -112,9 +115,6 @@ void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 	float inv_min_z = 1.0f / start.pos.z;
 	float inv_max_z = 1.0f / start.pos.z;
-
-	float du = (end.uv.x - start.uv.x) / width;
-	float dv = (end.uv.y - start.uv.y) / height;
 	for (int y = scissor_min_y; y < scissor_max_y; y++) {
 		glm::vec2 uv{
 			start.uv.x,
@@ -136,8 +136,7 @@ void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 			Color color = end.color;
 			if (use_texture) {
-				glm::uvec2 tex_pos = FilterTexture(filter, uv);
-				Color texel = texture.data[tex_pos.y * textures[0].width + tex_pos.x];
+				Color texel = FilterTexture(filter, uv, texture.data);
 				if (texture.clut) {
 					texel = GetCLUT(texel.abgr);
 				}
@@ -165,12 +164,12 @@ void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 }
 
 void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
-	auto edge = [](glm::ivec3 v0, glm::ivec3 v1, glm::ivec3 v2) -> int {
+	auto edge = [](glm::vec3 v0, glm::vec3 v1, glm::vec3 v2) -> float {
 		return (v1.x - v0.x) * (v2.y - v0.y) - (v1.y - v0.y) * (v2.x - v0.x);
-		};
+	};
 
 	auto topleft = [](glm::ivec3 v0, glm::ivec3 v1) -> bool {
-		return (v1.y == v0.y && v1.x > v0.x) || (v1.y > v0.y);
+		return (v0.y == v1.y && v1.x > v0.x) || (v0.y > v1.y);
 	};
 
 	uint32_t* frame_buffer_start = reinterpret_cast<uint32_t*>(PSP::GetInstance()->VirtualToPhysical(GetFrameBufferAddress()));
@@ -181,7 +180,11 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	int min_y = floorf(std::min({ v0.pos.y, v1.pos.y, v2.pos.y }));
 	int max_y = ceilf(std::max({ v0.pos.y, v1.pos.y, v2.pos.y }));
 
-	int area = edge(v0.pos, v1.pos, v2.pos);
+	v0.pos = glm::round(v0.pos);
+	v1.pos = glm::round(v1.pos);
+	v2.pos = glm::round(v2.pos);
+
+	float area = edge(v0.pos, v1.pos, v2.pos);
 	if (area == 0) return;
 
 	/*if (culling) {
@@ -210,10 +213,12 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 		return;
 	}
 
+	uint8_t filter = -1;
 	bool use_texture = !clear_mode && textures_enabled;
 	TextureCacheEntry texture{};
 	if (use_texture) {
 		texture = DecodeTexture();
+		filter = GetFilter(v1.uv.x - v0.uv.x, v2.uv.y - v0.uv.y);
 	}
 
 	int scissor_min_x = ScissorTestX(min_x);
@@ -221,33 +226,41 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	int scissor_min_y = ScissorTestY(min_y);
 	int scissor_max_y = ScissorTestY(max_y);
 
-	bool topleft1 = topleft(v0.pos, v1.pos);
-	bool topleft2 = topleft(v1.pos, v2.pos);
-	bool topleft3 = topleft(v2.pos, v0.pos);
+	int bias0 = topleft(v1.pos, v2.pos) ? 0 : -1;
+	int bias1 = topleft(v2.pos, v0.pos) ? 0 : -1;
+	int bias2 = topleft(v0.pos, v1.pos) ? 0 : -1;
 
-	for (int y = scissor_min_y; y < scissor_max_y; y++) {
-		for (int x = scissor_min_x; x < scissor_max_x; x++) {
-			glm::ivec3 p{ x, y, 0.0 };
+	float A01 = v0.pos.y - v1.pos.y;
+	float A12 = v1.pos.y - v2.pos.y;
+	float A20 = v2.pos.y - v0.pos.y;
 
-			int e1 = edge(v0.pos, v1.pos, p);
-			int e2 = edge(v1.pos, v2.pos, p);
-			int e3 = edge(v2.pos, v0.pos, p);
+	float B01 = v1.pos.x - v0.pos.x;
+	float B12 = v2.pos.x - v1.pos.x;
+	float B20 = v0.pos.x - v2.pos.x;
 
-			if ((e1 > 0 || (e1 == 0 && topleft1)) &&
-				(e2 > 0 || (e2 == 0 && topleft2)) &&
-				(e3 > 0 || (e3 == 0 && topleft3))) {
+	glm::ivec3 p{ scissor_min_x, scissor_min_y, 0.0 };
+	float w0_row = edge(v1.pos, v2.pos, p) + bias0;
+	float w1_row = edge(v2.pos, v0.pos, p) + bias1;
+	float w2_row = edge(v0.pos, v1.pos, p) + bias2;
 
-				float w1 = static_cast<float>(e1) / area;
-				float w2 = static_cast<float>(e2) / area;
-				float w3 = static_cast<float>(e3) / area;
+	for (p.y = scissor_min_y; p.y < scissor_max_y; p.y++, w0_row += B12, w1_row += B20, w2_row += B01) {
+		float e0 = w0_row;
+		float e1 = w1_row;
+		float e2 = w2_row;
 
-				uint16_t z = v2.pos.z * w1 + v0.pos.z * w2 + v1.pos.z * w3;
+		for (p.x = scissor_min_x; p.x < scissor_max_x; p.x++, e0 += A12, e1 += A20, e2 += A01) {
+			if ((static_cast<int>(e0) | static_cast<int>(e1) | static_cast<int>(e2)) >= 0) {
+				float w0 = (e0 - bias0 + 0.5) / area;
+				float w1 = (e1 - bias1 + 0.5) / area;
+				float w2 = (e2 - bias2 + 0.5) / area;
+
+				uint16_t z = v0.pos.z * w0 + v1.pos.z * w1 + v2.pos.z * w2;
 				if (!through && (z < min_z || z > max_z)) {
 					continue;
 				}
 
 				if (!clear_mode && depth_test) {
-					if (!Test(z_test_func, z, z_buffer_start[x + y * zbw])) {
+					if (!Test(z_test_func, z, z_buffer_start[p.x + p.y * zbw])) {
 						continue;
 					}
 				}
@@ -255,19 +268,18 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 				Color color = v0.color;
 				if (use_texture) {
 					glm::vec2 uv{
-						v2.uv.x * w1 + v0.uv.x * w2 + v1.uv.x * w3,
-						v2.uv.y * w1 + v0.uv.y * w2 + v1.uv.y * w3,
+						v0.uv.x * w0 + v1.uv.x * w1 + v2.uv.x * w2,
+						v0.uv.y * w0 + v1.uv.y * w1 + v2.uv.y * w2,
 					};
-					glm::uvec2 tex_pos = FilterTexture(true, uv);
-					Color texel = texture.data[tex_pos.y * textures[0].width + tex_pos.x];
+					Color texel = FilterTexture(filter, uv, texture.data);
 					if (texture.clut) {
 						texel = GetCLUT(texel.abgr);
 					}
 					color = BlendTexture(texel, color);
 				} else if (gouraud_shading) {
-					color.r = v2.color.r * w1 + v0.color.r * w2 + v1.color.r * w3;
-					color.g = v2.color.g * w1 + v0.color.g * w2 + v1.color.g * w3;
-					color.b = v2.color.b * w1 + v0.color.b * w2 + v1.color.b * w3;
+					color.r = v0.color.r * w0 + v1.color.r * w1 + v2.color.r * w2;
+					color.g = v0.color.g * w0 + v1.color.g * w1 + v2.color.g * w2;
+					color.b = v0.color.b * w0 + v1.color.b * w1 + v2.color.b * w2;
 				}
 
 				if (!clear_mode && alpha_test) {
@@ -277,12 +289,12 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 				}
 
 				if (!clear_mode && blend) {
-					color = Blend(color, static_cast<Color>(frame_buffer_start[x + y * fbw]));
+					color = Blend(color, static_cast<Color>(frame_buffer_start[p.x + p.y * fbw]));
 				}
 
-				frame_buffer_start[x + y * fbw] = color.abgr;
+				frame_buffer_start[p.x + p.y * fbw] = color.abgr;
 				if (depth_write) {
-					z_buffer_start[x + y * zbw] = z;
+					z_buffer_start[p.x + p.y * zbw] = z;
 				}
 			}
 		}
@@ -448,14 +460,17 @@ bool SoftwareRenderer::Test(uint8_t test, int src, int dst) {
 	return true;
 }
 
-uint8_t SoftwareRenderer::GetFilter(float ds, float dt) {
+uint8_t SoftwareRenderer::GetFilter(float du, float dv) {
 	int detail{};
 
 	int height = 1 << (textures[0].height & 0xF);
 	int width = 1 << (textures[0].width & 0xF);
 	switch (texture_level_mode) {
 	case SCEGU_LOD_AUTO:
-		detail = std::log2(std::max(std::abs(ds * width), std::abs(dt * height)));
+		detail = std::log2(std::max(std::abs(du * width), std::abs(dv * height)));
+		break;
+	default:
+		spdlog::error("SoftwareRenderer: unimplemented texture level mode {}", texture_level_mode);
 		break;
 	}
 	detail += texture_level_offset;
@@ -589,22 +604,36 @@ Color SoftwareRenderer::BlendTexture(Color texture, Color blending) {
 		static_cast<uint8_t>(std::clamp(result.r, 0, 255)) };
 }
 
-glm::uvec2 SoftwareRenderer::FilterTexture(uint8_t filter, glm::vec2 uv) {
+Color SoftwareRenderer::FilterTexture(uint8_t filter, glm::vec2 uv, const std::vector<Color>& tex_data) {
 	auto& texture = textures[0];
 
-	glm::uvec2 pos{};
 	switch (filter) {
 	case SCEGU_LINEAR:
-	case SCEGU_NEAREST:
+	case SCEGU_NEAREST: {
+		glm::uvec2 pos{};
 		pos.x = floorf(uv.x * texture.width);
 		pos.y = floorf(uv.y * texture.height);
-		break;
+
+		if (u_clamp) {
+			pos.x = std::clamp(pos.x, 0u, texture.width - 1);
+		}
+		else {
+			pos.x %= texture.width;
+		}
+
+		if (v_clamp) {
+			pos.y = std::max(0u, std::min(pos.y, texture.height - 1));
+		}
+		else {
+			pos.y %= texture.height;
+		}
+
+		return tex_data[pos.y * texture.width + pos.x];
+	}
 	default:
 		spdlog::error("SoftwareRenderer: texel filter not implemented {}", filter);
+		return {};
 	}
-	pos.x = std::max(0u, std::min(pos.x, texture.width - 1));
-	pos.y = std::max(0u, std::min(pos.y, texture.height - 1));
-	return pos;
 }
 
 TextureCacheEntry SoftwareRenderer::DecodeTexture() {

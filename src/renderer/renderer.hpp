@@ -244,6 +244,8 @@ protected:
 	uint8_t texture_minify_filter = 0;
 	uint8_t texture_level_mode = 0;
 	int8_t texture_level_offset = 0;
+	bool u_clamp = false;
+	bool v_clamp = false;
 	glm::ivec4 environment_texture{};
 
 	float u_scale = 0;
@@ -377,6 +379,7 @@ enum GECommand {
 	CMD_CLOAD = 0xC4,
 	CMD_CLUT = 0xC5,
 	CMD_TFILTER = 0xC6,
+	CMD_TWRAP = 0xC7,
 	CMD_TLEVEL = 0xC8,
 	CMD_TFUNC = 0xC9,
 	CMD_TEC = 0xCA,
