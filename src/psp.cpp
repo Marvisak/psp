@@ -182,12 +182,17 @@ void PSP::Exit() {
 		auto callback = kernel->GetKernelObject<Callback>(exit_callback);
 		if (!callback) {
 			spdlog::warn("PSP: invalid exit callback {}", exit_callback);
+			ForceExit();
 		} else {
 			callback->Notify(0);
-			return;
+			Schedule(MS_TO_CYCLES(1000), [this](uint64_t _) {
+				ForceExit();
+			});
 		}
 	}
-	ForceExit();
+	else {
+		ForceExit();
+	}
 }
 
 void PSP::ForceExit() {
