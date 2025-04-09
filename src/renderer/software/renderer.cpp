@@ -1,7 +1,6 @@
 #include "renderer.hpp"
 
 #include <spdlog/spdlog.h>
-#include <glm/packing.hpp>
 
 #include "../../psp.hpp"
 
@@ -463,11 +462,9 @@ bool SoftwareRenderer::Test(uint8_t test, int src, int dst) {
 uint8_t SoftwareRenderer::GetFilter(float du, float dv) {
 	int detail{};
 
-	int height = 1 << (textures[0].height & 0xF);
-	int width = 1 << (textures[0].width & 0xF);
 	switch (texture_level_mode) {
 	case SCEGU_LOD_AUTO:
-		detail = std::log2(std::max(std::abs(du * width), std::abs(dv * height)));
+		detail = std::log2(std::max(std::abs(du * textures[0].height), std::abs(dv * textures[0].width)));
 		break;
 	default:
 		spdlog::error("SoftwareRenderer: unimplemented texture level mode {}", texture_level_mode);
@@ -476,6 +473,25 @@ uint8_t SoftwareRenderer::GetFilter(float du, float dv) {
 	detail += texture_level_offset;
 
 	return detail > 0 ? texture_minify_filter : texture_magnify_filter;
+}
+
+Color SoftwareRenderer::GetTexel(int x, int y, const std::vector<Color>& tex_data) {
+	auto& texture = textures[0];
+	if (u_clamp) {
+		x = std::clamp<int>(x, 0, texture.width - 1);
+	}
+	else {
+		x %= texture.width;
+	}
+
+	if (v_clamp) {
+		y = std::clamp<int>(y, 0, texture.height - 1);
+	}
+	else {
+		y %= texture.height;
+	}
+
+	return tex_data[y * texture.pitch + x];
 }
 
 Color SoftwareRenderer::GetCLUT(uint32_t index) {
@@ -608,27 +624,41 @@ Color SoftwareRenderer::FilterTexture(uint8_t filter, glm::vec2 uv, const std::v
 	auto& texture = textures[0];
 
 	switch (filter) {
-	case SCEGU_LINEAR:
 	case SCEGU_NEAREST: {
-		glm::uvec2 pos{};
-		pos.x = floorf(uv.x * texture.width);
-		pos.y = floorf(uv.y * texture.height);
+		int x = static_cast<int>(uv.x * texture.width * 256) >> 8;
+		int y = static_cast<int>(uv.y * texture.height * 256) >> 8;
 
-		if (u_clamp) {
-			pos.x = std::clamp(pos.x, 0u, texture.width - 1);
-		}
-		else {
-			pos.x %= texture.width;
-		}
+		return GetTexel(x, y, tex_data);
+	}
+	case SCEGU_LINEAR: {
+		int base_x = static_cast<int>(uv.x * texture.width * 256) - 128;
+		int base_y = static_cast<int>(uv.y * texture.height * 256) - 128;
 
-		if (v_clamp) {
-			pos.y = std::max(0u, std::min(pos.y, texture.height - 1));
-		}
-		else {
-			pos.y %= texture.height;
-		}
+		int x0 = base_x >> 8;
+		int frac_u = base_x >> 4 & 0xF;
+		int y0 = base_y >> 8;
+		int frac_v = base_y >> 4 & 0xF;
 
-		return tex_data[pos.y * texture.width + pos.x];
+		int x1 = x0 + 1;
+		int y1 = y0 + 1;
+		
+		Color t0 = GetTexel(x0, y0, tex_data);
+		auto c00 = glm::ivec4(t0.r, t0.g, t0.b, t0.a);
+		Color t1 = GetTexel(x1, y0, tex_data);
+		auto c10 = glm::ivec4(t1.r, t1.g, t1.b, t1.a);
+		Color t2 = GetTexel(x0, y1, tex_data);
+		auto c01 = glm::ivec4(t2.r, t2.g, t2.b, t2.a);
+		Color t3 = GetTexel(x1, y1, tex_data);
+		auto c11 = glm::ivec4(t3.r, t3.g, t3.b, t3.a);
+
+		auto c0 = c00 * (0x10 - frac_u) + c10 * frac_u;
+		auto c1 = c01 * (0x10 - frac_u) + c11 * frac_u;
+		auto result = (c0 * (0x10 - frac_v) + c1 * frac_v) >> 8;
+		return { 
+			static_cast<uint8_t>(std::clamp(result.a, 0, 255)),
+			static_cast<uint8_t>(std::clamp(result.b, 0, 255)),
+			static_cast<uint8_t>(std::clamp(result.g, 0, 255)),
+			static_cast<uint8_t>(std::clamp(result.r, 0, 255)) };
 	}
 	default:
 		spdlog::error("SoftwareRenderer: texel filter not implemented {}", filter);
