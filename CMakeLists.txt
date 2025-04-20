@@ -23,6 +23,7 @@ list(APPEND sources
 	src/kernel/memory.cpp
 	src/kernel/kernel.cpp
 	src/kernel/module.cpp
+	src/kernel/decrypter.cpp
 	src/kernel/thread.cpp
 	src/kernel/callback.cpp
 	src/kernel/memory_block.cpp
@@ -52,6 +53,12 @@ list(APPEND sources
 	src/hle/sceatrac3plus.cpp
 	src/hle/sceumduser.cpp
 	src/hle/scertc.cpp
+
+	vendors/libkirk/kirk_engine.c
+	vendors/libkirk/SHA1.c
+	vendors/libkirk/AES.c
+	vendors/libkirk/ec.c
+	vendors/libkirk/bn.c
 )
 
 add_executable(psp ${sources})

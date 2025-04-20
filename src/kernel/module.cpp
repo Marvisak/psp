@@ -1,15 +1,19 @@
 #include <spdlog/spdlog.h>
 
-#include "../psp.hpp"
 #include "module.hpp"
+#include "filesystem/file.hpp"
+
+#include "../psp.hpp"
 #include "../hle/hle.hpp"
 #include "../hle/defs.hpp"
-#include "filesystem/file.hpp"
+
+int pspDecryptPRX(const uint8_t* inbuf, uint8_t* outbuf, uint32_t size, const uint8_t* seed);
 
 Module::Module(std::string file_path) : file_path(file_path) {}
 
 const char ELF_MAGIC[4] = { 0x7F, 'E', 'L', 'F' };
-const char PBP_MAGIC[4] = { 0x00, 'P', 'B', 'P'};
+const char PBP_MAGIC[4] = { 0x00, 'P', 'B', 'P' };
+const char PRX_MAGIC[4] = { 0x7E, 'P', 'S', 'P' };
 
 bool Module::Load() {
 	auto kernel = PSP::GetInstance()->GetKernel();
@@ -21,7 +25,7 @@ bool Module::Load() {
 	file->Read(magic, sizeof(magic));
 
 	std::string data{};
-	if (memcmp(magic, ELF_MAGIC, sizeof(ELF_MAGIC)) == 0) {
+	if (memcmp(magic, ELF_MAGIC, sizeof(ELF_MAGIC)) == 0 || memcmp(magic, PRX_MAGIC, sizeof(PRX_MAGIC)) == 0) {
 		auto file_size = file->Seek(0, SCE_SEEK_END);
 		file->Seek(0, SCE_SEEK_SET);
 
@@ -45,6 +49,11 @@ bool Module::Load() {
 	}
 
 	kernel->RemoveKernelObject(fid);
+
+	if (memcmp(data.data(), PRX_MAGIC, sizeof(PRX_MAGIC)) == 0) {
+		pspDecryptPRX(reinterpret_cast<const uint8_t*>(data.data()), reinterpret_cast<uint8_t*>(data.data()), data.size(), nullptr);
+	}
+
 	std::istringstream ss(data);
 
 	return LoadELF(std::move(ss));
