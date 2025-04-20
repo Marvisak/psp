@@ -491,7 +491,7 @@ Color SoftwareRenderer::GetTexel(int x, int y, const std::vector<Color>& tex_dat
 		y %= texture.height;
 	}
 
-	return tex_data[y * texture.pitch + x];
+	return tex_data[y * texture.width + x];
 }
 
 Color SoftwareRenderer::GetCLUT(uint32_t index) {

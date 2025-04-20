@@ -286,13 +286,10 @@ Vertex Renderer::ParseVertex() {
 			break;
 		}
 
-		if (!through) {
-			v.uv.x *= textures[0].width;
-			v.uv.y *= textures[0].height;
+		if (through) {
+			v.uv.x /= textures[0].width;
+			v.uv.y /= textures[0].height;
 		}
-		v.uv = glm::round(v.uv);
-		v.uv.x /= textures[0].width;
-		v.uv.y /= textures[0].height;
 	}
 
 	switch (color_format) {

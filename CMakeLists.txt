@@ -1,9 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 project(psp)
 
-set(SDL_STATIC on)
-set(SOCKPP_BUILD_STATIC on)
-
 add_subdirectory(vendors/spdlog)
 add_subdirectory(vendors/CLI11)
 add_subdirectory(vendors/SDL)
@@ -58,6 +55,7 @@ list(APPEND sources
 )
 
 add_executable(psp ${sources})
-target_link_libraries(psp PRIVATE Sockpp::sockpp-static elfio::elfio spdlog::spdlog CLI11::CLI11 SDL3::SDL3-static glm::glm)
+target_link_libraries(psp PRIVATE Sockpp::sockpp elfio::elfio spdlog::spdlog CLI11::CLI11 SDL3::SDL3 glm::glm)
 target_include_directories(psp PRIVATE include)
-SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/PROFILE")
+
+add_custom_command(TARGET psp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:psp> $<TARGET_FILE_DIR:psp> COMMAND_EXPAND_LISTS)
