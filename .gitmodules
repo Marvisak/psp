@@ -16,3 +16,9 @@
 [submodule "vendors/glm"]
 	path = vendors/glm
 	url = https://github.com/g-truc/glm.git
+[submodule "vendors/WebGPU-distribution"]
+	path = vendors/WebGPU-distribution
+	url = https://github.com/eliemichel/WebGPU-distribution.git
+[submodule "vendors/sdl3webgpu"]
+	path = vendors/sdl3webgpu
+	url = https://github.com/eliemichel/sdl3webgpu.git

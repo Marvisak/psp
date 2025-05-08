@@ -39,6 +39,7 @@ public:
 	~SoftwareRenderer();
 
 	void Frame();
+	void Resize(int width, int height) {}
 	void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format);
 	void DrawRectangle(Vertex start, Vertex end);
 	void DrawTriangle(Vertex v0, Vertex v1, Vertex v2);

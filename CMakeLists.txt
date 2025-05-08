@@ -7,6 +7,8 @@ add_subdirectory(vendors/SDL)
 add_subdirectory(vendors/ELFIO)
 add_subdirectory(vendors/sockpp)
 add_subdirectory(vendors/glm)
+add_subdirectory(vendors/WebGPU-distribution)
+add_subdirectory(vendors/sdl3webgpu)
 
 set(CMAKE_CXX_STANDARD 23)
 
@@ -18,6 +20,7 @@ list(APPEND sources
 	src/debugger/debugger.cpp
 
 	src/renderer/renderer.cpp
+	src/renderer/compute/renderer.cpp
 	src/renderer/software/renderer.cpp
 
 	src/kernel/memory.cpp
@@ -62,7 +65,7 @@ list(APPEND sources
 )
 
 add_executable(psp ${sources})
-target_link_libraries(psp PRIVATE Sockpp::sockpp elfio::elfio spdlog::spdlog CLI11::CLI11 SDL3::SDL3 glm::glm)
+target_link_libraries(psp PRIVATE Sockpp::sockpp elfio::elfio spdlog::spdlog CLI11::CLI11 SDL3::SDL3 glm::glm sdl3webgpu webgpu)
 target_include_directories(psp PRIVATE include)
 
 add_custom_command(TARGET psp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:psp> $<TARGET_FILE_DIR:psp> COMMAND_EXPAND_LISTS)

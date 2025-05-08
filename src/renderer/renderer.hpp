@@ -11,7 +11,8 @@
 #include <glm/mat4x4.hpp>
 
 enum class RendererType {
-	SOFTWARE
+	SOFTWARE,
+	COMPUTE
 };
 
 enum ValueFormat {
@@ -43,6 +44,8 @@ struct Vertex {
 
 constexpr auto BASE_WIDTH = 480;
 constexpr auto BASE_HEIGHT = 272;
+constexpr auto BASE_WINDOW_WIDTH = BASE_WIDTH * 2;
+constexpr auto BASE_WINDOW_HEIGHT = BASE_HEIGHT * 2;
 constexpr auto REFRESH_RATE = 60;
 constexpr auto FRAME_DURATION = std::chrono::duration<double, std::milli>(1000 / REFRESH_RATE);
 
@@ -80,6 +83,7 @@ public:
 	~Renderer();
 
 	virtual void Frame();
+	virtual void Resize(int width, int height) = 0;
 	virtual void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format) = 0;
 	virtual void DrawRectangle(Vertex start, Vertex end) = 0;
 	virtual void DrawTriangle(Vertex v0, Vertex v1, Vertex v2) = 0;

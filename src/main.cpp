@@ -29,7 +29,8 @@ int main(int argc, char* argv[]) {
 
     RendererType renderer_type = RendererType::SOFTWARE;
     std::map<std::string, RendererType> renderer_types{
-        {"software", RendererType::SOFTWARE}
+        {"software", RendererType::SOFTWARE},
+        {"compute", RendererType::COMPUTE}
     };
     app.add_option("-r,--renderer", renderer_type, "Renderer type")->transform(CLI::CheckedTransformer(renderer_types, CLI::ignore_case));
 

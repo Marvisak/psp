@@ -13,7 +13,7 @@ static void WakeUpRenderer(uint64_t cycles_late) {
 }
 
 Renderer::Renderer() {
-	window = SDL_CreateWindow("PSP", BASE_WIDTH * 2, BASE_HEIGHT * 2, SDL_WINDOW_RESIZABLE);
+	window = SDL_CreateWindow("PSP", BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT, SDL_WINDOW_RESIZABLE);
 	SDL_SetWindowMinimumSize(window, BASE_WIDTH, BASE_HEIGHT);
 	second_timer = std::chrono::steady_clock::now();
 }
@@ -28,6 +28,9 @@ void Renderer::Frame() {
 		switch (event.type) {
 		case SDL_EVENT_QUIT:
 			PSP::GetInstance()->Exit();
+			break;
+		case SDL_EVENT_WINDOW_RESIZED:
+			Resize(event.window.data1, event.window.data2);
 			break;
 		}
 	}

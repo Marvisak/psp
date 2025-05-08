@@ -4,6 +4,7 @@
 
 #include "kernel/filesystem/directory/directoryfs.hpp"
 #include "renderer/software/renderer.hpp"
+#include "renderer/compute/renderer.hpp"
 #include "kernel/callback.hpp"
 #include "kernel/module.hpp"
 #include "hle/hle.hpp"
@@ -42,6 +43,9 @@ PSP::PSP(RendererType renderer_type) {
 	switch (renderer_type) {
 	case RendererType::SOFTWARE:
 		renderer = std::make_unique<SoftwareRenderer>();
+		break;
+	case RendererType::COMPUTE:
+		renderer = std::make_unique<ComputeRenderer>();
 		break;
 	}
 	RegisterHLE();
