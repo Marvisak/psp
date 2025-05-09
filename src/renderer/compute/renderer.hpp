@@ -31,10 +31,16 @@ private:
 	wgpu::Queue queue;
 	wgpu::Buffer vertex_buffer;
 	wgpu::Buffer index_buffer;
-	wgpu::BindGroupLayout bind_group_layout;
-	wgpu::PipelineLayout layout;
+	wgpu::BindGroupLayout render_bind_group_layout;
+	wgpu::PipelineLayout render_layout;
 	wgpu::RenderPipeline render_pipeline;
-	wgpu::BindGroup bind_group;
+	wgpu::BindGroup render_bind_group;
+
+	wgpu::Texture framebuffer_conversion_texture;
+	wgpu::BindGroupLayout framebuffer_conversion_bind_group_layout;
+	wgpu::PipelineLayout framebuffer_conversion_layout;
+	wgpu::BindGroup framebuffer_conversion_bind_group;
+	wgpu::ComputePipeline framebuffer_conversion_pipelines[3];
 
 	wgpu::Buffer frame_width_buffer{};
 	wgpu::Sampler nearest_sampler{};

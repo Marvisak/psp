@@ -29,6 +29,7 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 
 	wgpu::RequestAdapterOptions adapter_options{};
 	adapter_options.compatibleSurface = surface;
+	adapter_options.powerPreference = wgpu::PowerPreference::HighPerformance;
 	adapter = instance.requestAdapter(adapter_options);
 
 	wgpu::AdapterInfo adapter_info{};
@@ -43,11 +44,6 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	device = adapter.requestDevice(device_desc);
 
 	queue = device.getQueue();
-
-	wgpu::SurfaceCapabilities surface_capabilities{};
-	if (surface.getCapabilities(adapter, &surface_capabilities) != wgpu::Status::Success) {
-		spdlog::error("ComputeRenderer: failed to get surface capabilities");
-	}
 
 	wgpu::BufferDescriptor vertex_buffer_desc{};
 	vertex_buffer_desc.size = sizeof(QUAD_VERTICES);
@@ -87,7 +83,7 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	vertex_layout.attributes = vertex_attrs;
 
 	wgpu::ColorTargetState color_target{};
-	color_target.format = surface_capabilities.formats[0];
+	color_target.format = wgpu::TextureFormat::RGBA8Unorm;
 	color_target.writeMask = wgpu::ColorWriteMask::All;
 
 	wgpu::FragmentState fragment_state{};
@@ -102,31 +98,31 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	vertex_state.bufferCount = 1;
 	vertex_state.buffers = &vertex_layout;
 
-	wgpu::BindGroupLayoutEntry binding_layouts[4]{};
+	wgpu::BindGroupLayoutEntry render_binding_layouts[4]{};
 
-	binding_layouts[0].binding = 0;
-	binding_layouts[0].visibility = wgpu::ShaderStage::Fragment;
-	binding_layouts[0].texture.sampleType = wgpu::TextureSampleType::Float;
-	binding_layouts[0].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	render_binding_layouts[0].binding = 0;
+	render_binding_layouts[0].visibility = wgpu::ShaderStage::Fragment;
+	render_binding_layouts[0].texture.sampleType = wgpu::TextureSampleType::Float;
+	render_binding_layouts[0].texture.viewDimension = wgpu::TextureViewDimension::_2D;
 
-	binding_layouts[1].binding = 1;
-	binding_layouts[1].visibility = wgpu::ShaderStage::Fragment;
-	binding_layouts[1].sampler.type = wgpu::SamplerBindingType::Filtering;
+	render_binding_layouts[1].binding = 1;
+	render_binding_layouts[1].visibility = wgpu::ShaderStage::Fragment;
+	render_binding_layouts[1].sampler.type = wgpu::SamplerBindingType::Filtering;
 
-	binding_layouts[2].binding = 2;
-	binding_layouts[2].visibility = wgpu::ShaderStage::Fragment;
-	binding_layouts[2].buffer.type = wgpu::BufferBindingType::Uniform;
-	binding_layouts[2].buffer.minBindingSize = sizeof(float);
+	render_binding_layouts[2].binding = 2;
+	render_binding_layouts[2].visibility = wgpu::ShaderStage::Fragment;
+	render_binding_layouts[2].buffer.type = wgpu::BufferBindingType::Uniform;
+	render_binding_layouts[2].buffer.minBindingSize = sizeof(float);
 
-	wgpu::BindGroupLayoutDescriptor bind_group_layout_desc{};
-	bind_group_layout_desc.entryCount = 3;
-	bind_group_layout_desc.entries = binding_layouts;
-	bind_group_layout = device.createBindGroupLayout(bind_group_layout_desc);
+	wgpu::BindGroupLayoutDescriptor render_bind_group_layout_desc{};
+	render_bind_group_layout_desc.entryCount = 3;
+	render_bind_group_layout_desc.entries = render_binding_layouts;
+	render_bind_group_layout = device.createBindGroupLayout(render_bind_group_layout_desc);
 
-	wgpu::PipelineLayoutDescriptor layout_desc{};
-	layout_desc.bindGroupLayoutCount = 1;
-	layout_desc.bindGroupLayouts = reinterpret_cast<WGPUBindGroupLayout*>(&bind_group_layout);
-	layout = device.createPipelineLayout(layout_desc);
+	wgpu::PipelineLayoutDescriptor render_layout_desc{};
+	render_layout_desc.bindGroupLayoutCount = 1;
+	render_layout_desc.bindGroupLayouts = reinterpret_cast<WGPUBindGroupLayout*>(&render_bind_group_layout);
+	render_layout = device.createPipelineLayout(render_layout_desc);
 
 	wgpu::RenderPipelineDescriptor pipeline_desc{};
 	pipeline_desc.vertex = vertex_state;
@@ -136,17 +132,17 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	pipeline_desc.primitive.cullMode = wgpu::CullMode::None;
 	pipeline_desc.multisample.count = 1;
 	pipeline_desc.multisample.mask = 0xFFFFFFFF;
-	pipeline_desc.layout = layout;
+	pipeline_desc.layout = render_layout;
 
 	render_pipeline = device.createRenderPipeline(pipeline_desc);
 
 	wgpu::TextureDescriptor texture_desc{};
 	texture_desc.dimension = wgpu::TextureDimension::_2D;
-	texture_desc.format = wgpu::TextureFormat::RGBA8UnormSrgb;
+	texture_desc.format = wgpu::TextureFormat::RGBA8Unorm;
 	texture_desc.size = { BASE_WIDTH, BASE_HEIGHT, 1 };
 	texture_desc.sampleCount = 1;
 	texture_desc.mipLevelCount = 1;
-	texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
+	texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::StorageBinding;
 	framebuffer_texture = device.createTexture(texture_desc);
 
 	wgpu::TextureViewDescriptor texture_view_desc{};
@@ -154,7 +150,7 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	texture_view_desc.arrayLayerCount = 1;
 	texture_view_desc.mipLevelCount = 1;
 	texture_view_desc.dimension = wgpu::TextureViewDimension::_2D;
-	texture_view_desc.format = wgpu::TextureFormat::RGBA8UnormSrgb;
+	texture_view_desc.format = wgpu::TextureFormat::RGBA8Unorm;
 	auto texture_view = framebuffer_texture.createView(texture_view_desc);
 
 	wgpu::SamplerDescriptor sampler_desc{};
@@ -170,33 +166,99 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	frame_width_buffer_desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
 	frame_width_buffer = device.createBuffer(frame_width_buffer_desc);
 
-	wgpu::BindGroupEntry bindings[4];
-	bindings[0].binding = 0;
-	bindings[0].textureView = texture_view;
+	wgpu::BindGroupEntry render_bindings[4];
+	render_bindings[0].binding = 0;
+	render_bindings[0].textureView = texture_view;
 	
-	bindings[1].binding = 1;
-	bindings[1].sampler = nearest_sampler;
+	render_bindings[1].binding = 1;
+	render_bindings[1].sampler = nearest_sampler;
 
-	bindings[2].binding = 2;
-	bindings[2].buffer = frame_width_buffer;
-	bindings[2].size = sizeof(float);
+	render_bindings[2].binding = 2;
+	render_bindings[2].buffer = frame_width_buffer;
+	render_bindings[2].size = sizeof(float);
 
 	wgpu::BindGroupDescriptor bind_group_desc{};
-	bind_group_desc.layout = bind_group_layout;
+	bind_group_desc.layout = render_bind_group_layout;
 	bind_group_desc.entryCount = 3;
-	bind_group_desc.entries = bindings;
-	bind_group = device.createBindGroup(bind_group_desc);
+	bind_group_desc.entries = render_bindings;
+	render_bind_group = device.createBindGroup(bind_group_desc);
+
+	wgpu::BindGroupLayoutEntry framebuffer_conversion_binding_layouts[2]{};
+	framebuffer_conversion_binding_layouts[0].binding = 0;
+	framebuffer_conversion_binding_layouts[0].visibility = wgpu::ShaderStage::Compute;
+	framebuffer_conversion_binding_layouts[0].texture.sampleType = wgpu::TextureSampleType::Uint;
+	framebuffer_conversion_binding_layouts[0].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+
+	framebuffer_conversion_binding_layouts[1].binding = 1;
+	framebuffer_conversion_binding_layouts[1].visibility = wgpu::ShaderStage::Compute;
+	framebuffer_conversion_binding_layouts[1].storageTexture.access = wgpu::StorageTextureAccess::WriteOnly;
+	framebuffer_conversion_binding_layouts[1].storageTexture.format = wgpu::TextureFormat::RGBA8Unorm;
+	framebuffer_conversion_binding_layouts[1].storageTexture.viewDimension = wgpu::TextureViewDimension::_2D;
+
+	wgpu::BindGroupLayoutDescriptor framebuffer_conversion_bind_group_layout_desc{};
+	framebuffer_conversion_bind_group_layout_desc.entryCount = 2;
+	framebuffer_conversion_bind_group_layout_desc.entries = framebuffer_conversion_binding_layouts;
+	framebuffer_conversion_bind_group_layout = device.createBindGroupLayout(framebuffer_conversion_bind_group_layout_desc);
+
+	const char* compute_entrypoints[] = {
+		"rgba565",
+		"rgba5551",
+		"rgba4444"
+	};
+
+	wgpu::PipelineLayoutDescriptor framebuffer_conversion_layout_desc{};
+	framebuffer_conversion_layout_desc.bindGroupLayoutCount = 1;
+	framebuffer_conversion_layout_desc.bindGroupLayouts = reinterpret_cast<WGPUBindGroupLayout*>(&framebuffer_conversion_bind_group_layout);
+	framebuffer_conversion_layout = device.createPipelineLayout(framebuffer_conversion_layout_desc);
+
+	for (int i = SCE_DISPLAY_PIXEL_RGB565; i < SCE_DISPLAY_PIXEL_RGBA8888; i++) {
+		wgpu::ComputePipelineDescriptor compute_pipeline_desc{};
+		compute_pipeline_desc.compute.entryPoint = WGPUStringView(compute_entrypoints[i], WGPU_STRLEN);
+		compute_pipeline_desc.compute.module = shader_module;
+		compute_pipeline_desc.layout = framebuffer_conversion_layout;
+		framebuffer_conversion_pipelines[i] = device.createComputePipeline(compute_pipeline_desc);
+	}
+
+	wgpu::TextureDescriptor framebuffer_conversion_texture_desc{};
+	framebuffer_conversion_texture_desc.dimension = wgpu::TextureDimension::_2D;
+	framebuffer_conversion_texture_desc.format = wgpu::TextureFormat::R16Uint;
+	framebuffer_conversion_texture_desc.size = { BASE_WIDTH, BASE_HEIGHT, 1 };
+	framebuffer_conversion_texture_desc.sampleCount = 1;
+	framebuffer_conversion_texture_desc.mipLevelCount = 1;
+	framebuffer_conversion_texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
+	framebuffer_conversion_texture = device.createTexture(framebuffer_conversion_texture_desc);
+
+	wgpu::BindGroupEntry framebuffer_conversion_bindings[2]{};
+	framebuffer_conversion_bindings[0].binding = 0;
+	framebuffer_conversion_bindings[0].textureView = framebuffer_conversion_texture.createView();
+
+	framebuffer_conversion_bindings[1].binding = 1;
+	framebuffer_conversion_bindings[1].textureView = framebuffer_texture.createView();
+
+	wgpu::BindGroupDescriptor framebuffer_conversion_bind_group_desc{};
+	framebuffer_conversion_bind_group_desc.layout = framebuffer_conversion_bind_group_layout;
+	framebuffer_conversion_bind_group_desc.entryCount = 2;
+	framebuffer_conversion_bind_group_desc.entries = framebuffer_conversion_bindings;
+	framebuffer_conversion_bind_group = device.createBindGroup(framebuffer_conversion_bind_group_desc);
 
 	Resize(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
 }
 
 ComputeRenderer::~ComputeRenderer() {
+	for (int i = SCE_DISPLAY_PIXEL_RGB565; i < SCE_DISPLAY_PIXEL_RGBA8888; i++) {
+		framebuffer_conversion_pipelines[i].release();
+	}
+
+	framebuffer_conversion_texture.release();
+	framebuffer_conversion_bind_group.release();
+	framebuffer_conversion_layout.release();
+	framebuffer_conversion_bind_group_layout.release();
 	frame_width_buffer.release();
 	framebuffer_texture.release();
-	bind_group.release();
+	render_bind_group.release();
 	render_pipeline.release();
-	layout.release();
-	bind_group_layout.release();
+	render_layout.release();
+	render_bind_group_layout.release();
 	index_buffer.release();
 	vertex_buffer.release();
 	surface.unconfigure();
@@ -236,8 +298,6 @@ void ComputeRenderer::Frame() {
 	render_pass_desc.colorAttachmentCount = 1;
 	render_pass_desc.colorAttachments = &render_pass_color_attachment;
 
-	auto render_pass = encoder.beginRenderPass(render_pass_desc);
-
 	if (frame_buffer) {
 		void* framebuffer = PSP::GetInstance()->VirtualToPhysical(frame_buffer);
 
@@ -251,17 +311,38 @@ void ComputeRenderer::Frame() {
 
 			queue.writeTexture(destination, framebuffer, frame_width * BASE_HEIGHT * 4, data_layout, {std::min<uint32_t>(BASE_WIDTH, frame_width), BASE_HEIGHT, 1});
 		} else {
-			// TODO
-		}
+			wgpu::TexelCopyTextureInfo destination{};
+			destination.texture = framebuffer_conversion_texture;
 
+			wgpu::TexelCopyBufferLayout data_layout{};
+			data_layout.bytesPerRow = frame_width * 2;
+			data_layout.rowsPerImage = BASE_HEIGHT;
+
+			queue.writeTexture(destination, framebuffer, frame_width * BASE_HEIGHT * 2, data_layout, { std::min<uint32_t>(BASE_WIDTH, frame_width), BASE_HEIGHT, 1 });
+
+			auto compute_pass = encoder.beginComputePass();
+
+			compute_pass.setPipeline(framebuffer_conversion_pipelines[pixel_format]);
+			compute_pass.setBindGroup(0, framebuffer_conversion_bind_group, 0, nullptr);
+
+			uint32_t workgroup_count_x = (BASE_WIDTH + 7) / 8;
+			uint32_t workgroup_count_y = (BASE_HEIGHT + 7) / 8;
+
+			compute_pass.dispatchWorkgroups(workgroup_count_x, workgroup_count_y, 1);
+
+			compute_pass.end();
+			compute_pass.release();
+		}
+	}
+
+	auto render_pass = encoder.beginRenderPass(render_pass_desc);
+	if (frame_buffer) {
 		render_pass.setViewport(viewport_x, viewport_y, viewport_width, viewport_height, 0.0f, 0.0f);
 		render_pass.setPipeline(render_pipeline);
 		render_pass.setVertexBuffer(0, vertex_buffer, 0, sizeof(QUAD_VERTICES));
 		render_pass.setIndexBuffer(index_buffer, wgpu::IndexFormat::Uint16, 0, sizeof(QUAD_INDICES));
-		render_pass.setBindGroup(0, bind_group, 0, nullptr);
+		render_pass.setBindGroup(0, render_bind_group, 0, nullptr);
 		render_pass.drawIndexed(6, 1, 0, 0, 0);
-
-
 	}
 
 	render_pass.end();
@@ -280,17 +361,12 @@ void ComputeRenderer::Frame() {
 }
 
 void ComputeRenderer::Resize(int width, int height) {
-	wgpu::SurfaceCapabilities surface_capabilities{};
-	if (surface.getCapabilities(adapter, &surface_capabilities) != wgpu::Status::Success) {
-		spdlog::error("ComputeRenderer: failed to get surface capabilities");
-	}
-
 	wgpu::SurfaceConfiguration surface_config{};
 	surface_config.width = width;
 	surface_config.height = height;
 	surface_config.usage = wgpu::TextureUsage::RenderAttachment;
 	surface_config.device = device;
-	surface_config.format = surface_capabilities.formats[0];
+	surface_config.format = wgpu::TextureFormat::RGBA8Unorm;
 	surface_config.presentMode = wgpu::PresentMode::Immediate;
 	surface.configure(surface_config);
 

@@ -131,7 +131,7 @@ void Renderer::Step() {
 	case CMD_TSIZE5:
 	case CMD_TSIZE6:
 	case CMD_TSIZE7:
-		TSize(command); break;;
+		TSize(command); break;
 	case CMD_TMODE: TMode(command); break;
 	case CMD_TPF: texture_format = command & 0xFFFFFF; break;
 	case CMD_CLOAD: CLoad(command); break;
