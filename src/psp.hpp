@@ -86,6 +86,7 @@ public:
 	void Unschedule(std::shared_ptr<ScheduledEvent> event);
 	void GetEarliestEvent();
 	void ExecuteEvents();
+	void JumpToNextEvent();
 	void EatCycles(uint64_t cycles) { this->cycles += cycles; }
 	uint64_t GetCycles() const { return cycles; }
 

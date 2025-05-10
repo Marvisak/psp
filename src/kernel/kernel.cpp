@@ -128,8 +128,19 @@ int Kernel::Reschedule() {
 	}
 
 	if (!current_thread_valid) {
-		if (current_thread_obj) current_thread_obj->SaveState();
+		if (current_thread_obj) {
+			current_thread_obj->SaveState();
+		}
+
 		current_thread = -1;
+
+		auto psp = PSP::GetInstance();
+
+		// At this point there is no CPU activity happening
+		// We could either wait for something to happen, or just jump through scheduled events until the thread is changed
+		while (current_thread == -1 && !psp->IsClosed()) {
+			psp->JumpToNextEvent();
+		}
 	} else if (current_thread_obj->HasPendingCallback()) {
 		current_thread_obj->SaveState();
 		current_thread_obj->SwitchState();

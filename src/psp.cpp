@@ -61,10 +61,6 @@ void PSP::Run() {
 	while (!close) {
 		GetEarliestEvent();
 		for (; cycles < earliest_event_cycles; cycles++) {
-			if (kernel->GetCurrentThread() == -1) {
-				continue;
-			}
-
 			if (!cpu->RunInstruction()) {
 				close = true;
 				break;
@@ -82,10 +78,8 @@ void PSP::Step() {
 		ExecuteEvents();
 	}
 
-	if (kernel->GetCurrentThread() != -1) {
-		if (!cpu->RunInstruction()) {
-			close = true;
-		}
+	if (!cpu->RunInstruction()) {
+		close = true;
 	}
 }
 
@@ -178,8 +172,7 @@ void PSP::Exit() {
 				ForceExit();
 			});
 		}
-	}
-	else {
+	} else {
 		ForceExit();
 	}
 }
@@ -225,6 +218,13 @@ void PSP::ExecuteEvents() {
 		}
 	}
 }
+
+void PSP::JumpToNextEvent() {
+	GetEarliestEvent();
+	cycles = earliest_event_cycles;
+	ExecuteEvents();
+}
+
 void UnixTimestampToDateTime(tm* time, ScePspDateTime* out) {
 	out->year = time->tm_year + 1900;
 	out->month = time->tm_mon + 1;
