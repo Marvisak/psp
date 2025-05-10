@@ -209,7 +209,7 @@ void ReturnFromThread(CPU* cpu) {
 
 	int exit_status = cpu->GetRegister(MIPS_REG_V0);
 	thread->SetExitStatus(exit_status);
-	kernel->RescheduleNextCycle();
+	kernel->HLEReschedule();
 
 	HandleThreadEnd(thid, exit_status);
 }
@@ -254,7 +254,7 @@ static int sceKernelCreateThread(const char* name, uint32_t entry, int init_prio
 	int thid = kernel->CreateThread(name, entry, init_priority, stack_size, attr);
 
 	psp->EatCycles(32000);
-	kernel->RescheduleNextCycle();
+	kernel->HLEReschedule();
 
 	return thid;
 }
@@ -319,6 +319,7 @@ static int sceKernelStartThread(int thid, int arg_size, uint32_t arg_block_addr)
 	}
 
 	kernel->StartThread(thid, arg_size, arg_block);
+	kernel->HLEReschedule();
 	return SCE_KERNEL_ERROR_OK;
 }
 
@@ -333,7 +334,7 @@ static int sceKernelExitThread(int exit_status) {
 	thread->SetState(ThreadState::DORMANT);
 	thread->ClearWait();
 	thread->SetExitStatus(exit_status);
-	kernel->RescheduleNextCycle();
+	kernel->HLEReschedule();
 
 	return SCE_KERNEL_ERROR_OK;
 }
@@ -346,7 +347,7 @@ static int sceKernelExitDeleteThread(int exit_status) {
 	HandleThreadEnd(thid, exit_status);
 	kernel->RemoveThreadFromQueue(thid);
 	kernel->RemoveKernelObject(thid);
-	kernel->RescheduleNextCycle();
+	kernel->HLEReschedule();
 
 	return SCE_KERNEL_ERROR_OK;
 }
@@ -497,7 +498,7 @@ static int sceKernelReferThreadStatus(int thid, uint32_t info_addr) {
 		if (info->size > new_info.size) {
 			spdlog::warn("sceKernelReferThreadStatus: invalid info size {}", info->size);
 			psp->EatCycles(1200);
-			kernel->RescheduleNextCycle();
+			kernel->HLEReschedule();
 			return SCE_KERNEL_ERROR_ILLEGAL_SIZE;
 		}
 	}
@@ -524,7 +525,7 @@ static int sceKernelReferThreadStatus(int thid, uint32_t info_addr) {
 	memcpy(info, &new_info, wanted_size);
 
 	psp->EatCycles(1400);
-	kernel->RescheduleNextCycle();
+	kernel->HLEReschedule();
 	return SCE_KERNEL_ERROR_OK;
 }
 
@@ -620,7 +621,9 @@ static int sceKernelReferCallbackStatus(int cbid, uint32_t info_addr) {
 static int sceKernelCheckCallback() {
 	auto kernel = PSP::GetInstance()->GetKernel();
 	int thid = kernel->GetCurrentThread();
-	return kernel->CheckCallbacksOnThread(thid);
+	bool executed = kernel->CheckCallbacksOnThread(thid);
+	kernel->HLEReschedule();
+	return executed;
 }
 
 static int sceKernelSleepThread() {
@@ -723,7 +726,7 @@ static int sceKernelWakeupThread(int thid) {
 	if (thread->GetWaitReason() == WaitReason::SLEEP) {
 		thread->ClearWait();
 		kernel->WakeUpThread(thid);
-		kernel->RescheduleNextCycle();
+		kernel->HLEReschedule();
 	} else {
 		thread->IncWakeupCount();
 	}
@@ -1096,7 +1099,7 @@ static uint64_t sceKernelGetSystemTimeWide() {
 	auto psp = PSP::GetInstance();
 	uint64_t time = CYCLES_TO_US(psp->GetCycles());
 	psp->EatCycles(250);
-	psp->GetKernel()->RescheduleNextCycle();
+	psp->GetKernel()->HLEReschedule();
 	return time;
 }
 
@@ -1104,7 +1107,7 @@ static uint32_t sceKernelGetSystemTimeLow() {
 	auto psp = PSP::GetInstance();
 	uint64_t time = CYCLES_TO_US(psp->GetCycles());
 	psp->EatCycles(165);
-	psp->GetKernel()->RescheduleNextCycle();
+	psp->GetKernel()->HLEReschedule();
 	return time;
 }
 

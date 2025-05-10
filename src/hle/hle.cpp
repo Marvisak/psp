@@ -61,7 +61,7 @@ void ReturnFromModule(CPU* _) {
 	int thid = kernel->GetCurrentThread();
 	kernel->RemoveThreadFromQueue(thid);
 	kernel->RemoveKernelObject(thid);
-	kernel->RescheduleNextCycle();
+	kernel->HLEReschedule();
 }
 
 void ReturnFromCallback(CPU* cpu) {

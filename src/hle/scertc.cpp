@@ -26,7 +26,7 @@ static int sceRtcGetCurrentTick(uint32_t tick_addr) {
 	psp->WriteMemory64(tick_addr, ticks);
 
 	psp->EatCycles(300);
-	psp->GetKernel()->RescheduleNextCycle();
+	psp->GetKernel()->HLEReschedule();
 
 	return SCE_OK;
 }
@@ -49,7 +49,7 @@ static int sceRtcGetCurrentClock(uint32_t clock_addr, int time_zone) {
 		clock->microsecond = tv.tv_usec;
 	}
 	psp->EatCycles(1900);
-	psp->GetKernel()->RescheduleNextCycle();
+	psp->GetKernel()->HLEReschedule();
 
 	return SCE_OK;
 }
@@ -69,7 +69,7 @@ static int sceRtcGetCurrentClockLocalTime(uint32_t clock_addr) {
 		clock->microsecond = tv.tv_usec;
 	}
 	psp->EatCycles(1900);
-	psp->GetKernel()->RescheduleNextCycle();
+	psp->GetKernel()->HLEReschedule();
 
 	return SCE_OK;
 }

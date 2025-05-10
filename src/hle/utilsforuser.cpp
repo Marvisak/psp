@@ -20,7 +20,7 @@ static int sceKernelDcacheWritebackInvalidateAll() {
 	auto psp = PSP::GetInstance();
 	psp->GetRenderer()->ClearTextureCache();
 	psp->EatCycles(1165);
-	psp->GetKernel()->RescheduleNextCycle();
+	psp->GetKernel()->HLEReschedule();
 	return 0;
 }
 
@@ -28,7 +28,7 @@ static int sceKernelDcacheWritebackAll() {
 	auto psp = PSP::GetInstance();
 	psp->GetRenderer()->ClearTextureCache();
 	psp->EatCycles(3524);
-	psp->GetKernel()->RescheduleNextCycle();
+	psp->GetKernel()->HLEReschedule();
 	return 0;
 }
 
@@ -49,7 +49,7 @@ static int sceKernelLibcGettimeofday(uint32_t time_addr, uint32_t timezone_addr)
 	}
 
 	psp->EatCycles(1885);
-	psp->GetKernel()->RescheduleNextCycle();
+	psp->GetKernel()->HLEReschedule();
 
 	return 0;
 }
@@ -73,7 +73,7 @@ static uint32_t sceKernelLibcClock() {
 	auto psp = PSP::GetInstance();
 	uint32_t time = CYCLES_TO_US(psp->GetCycles());
 	psp->EatCycles(330);
-	psp->GetKernel()->RescheduleNextCycle();
+	psp->GetKernel()->HLEReschedule();
 	return time;
 }
 

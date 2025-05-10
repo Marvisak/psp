@@ -25,7 +25,7 @@ Mutex::~Mutex() {
 		thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_DELETE);
 		mutex_thread.wait->ended = true;
 		kernel->WakeUpThread(mutex_thread.thid);
-		kernel->RescheduleNextCycle();
+		kernel->HLEReschedule();
 	}
 }
 
@@ -59,7 +59,7 @@ void Mutex::Unlock() {
 
 	mutex_thread.wait->ended = true;
 	if (kernel->WakeUpThread(mutex_thread.thid)) {
-		kernel->RescheduleNextCycle();
+		kernel->HLEReschedule();
 	}
 
 	waiting_threads.pop_front();
@@ -169,7 +169,7 @@ int Mutex::Cancel(int new_count) {
 		thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_CANCEL);
 		mutex_thread.wait->ended = true;
 		kernel->WakeUpThread(mutex_thread.thid);
-		kernel->RescheduleNextCycle();
+		kernel->HLEReschedule();
 	}
 
 	int num_wait_threads = waiting_threads.size();

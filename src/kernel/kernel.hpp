@@ -71,9 +71,8 @@ public:
 	void SetSDKVersion(int version) { sdk_version = version; }
 
 	int Reschedule();
-	void ForceReschedule() { force_reschedule = true; RescheduleNextCycle(); }
-	void RescheduleNextCycle() { reschedule_next_cycle = true; }
-	bool ShouldReschedule() const { return reschedule_next_cycle; }
+	void ForceReschedule() { force_reschedule = true; HLEReschedule(); }
+	void HLEReschedule() { reschedule = true; }
 	void AddThreadToQueue(int thid);
 	void RemoveThreadFromQueue(int thid);
 
@@ -111,7 +110,7 @@ private:
 	int exec_module = -1;
 	int current_thread = -1;
 	int next_uid = 1;
-	bool reschedule_next_cycle = false;
+	bool reschedule = false;
 	bool force_reschedule = false;
 	int sdk_version = 0;
 

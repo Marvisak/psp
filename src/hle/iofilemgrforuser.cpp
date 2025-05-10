@@ -166,7 +166,7 @@ static int64_t sceIoLseek(int fd, int64_t offset, int whence) {
 	}
 
 	psp->EatCycles(1400);
-	kernel->RescheduleNextCycle();
+	kernel->HLEReschedule();
 	return file->Seek(offset, whence);
 }
 
@@ -181,7 +181,7 @@ static int sceIoLseek32(int fd, int offset, int whence) {
 	}
 
 	psp->EatCycles(1400);
-	kernel->RescheduleNextCycle();
+	kernel->HLEReschedule();
 	return file->Seek(offset, whence);
 }
 

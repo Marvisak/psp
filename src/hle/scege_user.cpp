@@ -39,7 +39,7 @@ static int sceGeListEnQueue(uint32_t maddr, uint32_t saddr, int cbid, uint32_t o
 static int sceGeListDeQueue(int id) {
 	auto psp = PSP::GetInstance();
 	psp->GetRenderer()->DeQueueList(id);
-	psp->GetKernel()->RescheduleNextCycle();
+	psp->GetKernel()->HLEReschedule();
 	return 0;
 }
 

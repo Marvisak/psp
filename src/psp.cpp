@@ -61,10 +61,6 @@ void PSP::Run() {
 	while (!close) {
 		GetEarliestEvent();
 		for (; cycles < earliest_event_cycles; cycles++) {
-			if (kernel->ShouldReschedule()) { 
-				kernel->Reschedule();
-			}
-
 			if (kernel->GetCurrentThread() == -1) {
 				continue;
 			}
@@ -84,10 +80,6 @@ void PSP::Step() {
 	
 	if (cycles >= earliest_event_cycles) {
 		ExecuteEvents();
-	}
-
-	if (kernel->ShouldReschedule()) {
-		kernel->Reschedule();
 	}
 
 	if (kernel->GetCurrentThread() != -1) {
@@ -123,6 +115,7 @@ bool PSP::LoadExec(std::string path) {
 		return false;
 	}
 	kernel->ExecModule(uid);
+	kernel->Reschedule();
 
 	return true;
 }

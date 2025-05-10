@@ -150,7 +150,7 @@ void Thread::RestoreFromCallback(std::shared_ptr<WaitObject> wait) {
 		}
 	}
 	current_callbacks.pop_front();
-	kernel->RescheduleNextCycle();
+	kernel->HLEReschedule();
 
 	if (!pending_callbacks.empty() && current_callbacks.empty()) {
 		int cbid = pending_callbacks.front();

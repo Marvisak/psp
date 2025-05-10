@@ -167,7 +167,7 @@ static int sceDisplayWaitVblank() {
 	}
 	else {
 		psp->EatCycles(1110);
-		psp->GetKernel()->RescheduleNextCycle();
+		psp->GetKernel()->HLEReschedule();
 		return 1;
 	}
 }
@@ -180,7 +180,7 @@ static int sceDisplayWaitVblankCB() {
 	}
 	else {
 		psp->EatCycles(1110);
-		psp->GetKernel()->RescheduleNextCycle();
+		psp->GetKernel()->HLEReschedule();
 		return 1;
 	}
 }
@@ -196,7 +196,7 @@ static float sceDisplayGetFramePerSec() {
 static int sceDisplayGetVcount() {
 	auto psp = PSP::GetInstance();
 	psp->EatCycles(150);
-	psp->GetKernel()->RescheduleNextCycle();
+	psp->GetKernel()->HLEReschedule();
 	return VBLANK_COUNT;
 }
 

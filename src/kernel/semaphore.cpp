@@ -21,7 +21,7 @@ Semaphore::~Semaphore() {
 		thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_DELETE);
 		sema_thread.wait->ended = true;
 		kernel->WakeUpThread(sema_thread.thid);
-		kernel->RescheduleNextCycle();
+		kernel->HLEReschedule();
 	}
 }
 
@@ -52,7 +52,7 @@ void Semaphore::HandleQueue() {
 		count -= sema_thread.need_count;
 		sema_thread.wait->ended = true;
 		if (kernel->WakeUpThread(sema_thread.thid)) {
-			kernel->RescheduleNextCycle();
+			kernel->HLEReschedule();
 		}
 		waiting_threads.pop_front();
 	}
@@ -142,7 +142,7 @@ int Semaphore::Cancel(int new_count) {
 		thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_CANCEL);
 		sema_thread.wait->ended = true;
 		kernel->WakeUpThread(sema_thread.thid);
-		kernel->RescheduleNextCycle();
+		kernel->HLEReschedule();
 	}
 
 	int num_wait_threads = waiting_threads.size();

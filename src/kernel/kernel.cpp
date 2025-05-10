@@ -86,7 +86,7 @@ int Kernel::Reschedule() {
 
 	auto current_thread_obj = GetKernelObject<Thread>(current_thread);
 	bool current_thread_valid = !force_reschedule && current_thread_obj && current_thread_obj->GetState() == ThreadState::RUN;
-	reschedule_next_cycle = false;
+	reschedule = false;
 	force_reschedule = false;
 	for (int priority = 0; priority < thread_ready_queue.size(); priority++) {
 		auto& ready_threads = thread_ready_queue[priority];
@@ -164,7 +164,6 @@ void Kernel::StartThread(int thid, int arg_size, void* arg_block) {
 	thread->Start(arg_size, arg_block);
 	thread->SetState(ThreadState::READY);
 	AddThreadToQueue(thid);
-	RescheduleNextCycle();
 }
 
 int Kernel::CreateCallback(std::string name, uint32_t entry, uint32_t common) {
@@ -215,7 +214,6 @@ bool Kernel::CheckCallbacksOnThread(int thid) {
 		thread->AddPendingCallback(cbid);
 		thread->WakeUpForCallback();
 	}
-	RescheduleNextCycle();
 	return executed;
 }
 
@@ -398,7 +396,7 @@ bool Kernel::WakeUpThread(int thid) {
 
 	thread->SetAllowCallbacks(false);
 	if (GetCurrentThread() == -1) {
-		RescheduleNextCycle();
+		Reschedule();
 	}
 
 	return true;
@@ -410,7 +408,7 @@ std::shared_ptr<WaitObject> Kernel::WaitCurrentThread(WaitReason reason, bool al
 	thread->SetState(ThreadState::WAIT);
 	RemoveThreadFromQueue(GetCurrentThread());
 	thread->SetAllowCallbacks(allow_callbacks);
-	RescheduleNextCycle();
+	HLEReschedule();
 
 	return thread->Wait(reason);
 }
@@ -426,4 +424,8 @@ void Kernel::ExecHLEFunction(int import_index) {
 
 	auto cpu = PSP::GetInstance()->GetCPU();
 	func(cpu);
+
+	if (reschedule) {
+		Reschedule();
+	}
 }
