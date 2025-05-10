@@ -61,10 +61,6 @@ void PSP::Run() {
 	while (!close) {
 		GetEarliestEvent();
 		for (; cycles < earliest_event_cycles; cycles++) {
-			if (renderer->ShouldRun()) { 
-				renderer->Step();
-			}
-
 			if (kernel->ShouldReschedule()) { 
 				kernel->Reschedule();
 			}
@@ -88,10 +84,6 @@ void PSP::Step() {
 	
 	if (cycles >= earliest_event_cycles) {
 		ExecuteEvents();
-	}
-
-	if (renderer->ShouldRun()) {
-		renderer->Step();
 	}
 
 	if (kernel->ShouldReschedule()) {

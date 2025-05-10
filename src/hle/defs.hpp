@@ -131,6 +131,7 @@ constexpr auto SCE_KERNEL_TH_USER = 0x80000000;
 
 constexpr auto SCE_OK = 0;
 constexpr auto SCE_ERROR_BUSY = 0x80000021;
+constexpr auto SCE_ERROR_OUT_OF_MEMORY = 0x80000022;
 constexpr auto SCE_ERROR_INVALID_ID = 0x80000100;
 constexpr auto SCE_ERROR_INVALID_POINTER = 0x80000103;
 constexpr auto SCE_ERROR_INVALID_SIZE = 0x80000104;

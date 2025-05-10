@@ -94,15 +94,16 @@ public:
 	virtual void ClearTextureCache() = 0;
 	virtual void ClearTextureCache(uint32_t addr, uint32_t size) = 0;
 
-	void Step();
-	bool ShouldRun() { return !waiting && !queue.empty(); }
+	void Run();
 	int EnQueueList(uint32_t addr, uint32_t stall_addr);
+	void DeQueueList(int id);
 	bool SetStallAddr(int id, uint32_t stall_addr);
 	uint32_t Get(int cmd) { return cmds[cmd]; }
 
 	bool SyncThread(int id, int thid);
 	void SyncThread(int thid);
-	void WakeUp() { waiting = false; }
+	void HandleListSync(DisplayList& dl);
+	void HandleDrawSync();
 
 	uint32_t GetBaseAddress(uint32_t addr) const {
 		uint32_t base_addr = ((base & 0xF0000) << 8) | addr;
@@ -282,11 +283,10 @@ protected:
 	uint32_t fbw = 0x0;
 	uint32_t fpf = 0x0;
 
-	int next_id = 1;
+	int next_id = 0;
 	std::deque<int> queue{};
 	std::array<DisplayList, 64> display_lists{};
 	std::vector<SyncWaitingThread> waiting_threads{};
-	bool waiting = false;
 	int executed_cycles = 0;
 
 	SDL_Window* window;

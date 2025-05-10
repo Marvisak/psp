@@ -24,8 +24,23 @@ static int sceGeListEnQueue(uint32_t maddr, uint32_t saddr, int cbid, uint32_t o
 		spdlog::error("sceGeListEnqueue: invalid list addr {:x}", maddr);
 		return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
 	}
-	
-	return psp->GetRenderer()->EnQueueList(maddr, saddr);
+
+	psp->EatCycles(490);
+
+	int id = psp->GetRenderer()->EnQueueList(maddr, saddr);
+
+	if (id == -1) {
+		return SCE_ERROR_OUT_OF_MEMORY;
+	}
+
+	return id;
+}
+
+static int sceGeListDeQueue(int id) {
+	auto psp = PSP::GetInstance();
+	psp->GetRenderer()->DeQueueList(id);
+	psp->GetKernel()->RescheduleNextCycle();
+	return 0;
 }
 
 static int sceGeListUpdateStallAddr(int id, uint32_t s_addr) {	
@@ -85,6 +100,7 @@ FuncMap RegisterSceGeUser() {
 	funcs[0xE47E40E4] = HLE_R(sceGeEdramGetAddr);
 	funcs[0x1F6752AD] = HLE_R(sceGeEdramGetSize);
 	funcs[0xAB49E76A] = HLE_UUIU_R(sceGeListEnQueue);
+	funcs[0x5FB86AB0] = HLE_I_R(sceGeListDeQueue);
 	funcs[0xE0D68148] = HLE_IU_R(sceGeListUpdateStallAddr);
 	funcs[0x03444EB4] = HLE_II_R(sceGeListSync);
 	funcs[0xB287BD61] = HLE_I_R(sceGeDrawSync);
