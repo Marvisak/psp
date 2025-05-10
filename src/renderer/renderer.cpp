@@ -65,12 +65,15 @@ void Renderer::Step() {
 
 	auto psp = PSP::GetInstance();
 	uint32_t command = psp->ReadMemory32(current_dl.current_addr);
+	cmds[command >> 24] = command;
+
 	switch (command >> 24) {
 	case CMD_NOP: break;
 	case CMD_VADR: vaddr = GetBaseAddress(command & 0xFFFFFF); break;
 	case CMD_PRIM: Prim(command); break;
+	case CMD_BBOX: BBox(current_dl,command); break;
 	case CMD_JUMP: Jump(current_dl, command); break;
-	case CMD_BJUMP: spdlog::warn("BJUMP"); psp->Exit(); break;
+	case CMD_BJUMP: BJump(current_dl, command); break;
 	case CMD_CALL: spdlog::warn("CALL"); psp->Exit(); break;
 	case CMD_RET: spdlog::warn("RET"); psp->Exit(); break;
 	case CMD_END: End(current_dl, command); break;
@@ -79,8 +82,8 @@ void Renderer::Step() {
 	case CMD_BASE: base = command; break;
 	case CMD_VTYPE: VType(command); break;
 	case CMD_OFFSET: offset = command << 8; break;
-	case CMD_REGION1: spdlog::warn("Renderer: unimplemented GE command CMD_REGION1"); break;
-	case CMD_REGION2: spdlog::warn("Renderer: unimplemented GE command CMD_REGION2"); break;
+	case CMD_REGION1: min_draw_area = glm::ivec2(command & 0x1FF, command >> 10 & 0x1FF); break;
+	case CMD_REGION2: max_draw_area = glm::ivec2(command & 0x1FF, command >> 10 & 0x1FF); break;
 	case CMD_BCE: culling = command & 1; break;
 	case CMD_TME: textures_enabled = command & 1; break;
 	case CMD_ABE: blend = command & 1; break;
@@ -460,6 +463,34 @@ void Renderer::Prim(uint32_t opcode) {
 	}
 }
 
+void Renderer::BBox(DisplayList& dl, uint32_t opcode) {
+	uint16_t count = opcode & 0xFFFF;
+
+	executed_cycles += count * 22;
+
+	if (count > 0x200) {
+		uint32_t start_vaddr = vaddr;
+		ParseVertex();
+		uint32_t vertex_size = vaddr - start_vaddr;
+		vaddr = start_vaddr + (count - 0x200) * vertex_size;
+
+		count = 0x100;
+	} else if (count > 0x100) {
+		count -= 0x100;
+	}
+
+	int outside = 0;
+	for (int i = 0; i < count; i++) {
+		auto vertex = ParseVertex();
+
+		if (vertex.pos.x < min_draw_area.x || vertex.pos.y < min_draw_area.y || vertex.pos.x > max_draw_area.x || vertex.pos.y > max_draw_area.y) {
+			outside++;
+		}
+	}
+
+	dl.bounding_box_check = (count - outside) != 0;
+}
+
 void Renderer::End(DisplayList& dl, uint32_t opcode) {
 	executed_cycles += 60;
 	dl.valid = false;
@@ -475,6 +506,14 @@ void Renderer::Jump(DisplayList& dl, uint32_t opcode) {
 	uint32_t current = dl.current_addr;
 	dl.current_addr = GetBaseAddress(opcode & 0xFFFFFC) - 4;
 	executed_cycles += (dl.current_addr - current) / 2;
+}
+
+void Renderer::BJump(DisplayList& dl, uint32_t opcode) {
+	if (!dl.bounding_box_check) {
+		uint32_t current = dl.current_addr;
+		dl.current_addr = GetBaseAddress(opcode & 0xFFFFFC) - 4;
+		executed_cycles += (dl.current_addr - current) / 2;
+	}
 }
 
 void Renderer::CLoad(uint32_t opcode) {

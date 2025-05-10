@@ -66,6 +66,10 @@ static int sceGeDrawSync(int mode) {
 	return 0;
 }
 
+static uint32_t sceGeGetCmd(int cmd) {
+	return PSP::GetInstance()->GetRenderer()->Get(cmd);
+}
+
 static int sceGeSetCallback(uint32_t param_addr) {
 	spdlog::error("sceGeSetCallback({:x})", param_addr);
 	return 0;
@@ -84,6 +88,7 @@ FuncMap RegisterSceGeUser() {
 	funcs[0xE0D68148] = HLE_IU_R(sceGeListUpdateStallAddr);
 	funcs[0x03444EB4] = HLE_II_R(sceGeListSync);
 	funcs[0xB287BD61] = HLE_I_R(sceGeDrawSync);
+	funcs[0xDC93CFEF] = HLE_I_R(sceGeGetCmd);
 	funcs[0xA4FC06A4] = HLE_U_R(sceGeSetCallback);
 	funcs[0x05DB22CE] = HLE_I_R(sceGeUnsetCallback);
 	return funcs;

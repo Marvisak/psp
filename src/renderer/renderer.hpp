@@ -60,6 +60,8 @@ struct DisplayList {
 	uint32_t current_addr;
 	uint32_t stall_addr;
 
+	bool bounding_box_check;
+
 	bool valid;
 	std::vector<SyncWaitingThread> waiting_threads;
 };
@@ -96,6 +98,7 @@ public:
 	bool ShouldRun() { return !waiting && !queue.empty(); }
 	int EnQueueList(uint32_t addr, uint32_t stall_addr);
 	bool SetStallAddr(int id, uint32_t stall_addr);
+	uint32_t Get(int cmd) { return cmds[cmd]; }
 
 	bool SyncThread(int id, int thid);
 	void SyncThread(int thid);
@@ -141,7 +144,9 @@ public:
 	Color BGR565ToABGR8888(uint16_t color);
 
 	void Prim(uint32_t opcode);
+	void BBox(DisplayList& dl, uint32_t opcode);
 	void Jump(DisplayList& dl, uint32_t opcode);
+	void BJump(DisplayList& dl, uint32_t opcode);
 	void End(DisplayList& dl, uint32_t opcode);
 	void VType(uint32_t opcode);
 	void WorldD(uint32_t opcode);
@@ -157,6 +162,8 @@ public:
 	void XStart(uint32_t opcode);
 protected:
 	Renderer();
+
+	std::unordered_map<int, uint32_t> cmds{};
 
 	uint32_t offset = 0x0;
 	uint32_t base = 0x0;
@@ -178,6 +185,9 @@ protected:
 	};
 	int projection_matrix_num = 0;
 	glm::mat4 projection_matrix{};
+
+	glm::ivec2 min_draw_area{};
+	glm::ivec2 max_draw_area{};
 
 	float viewport_scale_y = 0.0;
 	float viewport_scale_x = 0.0;
