@@ -119,20 +119,20 @@ public:
 	}
 
 	int ScissorTestX(int x) const {
-		if (x < scissor_start_x) {
-			return scissor_start_x;
-		} else if (x > scissor_end_x) {
-			return scissor_end_x;
+		if (x < scissor_start.x) {
+			return scissor_start.x;
+		} else if (x > scissor_end.x) {
+			return scissor_end.x;
 		}
 		return x;
 	}
 
 	int ScissorTestY(int y) const {
-		if (y < scissor_start_y) {
-			return scissor_start_y;
+		if (y < scissor_start.y) {
+			return scissor_start.y;
 		}
-		else if (y > scissor_end_y) {
-			return scissor_end_y;
+		else if (y > scissor_end.y) {
+			return scissor_end.y;
 		}
 		return y;
 	}
@@ -189,14 +189,9 @@ protected:
 	glm::ivec2 min_draw_area{};
 	glm::ivec2 max_draw_area{};
 
-	float viewport_scale_y = 0.0;
-	float viewport_scale_x = 0.0;
-	float viewport_scale_z = 0.0;
-	float viewport_pos_x = 0.0;
-	float viewport_pos_y = 0.0;
-	float viewport_pos_z = 0.0;
-	uint32_t viewport_offset_x = 0;
-	uint32_t viewport_offset_y = 0;
+	glm::vec3 viewport_scale{};
+	glm::vec3 viewport_pos{};
+	glm::uvec2 viewport_offset{};
 
 	bool clear_mode = false;
 	bool depth_test = false;
@@ -218,10 +213,8 @@ protected:
 	uint8_t z_test_func = 0;
 	bool depth_write = false;
 
-	int scissor_start_x = 0;
-	int scissor_start_y = 0;
-	int scissor_end_x = 0;
-	int scissor_end_y = 0;
+	glm::ivec2 scissor_start{};
+	glm::ivec2 scissor_end{};
 
 	bool blend = false;
 	uint8_t blend_operation = 0;

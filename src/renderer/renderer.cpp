@@ -102,18 +102,18 @@ void Renderer::Run() {
 		case CMD_VIEWD: ViewD(command); break;
 		case CMD_PROJN: projection_matrix_num = command & 0xF; break;
 		case CMD_PROJD: ProjD(command); break;
-		case CMD_SX: viewport_scale_x = std::bit_cast<float>(command << 8); break;
-		case CMD_SY: viewport_scale_y = std::bit_cast<float>(command << 8); break;
-		case CMD_SZ: viewport_scale_z = std::bit_cast<float>(command << 8); break;
-		case CMD_TX: viewport_pos_x = std::bit_cast<float>(command << 8); break;
-		case CMD_TY: viewport_pos_y = std::bit_cast<float>(command << 8); break;
-		case CMD_TZ: viewport_pos_z = std::bit_cast<float>(command << 8); break;
+		case CMD_SX: viewport_scale.x = std::bit_cast<float>(command << 8); break;
+		case CMD_SY: viewport_scale.y = std::bit_cast<float>(command << 8); break;
+		case CMD_SZ: viewport_scale.z = std::bit_cast<float>(command << 8); break;
+		case CMD_TX: viewport_pos.x = std::bit_cast<float>(command << 8); break;
+		case CMD_TY: viewport_pos.y = std::bit_cast<float>(command << 8); break;
+		case CMD_TZ: viewport_pos.z = std::bit_cast<float>(command << 8); break;
 		case CMD_SU: u_scale = std::bit_cast<float>(command << 8); break;
 		case CMD_SV: v_scale = std::bit_cast<float>(command << 8); break;
 		case CMD_TU: u_offset = std::bit_cast<float>(command << 8); break;
 		case CMD_TV: v_offset = std::bit_cast<float>(command << 8); break;
-		case CMD_OFFSETX: viewport_offset_x = command & 0xFFFFFF; break;
-		case CMD_OFFSETY: viewport_offset_y = command & 0xFFFFFF; break;
+		case CMD_OFFSETX: viewport_offset.x = command & 0xFFFFFF; break;
+		case CMD_OFFSETY: viewport_offset.y = command & 0xFFFFFF; break;
 		case CMD_SHADE: gouraud_shading = command & 1; break;
 		case CMD_MATERIAL: material_update = command & 1; break;
 		case CMD_MAC: ambient_color = command & 0xFFFFFF; break;
@@ -154,8 +154,8 @@ void Renderer::Run() {
 		case CMD_TSYNC: break;
 		case CMD_FPF: fpf = command & 7; break;
 		case CMD_CMODE: clear_mode = command & 1; break;
-		case CMD_SCISSOR1: scissor_start_x = command & 0x1FF; scissor_start_y = command >> 10 & 0x1FF; break;
-		case CMD_SCISSOR2: scissor_end_x = command & 0x1FF; scissor_end_y = command >> 10 & 0x1FF; break;
+		case CMD_SCISSOR1: scissor_start.x = command & 0x1FF; scissor_start.y = command >> 10 & 0x1FF; break;
+		case CMD_SCISSOR2: scissor_end.x = command & 0x1FF; scissor_end.y = command >> 10 & 0x1FF; break;
 		case CMD_MINZ: min_z = command & 0xFFFF; break;
 		case CMD_MAXZ: max_z = command & 0xFFFF; break;
 		case CMD_ATEST: alpha_test_func = command & 0x7; alpha_test_ref = (command >> 8) & 0xFF; alpha_test_mask = (command >> 16) & 0xFF; break;
@@ -284,13 +284,10 @@ void Renderer::TransformVertex(Vertex& v) const {
 	glm::mat4 worldviewproj = world_matrix * view_matrix * projection_matrix;
 	glm::vec4 clip_pos = model_pos * worldviewproj;
 
-	float x = clip_pos.x * viewport_scale_x / clip_pos.w + viewport_pos_x;
-	float y = clip_pos.y * viewport_scale_y / clip_pos.w + viewport_pos_y;
-	float z = clip_pos.z * viewport_scale_z / clip_pos.w + viewport_pos_z;
+	v.pos = glm::vec3(clip_pos) * viewport_scale / clip_pos.w + viewport_pos;
 
-	v.pos.x = (x * 16 - (viewport_offset_x & 0xFFFF)) * (1.0f / 16.0f);
-	v.pos.y = (y * 16 - (viewport_offset_y & 0xFFFF)) * (1.0f / 16.0f);
-	v.pos.z = z;
+	v.pos.x = (v.pos.x * 16 - (viewport_offset.x & 0xFFFF)) * (1.0f / 16.0f);
+	v.pos.y = (v.pos.y * 16 - (viewport_offset.y & 0xFFFF)) * (1.0f / 16.0f);
 }
 
 Vertex Renderer::ParseVertex() {
