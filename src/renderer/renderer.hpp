@@ -158,7 +158,6 @@ public:
 	void CLUT(uint32_t opcode);
 	void TSize(uint32_t opcode);
 	void TFunc(uint32_t opcode);
-	void FPF(uint32_t opcode);
 	void Blend(uint32_t opcode);
 	void XStart(uint32_t opcode);
 protected:

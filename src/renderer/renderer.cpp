@@ -75,7 +75,7 @@ void Renderer::Run() {
 
 		switch (command >> 24) {
 		case CMD_NOP: break;
-		case CMD_VADR: vaddr = GetBaseAddress(command & 0xFFFFFF); break;
+		case CMD_VADR: vaddr = command & 0xFFFFFF; break;
 		case CMD_PRIM: Prim(command); break;
 		case CMD_BBOX: BBox(current_dl, command); break;
 		case CMD_JUMP: Jump(current_dl, command); break;
@@ -152,7 +152,7 @@ void Renderer::Run() {
 		case CMD_TEC: environment_texture = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;
 		case CMD_TFLUSH: break;
 		case CMD_TSYNC: break;
-		case CMD_FPF: FPF(command); break;
+		case CMD_FPF: fpf = command & 7; break;
 		case CMD_CMODE: clear_mode = command & 1; break;
 		case CMD_SCISSOR1: scissor_start_x = command & 0x1FF; scissor_start_y = command >> 10 & 0x1FF; break;
 		case CMD_SCISSOR2: scissor_end_x = command & 0x1FF; scissor_end_y = command >> 10 & 0x1FF; break;
@@ -302,30 +302,32 @@ Vertex Renderer::ParseVertex() {
 		spdlog::error("Renderer: index not supported");
 	}
 
+	uint32_t base_vaddr = GetBaseAddress(vaddr);
+
 	if (uv_format != FORMAT_NONE) {
 		switch (uv_format) {
 		case FORMAT_BYTE:
-			v.uv.x = psp->ReadMemory8(vaddr) * (1.f / 128.f);
-			v.uv.y = psp->ReadMemory8(vaddr + 1) * (1.f / 128.f);
-			vaddr += 2;
+			v.uv.x = psp->ReadMemory8(base_vaddr) * (1.f / 128.f);
+			v.uv.y = psp->ReadMemory8(base_vaddr + 1) * (1.f / 128.f);
+			base_vaddr += 2;
 			break;
 		case FORMAT_SHORT:
-			vaddr = ALIGN(vaddr, 2);
-			v.uv.x = static_cast<float>(psp->ReadMemory16(vaddr));
-			v.uv.y = static_cast<float>(psp->ReadMemory16(vaddr + 2));
+			base_vaddr = ALIGN(base_vaddr, 2);
+			v.uv.x = static_cast<float>(psp->ReadMemory16(base_vaddr));
+			v.uv.y = static_cast<float>(psp->ReadMemory16(base_vaddr + 2));
 			if (!through) {
 				v.uv.x *= (1.f / 32768.f) * u_scale;
 				v.uv.y *= (1.f / 32768.f) * v_scale;
 				v.uv.x += u_offset;
 				v.uv.y += v_offset;
 			}
-			vaddr += 4;
+			base_vaddr += 4;
 			break;
 		case FORMAT_FLOAT:
-			vaddr = ALIGN(vaddr, 4);
-			v.uv.x = std::bit_cast<float>(psp->ReadMemory32(vaddr));
-			v.uv.y = std::bit_cast<float>(psp->ReadMemory32(vaddr + 4));
-			vaddr += 8;
+			base_vaddr = ALIGN(base_vaddr, 4);
+			v.uv.x = std::bit_cast<float>(psp->ReadMemory32(base_vaddr));
+			v.uv.y = std::bit_cast<float>(psp->ReadMemory32(base_vaddr + 4));
+			base_vaddr += 8;
 			break;
 		}
 
@@ -340,77 +342,69 @@ Vertex Renderer::ParseVertex() {
 		v.color = (ambient_alpha << 24) | ambient_color;
 		break;
 	case SCEGU_COLOR_PF5650:
-		vaddr = ALIGN(vaddr, 2);
-		v.color = BGR565ToABGR8888(psp->ReadMemory16(vaddr));
-		vaddr += 2;
+		base_vaddr = ALIGN(base_vaddr, 2);
+		v.color = BGR565ToABGR8888(psp->ReadMemory16(base_vaddr));
+		base_vaddr += 2;
 		break;
 	case SCEGU_COLOR_PF5551:
-		vaddr = ALIGN(vaddr, 2);
-		v.color = ABGR1555ToABGR8888(psp->ReadMemory16(vaddr));
-		vaddr += 2;
+		base_vaddr = ALIGN(base_vaddr, 2);
+		v.color = ABGR1555ToABGR8888(psp->ReadMemory16(base_vaddr));
+		base_vaddr += 2;
 		break;
 	case SCEGU_COLOR_PF4444:
-		vaddr = ALIGN(vaddr, 2);
-		v.color = ABGR4444ToABGR8888(psp->ReadMemory16(vaddr));
-		vaddr += 2;
+		base_vaddr = ALIGN(base_vaddr, 2);
+		v.color = ABGR4444ToABGR8888(psp->ReadMemory16(base_vaddr));
+		base_vaddr += 2;
 		break;
 	case SCEGU_COLOR_PF8888:
-		vaddr = ALIGN(vaddr, 4);
-		v.color.abgr = psp->ReadMemory32(vaddr);
-		vaddr += 4;
+		base_vaddr = ALIGN(base_vaddr, 4);
+		v.color.abgr = psp->ReadMemory32(base_vaddr);
+		base_vaddr += 4;
 		break;
 	}
 
 	if (normal_format != FORMAT_NONE) {
 		spdlog::error("Renderer: normal not supported");
-		switch (normal_format) {
-		case FORMAT_BYTE:
-			vaddr++;
-			break;
-		case FORMAT_SHORT:
-			vaddr += 2;
-			break;
-		case FORMAT_FLOAT:
-			vaddr += 4;
-			break;
-		}
 	}
 
 	switch (position_format) {
 	case FORMAT_BYTE:
-		vaddr = ALIGN(vaddr, 1);
+		base_vaddr = ALIGN(base_vaddr, 1);
 		if (through) {
 			v.pos = glm::vec3(0);
 		} else {
-			v.pos.x = static_cast<int8_t>(psp->ReadMemory8(vaddr));
-			v.pos.y = static_cast<int8_t>(psp->ReadMemory8(vaddr + 1));
-			v.pos.z = static_cast<int8_t>(psp->ReadMemory8(vaddr + 2));
+			v.pos.x = static_cast<int8_t>(psp->ReadMemory8(base_vaddr));
+			v.pos.y = static_cast<int8_t>(psp->ReadMemory8(base_vaddr + 1));
+			v.pos.z = static_cast<int8_t>(psp->ReadMemory8(base_vaddr + 2));
 			v.pos *= 1.0f / 128.0f;
 		}
-		vaddr += 3;
+		base_vaddr += 3;
 		break;
 	case FORMAT_SHORT:
-		vaddr = ALIGN(vaddr, 2);
-		v.pos.x = static_cast<int16_t>(psp->ReadMemory16(vaddr));
-		v.pos.y = static_cast<int16_t>(psp->ReadMemory16(vaddr + 2));
-		v.pos.z = static_cast<uint16_t>(psp->ReadMemory16(vaddr + 4));
+		base_vaddr = ALIGN(base_vaddr, 2);
+		v.pos.x = static_cast<int16_t>(psp->ReadMemory16(base_vaddr));
+		v.pos.y = static_cast<int16_t>(psp->ReadMemory16(base_vaddr + 2));
+		v.pos.z = static_cast<uint16_t>(psp->ReadMemory16(base_vaddr + 4));
 		if (!through) {
 			v.pos *= 1.0f / 32768.0f;
 		}
-		vaddr += 6;
+		base_vaddr += 6;
 		break;
 	case FORMAT_FLOAT:
-		vaddr = ALIGN(vaddr, 4);
-		v.pos.x = std::bit_cast<float>(psp->ReadMemory32(vaddr));
-		v.pos.y = std::bit_cast<float>(psp->ReadMemory32(vaddr + 4));
-		v.pos.z = std::bit_cast<float>(psp->ReadMemory32(vaddr + 8));
-		vaddr += 12;
+		base_vaddr = ALIGN(base_vaddr, 4);
+		v.pos.x = std::bit_cast<float>(psp->ReadMemory32(base_vaddr));
+		v.pos.y = std::bit_cast<float>(psp->ReadMemory32(base_vaddr + 4));
+		v.pos.z = std::bit_cast<float>(psp->ReadMemory32(base_vaddr + 8));
+		base_vaddr += 12;
 		break;
 	}
 
 	if (!through) {
 		TransformVertex(v);
 	}
+
+	uint32_t size = base_vaddr - GetBaseAddress(vaddr);
+	vaddr += size;
 
 	return v;
 }
@@ -626,14 +620,6 @@ void Renderer::ProjD(uint32_t opcode) {
 	projection_matrix_num++;
 }
 
-void Renderer::FPF(uint32_t opcode) {
-	uint32_t format = opcode & 0xFFFFFF;
-	if (format > 3) {
-		spdlog::warn("Renderer: unknown framebuffer pixel format passed: {}", format);
-	} else {
-		fpf = format;
-	}
-}
 void Renderer::Blend(uint32_t opcode) {
 	blend_source = opcode & 0xF;
 	blend_destination = opcode >> 4 & 0xF;
