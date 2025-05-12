@@ -5,8 +5,6 @@
 
 #include "../renderer.hpp"
 
-constexpr auto TEXTURE_CACHE_CLEAR_FRAMES = 120;
-
 struct DXT1Block {
 	uint8_t lines[4];
 	uint16_t color1;
@@ -40,6 +38,7 @@ public:
 
 	void Frame();
 	void Resize(int width, int height) {}
+	void RenderFramebufferChange() {}
 	void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format);
 	void DrawRectangle(Vertex start, Vertex end);
 	void DrawTriangle(Vertex v0, Vertex v1, Vertex v2);

@@ -120,8 +120,8 @@ void Renderer::Run() {
 		case CMD_MAA: ambient_alpha = command & 0xFF; break;
 		case CMD_MK: spdlog::warn("Renderer: unimplemented GE command CMD_MK"); break;
 		case CMD_CULL: cull_type = command & 0x1; break;
-		case CMD_FBP: fbp &= 0xFF000000; fbp |= command & 0xFFFFFF; break;
-		case CMD_FBW: fbp &= 0x00FFFFFF; fbp |= (command & 0xFF0000) << 8; fbw = command & 0x07FC; break;
+		case CMD_FBP: RenderFramebufferChange(); fbp &= 0xFF000000; fbp |= command & 0xFFFFFF; break;
+		case CMD_FBW: RenderFramebufferChange(); fbp &= 0x00FFFFFF; fbp |= (command & 0xFF0000) << 8; fbw = command & 0x07FC; break;
 		case CMD_ZBP: zbp &= 0xFF000000; zbp |= command & 0xFFFFFF; break;
 		case CMD_ZBW: zbp &= 0x00FFFFFF; zbp |= (command & 0xFF0000) << 8; zbw = command & 0x07FC; break;
 		case CMD_TBP0: textures[0].buffer &= 0xFF000000; textures[0].buffer |= command & 0xFFFFFF; break;
@@ -152,7 +152,7 @@ void Renderer::Run() {
 		case CMD_TEC: environment_texture = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;
 		case CMD_TFLUSH: break;
 		case CMD_TSYNC: break;
-		case CMD_FPF: fpf = command & 7; break;
+		case CMD_FPF: RenderFramebufferChange(); fpf = command & 7; break;
 		case CMD_CMODE: clear_mode = command & 1; break;
 		case CMD_SCISSOR1: scissor_start.x = command & 0x1FF; scissor_start.y = command >> 10 & 0x1FF; break;
 		case CMD_SCISSOR2: scissor_end.x = command & 0x1FF; scissor_end.y = command >> 10 & 0x1FF; break;
@@ -280,14 +280,15 @@ void Renderer::HandleDrawSync() {
 }
 
 void Renderer::TransformVertex(Vertex& v) const {
-	glm::vec4 model_pos(v.pos, 1.0);
 	glm::mat4 worldviewproj = world_matrix * view_matrix * projection_matrix;
-	glm::vec4 clip_pos = model_pos * worldviewproj;
+	glm::vec4 clip_pos = v.pos * worldviewproj;
 
-	v.pos = glm::vec3(clip_pos) * viewport_scale / clip_pos.w + viewport_pos;
+	auto translated_pos = glm::vec3(clip_pos) * viewport_scale / clip_pos.w + viewport_pos;
 
-	v.pos.x = (v.pos.x * 16 - (viewport_offset.x & 0xFFFF)) * (1.0f / 16.0f);
-	v.pos.y = (v.pos.y * 16 - (viewport_offset.y & 0xFFFF)) * (1.0f / 16.0f);
+	v.pos.x = (translated_pos.x * 16 - (viewport_offset.x & 0xFFFF)) * (1.0f / 16.0f);
+	v.pos.y = (translated_pos.y * 16 - (viewport_offset.y & 0xFFFF)) * (1.0f / 16.0f);
+	v.pos.z = translated_pos.z;
+	v.pos.w = clip_pos.w;
 }
 
 Vertex Renderer::ParseVertex() {
@@ -368,7 +369,7 @@ Vertex Renderer::ParseVertex() {
 	case FORMAT_BYTE:
 		base_vaddr = ALIGN(base_vaddr, 1);
 		if (through) {
-			v.pos = glm::vec3(0);
+			v.pos = glm::vec4(0);
 		} else {
 			v.pos.x = static_cast<int8_t>(psp->ReadMemory8(base_vaddr));
 			v.pos.y = static_cast<int8_t>(psp->ReadMemory8(base_vaddr + 1));
@@ -396,6 +397,7 @@ Vertex Renderer::ParseVertex() {
 		break;
 	}
 
+	v.pos.w = 1.0;
 	if (!through) {
 		TransformVertex(v);
 	}

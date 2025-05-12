@@ -2,7 +2,10 @@
 
 #include "../renderer.hpp"
 
+#include <unordered_map>
 #include <webgpu/webgpu.hpp>
+
+constexpr auto MAX_BUFFER_VERTEX_COUNT = 1024;
 
 class ComputeRenderer : public Renderer {
 public:
@@ -11,18 +14,53 @@ public:
 
 	void Frame();
 	void Resize(int width, int height);
+	void RenderFramebufferChange() { compute_texture_valid = false; }
 	void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format);
-	void DrawRectangle(Vertex start, Vertex end) {}
+	void DrawRectangle(Vertex start, Vertex end);
 	void DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {}
 	void DrawTriangleStrip(std::vector<Vertex> vertices) {}
 	void DrawTriangleFan(std::vector<Vertex> vertices) {}
 	void ClearTextureCache() {}
 	void ClearTextureCache(uint32_t addr, uint32_t size) {}
+	void CLoad(uint32_t opcode);
 private:
-	struct ScreenTransform {
-		glm::vec2 scale;
-		glm::vec2 offset;
+	struct alignas(16) ComputeVertex {
+        glm::vec4 pos;
+		glm::vec2 uv;
+		glm::uvec4 color;
 	};
+
+	struct alignas(16) RenderData {
+		glm::uvec2 scissor_start;
+		glm::uvec2 scissor_end;
+	};
+
+	struct TextureCacheEntry {
+		int unused_frames;
+		uint32_t size;
+		wgpu::Texture texture;
+		wgpu::BindGroup bind_group;
+	};
+
+	union ShaderID {
+		uint32_t full;
+		struct {
+			uint8_t primitive_type : 3;
+			bool textures_enabled : 1;
+			bool u_clamp : 1;
+			bool v_clamp : 1;
+			uint8_t clut_format : 2;
+		};
+	};
+
+	void WaitUntilWorkDone();
+	wgpu::ComputePipeline GetShader(uint8_t primitive_type);
+	void UpdateRenderTexture();
+	void UpdateRenderData();
+	void FlushRender();
+	uint32_t PushVertices(std::vector<Vertex> vertices);
+	wgpu::BindGroup GetTexture();
+	void FreeTexture(TextureCacheEntry& entry);
 
 	wgpu::Instance instance;
 	wgpu::Surface surface;
@@ -35,12 +73,33 @@ private:
 	wgpu::PipelineLayout render_layout;
 	wgpu::RenderPipeline render_pipeline;
 	wgpu::BindGroup render_bind_group;
+	uint32_t buffer_alignment = 0;
 
 	wgpu::Texture framebuffer_conversion_texture;
 	wgpu::BindGroupLayout framebuffer_conversion_bind_group_layout;
 	wgpu::PipelineLayout framebuffer_conversion_layout;
 	wgpu::BindGroup framebuffer_conversion_bind_group;
 	wgpu::ComputePipeline framebuffer_conversion_pipelines[3];
+
+	std::vector<wgpu::CommandBuffer> commands{};
+	std::unordered_map<uint32_t, wgpu::ComputePipeline> compute_pipelines{};
+	wgpu::BindGroupLayout compute_texture_bind_group_layout;
+	wgpu::BindGroupLayout compute_buffer_bind_group_layout;
+	wgpu::BindGroup compute_buffer_bind_group;
+	wgpu::BindGroupLayout compute_render_data_bind_group_layout;
+	wgpu::BindGroup compute_render_data_bind_group;
+	wgpu::PipelineLayout compute_layout;
+	wgpu::PipelineLayout compute_texture_layout;
+	bool compute_texture_valid = false;
+	wgpu::Texture compute_texture;
+	uint32_t compute_vertex_buffer_offset = 0;
+	wgpu::Buffer compute_vertex_buffer;
+	wgpu::Buffer compute_render_data_buffer{};
+	wgpu::Buffer compute_transitional_buffer;
+	uint32_t current_fbp = 0;
+
+	std::unordered_map<uint32_t, TextureCacheEntry> texture_cache{};
+	wgpu::Buffer clut_buffer{};
 
 	wgpu::Buffer frame_width_buffer{};
 	wgpu::Sampler nearest_sampler{};

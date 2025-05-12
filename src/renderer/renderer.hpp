@@ -10,6 +10,8 @@
 #include <glm/vec3.hpp>
 #include <glm/mat4x4.hpp>
 
+constexpr auto TEXTURE_CACHE_CLEAR_FRAMES = 120;
+
 enum class RendererType {
 	SOFTWARE,
 	COMPUTE
@@ -37,7 +39,7 @@ union Color {
 };
 
 struct Vertex {
-	glm::vec3 pos;
+	glm::vec4 pos;
 	glm::vec2 uv;
 	Color color;
 };
@@ -86,6 +88,7 @@ public:
 
 	virtual void Frame();
 	virtual void Resize(int width, int height) = 0;
+	virtual void RenderFramebufferChange() = 0;
 	virtual void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format) = 0;
 	virtual void DrawRectangle(Vertex start, Vertex end) = 0;
 	virtual void DrawTriangle(Vertex v0, Vertex v1, Vertex v2) = 0;
@@ -154,7 +157,7 @@ public:
 	void ViewD(uint32_t opcode);
 	void ProjD(uint32_t opcode);
 	void TMode(uint32_t opcode);
-	void CLoad(uint32_t opcode);
+	virtual void CLoad(uint32_t opcode);
 	void CLUT(uint32_t opcode);
 	void TSize(uint32_t opcode);
 	void TFunc(uint32_t opcode);
@@ -213,8 +216,8 @@ protected:
 	uint8_t z_test_func = 0;
 	bool depth_write = false;
 
-	glm::ivec2 scissor_start{};
-	glm::ivec2 scissor_end{};
+	glm::uvec2 scissor_start{};
+	glm::uvec2 scissor_end{};
 
 	bool blend = false;
 	uint8_t blend_operation = 0;
