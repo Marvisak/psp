@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <webgpu/webgpu.hpp>
 
-constexpr auto MAX_BUFFER_VERTEX_COUNT = 1024;
+constexpr auto MAX_BUFFER_VERTEX_COUNT = 2048;
 
 class ComputeRenderer : public Renderer {
 public:
@@ -17,17 +17,18 @@ public:
 	void RenderFramebufferChange() { compute_texture_valid = false; }
 	void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format);
 	void DrawRectangle(Vertex start, Vertex end);
-	void DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {}
+	void DrawTriangle(Vertex v0, Vertex v1, Vertex v2);
 	void DrawTriangleStrip(std::vector<Vertex> vertices) {}
-	void DrawTriangleFan(std::vector<Vertex> vertices) {}
+	void DrawTriangleFan(std::vector<Vertex> vertices);
 	void ClearTextureCache() {}
 	void ClearTextureCache(uint32_t addr, uint32_t size) {}
+	void FlushRender();
 	void CLoad(uint32_t opcode);
 private:
-	struct alignas(16) ComputeVertex {
-        glm::vec4 pos;
-		glm::vec2 uv;
-		glm::uvec4 color;
+	struct ComputeVertex {
+        alignas(16) glm::vec4 pos;
+		alignas(8)  glm::vec2 uv;
+		alignas(16) glm::uvec4 color;
 	};
 
 	struct alignas(16) RenderData {
@@ -57,7 +58,6 @@ private:
 	wgpu::ComputePipeline GetShader(uint8_t primitive_type);
 	void UpdateRenderTexture();
 	void UpdateRenderData();
-	void FlushRender();
 	uint32_t PushVertices(std::vector<Vertex> vertices);
 	wgpu::BindGroup GetTexture();
 	void FreeTexture(TextureCacheEntry& entry);

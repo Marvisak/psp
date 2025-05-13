@@ -44,21 +44,21 @@ fn fetch_clut(index: u32) -> vec4u {
     }
 }
 
-fn fetchTexel(pos: vec2u, dims: vec2u) -> vec4u {
+fn fetchTexel(pos: vec2i, dims: vec2i) -> vec4u {
     var tex_pos = pos;
     if (U_CLAMP == 1) {
-        tex_pos.x = min(tex_pos.x, dims.x);
+        tex_pos.x = clamp(tex_pos.x, 0, dims.x);
     } else {
         tex_pos.x %= dims.x;
     }
 
     if (V_CLAMP == 1) {
-        tex_pos.y = min(tex_pos.y, dims.y);
+        tex_pos.y = clamp(tex_pos.y, 0, dims.y);
     } else {
         tex_pos.y %= dims.y;
     }
 
-    var texel = textureLoad(texture, tex_pos, 0);
+    var texel = textureLoad(texture, pos, 0);
     
     if (CLUT_FORMAT != 100) {
         texel = fetch_clut(texel.r);
@@ -69,18 +69,8 @@ fn fetchTexel(pos: vec2u, dims: vec2u) -> vec4u {
 
 fn filterTexture(uv: vec2f) -> vec4u {
     let dims = textureDimensions(texture);
-    var pos = uv * vec2f(dims);
+    let pos = uv * vec2f(dims);
 
-    // In the OpenGL spec they say that this is how they handle nearest filtering
-    // Looks horrible but works
-    if (uv.x == 1.0) {
-        pos.x = f32(dims.x - 1);
-    }
-
-    if (uv.y == 1.0) {
-        pos.y = f32(dims.y - 1);
-    }
-
-    return fetchTexel(vec2u(pos), dims); 
+    return fetchTexel(vec2i(pos), vec2i(dims)); 
 }
 )"

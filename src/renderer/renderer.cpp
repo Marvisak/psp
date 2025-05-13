@@ -467,9 +467,11 @@ void Renderer::Prim(uint32_t opcode) {
 	executed_cycles = count * 40;
 
 	switch (primitive_type) {
-	case SCEGU_PRIM_TRIANGLES: 
-		for (int i = 0; i < vertices.size() - 2; i += 3) {
-			DrawTriangle(vertices[i], vertices[i + 1], vertices[i + 2]);
+	case SCEGU_PRIM_TRIANGLES:
+		if (count >= 3) {
+			for (int i = 0; i < vertices.size() - 2; i += 3) {
+				DrawTriangle(vertices[i], vertices[i + 1], vertices[i + 2]);
+			}
 		}
 		break;
 	case SCEGU_PRIM_TRIANGLE_STRIP: {
@@ -526,6 +528,7 @@ void Renderer::End(DisplayList& dl, uint32_t opcode) {
 	dl.valid = false;
 	queue.pop_front();
 	HandleListSync(dl);
+	FlushRender();
 }
 
 void Renderer::Jump(DisplayList& dl, uint32_t opcode) {

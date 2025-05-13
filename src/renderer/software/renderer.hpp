@@ -46,6 +46,7 @@ public:
 	void DrawTriangleFan(std::vector<Vertex> vertices);
 	void ClearTextureCache();
 	void ClearTextureCache(uint32_t addr, uint32_t size);
+	void FlushRender() {}
 
 	void DecodeDXTColors(const DXT1Block* block, glm::ivec4 palette[4], bool skip_alpha);
 	void WriteDXT1(const DXT1Block* block, glm::ivec4 palette[4], Color* dst, int pitch);

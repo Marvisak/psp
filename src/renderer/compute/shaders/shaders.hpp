@@ -19,3 +19,7 @@ constexpr const char pixel_shader[] =
 constexpr const char rectangle_shader[] =
 #include "rectangle.wgsl"
 ;
+
+constexpr const char triangle_shader[] =
+#include "triangle.wgsl"
+;

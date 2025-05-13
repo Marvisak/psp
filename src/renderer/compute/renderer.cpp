@@ -293,7 +293,7 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	compute_render_data_binding_layouts[1].visibility = wgpu::ShaderStage::Compute;
 	compute_render_data_binding_layouts[1].buffer.type = wgpu::BufferBindingType::Uniform;
 	compute_render_data_binding_layouts[1].buffer.hasDynamicOffset = true;
-	compute_render_data_binding_layouts[1].buffer.minBindingSize = sizeof(ComputeVertex) * 3;
+	compute_render_data_binding_layouts[1].buffer.minBindingSize = sizeof(ComputeVertex) * 4;
 
 	wgpu::BindGroupLayoutDescriptor compute_render_data_bind_group_layout_desc{};
 	compute_render_data_bind_group_layout_desc.entryCount = 2;
@@ -333,7 +333,7 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 
 	compute_render_data_bindings[1].binding = 1;
 	compute_render_data_bindings[1].buffer = compute_vertex_buffer;
-	compute_render_data_bindings[1].size = sizeof(ComputeVertex) * 3;
+	compute_render_data_bindings[1].size = sizeof(ComputeVertex) * 4;
 
 	wgpu::BindGroupDescriptor compute_render_data_bind_group_desc{};
 	compute_render_data_bind_group_desc.layout = compute_render_data_bind_group_layout;
@@ -527,6 +527,9 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 	auto pipeline = GetShader(SCEGU_PRIM_RECTANGLES);
 
+	start.pos = glm::round(start.pos);
+	end.pos = glm::round(end.pos);
+
 	if (start.pos.x > end.pos.x) {
 		std::swap(start.pos.x, end.pos.x);
 		std::swap(start.uv.x, end.uv.x);
@@ -537,8 +540,8 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 		std::swap(start.uv.y, end.uv.y);
 	}
 
-	int width = floor(end.pos.x) - floor(start.pos.x);
-	int height = floor(end.pos.y) - floor(start.pos.y);
+	int width = end.pos.x - start.pos.x;
+	int height = end.pos.y - start.pos.y;
 
 	if (width == 0 || height == 0) {
 		return;
@@ -568,6 +571,67 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 	auto command = encoder.finish();
 	commands.push_back(command);
+}
+
+void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
+	if (!compute_texture_valid) {
+		UpdateRenderTexture();
+	}
+
+	auto pipeline = GetShader(SCEGU_PRIM_TRIANGLES);
+
+	v0.pos = glm::round(v0.pos);
+	v1.pos = glm::round(v1.pos);
+	v2.pos = glm::round(v2.pos);
+
+	float area = (v1.pos.x - v0.pos.x) * (v2.pos.y - v0.pos.y) - (v1.pos.y - v0.pos.y) * (v2.pos.x - v0.pos.x);
+	if (area == 0) {
+		return;
+	}
+
+	if (area < 0) {
+		std::swap(v0, v1);
+	}
+
+	int min_x = std::min({ v0.pos.x, v1.pos.x, v2.pos.x });
+	int max_x = std::max({ v0.pos.x, v1.pos.x, v2.pos.x });
+	int min_y = std::min({ v0.pos.y, v1.pos.y, v2.pos.y });
+	int max_y = std::max({ v0.pos.y, v1.pos.y, v2.pos.y });
+
+	// This is the most ghetto code I have ever written, but it does the job and makes everything simple
+	Vertex bounding{};
+	bounding.pos = glm::vec4(min_x, min_y, 0.0, 0.0);
+
+	auto offset = PushVertices({ v0, v1, v2, bounding });
+
+	auto encoder = device.createCommandEncoder();
+	auto compute_pass = encoder.beginComputePass();
+
+	compute_pass.setPipeline(pipeline);
+	compute_pass.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
+	compute_pass.setBindGroup(1, compute_render_data_bind_group, 1, &offset);
+
+	if (textures_enabled) {
+		auto texture_bind_group = GetTexture();
+		compute_pass.setBindGroup(2, texture_bind_group, 0, nullptr);
+	}
+
+	uint32_t workgroup_count_x = (max_x - min_x + 7) / 8;
+	uint32_t workgroup_count_y = (max_y - min_y + 7) / 8;
+
+	compute_pass.dispatchWorkgroups(workgroup_count_x, workgroup_count_y, 1);
+
+	compute_pass.end();
+	compute_pass.release();
+
+	auto command = encoder.finish();
+	commands.push_back(command);
+}
+
+void ComputeRenderer::DrawTriangleFan(std::vector<Vertex> vertices) {
+	for (int i = 1; i < vertices.size() - 1; i++) {
+		DrawTriangle(vertices[0], vertices[i], vertices[i + 1]);
+	}
 }
 
 void ComputeRenderer::CLoad(uint32_t opcode) {
@@ -633,6 +697,9 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 	switch (primitive_type) {
 	case SCEGU_PRIM_RECTANGLES:
 		code += rectangle_shader;
+		break;
+	case SCEGU_PRIM_TRIANGLES:
+		code += triangle_shader;
 		break;
 	}
 
@@ -815,6 +882,14 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 
 	bool clut = false;
 	switch (texture_format) {
+	case SCEGU_PF8888: {
+		bpp = 4;
+		uint32_t* buffer = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(texture.buffer));
+		for (int y = 0; y < texture.height; y++) {
+			memcpy(&texture_data.data()[y * texture.width], &buffer[y * texture.pitch], texture.width * 4);
+		}
+		break;
+	}
 	case SCEGU_PFIDX8: {
 		bpp = 1;
 		clut = true;

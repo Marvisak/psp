@@ -96,6 +96,7 @@ public:
 	virtual void DrawTriangleFan(std::vector<Vertex> vertices) = 0;
 	virtual void ClearTextureCache() = 0;
 	virtual void ClearTextureCache(uint32_t addr, uint32_t size) = 0;
+	virtual void FlushRender() = 0;
 
 	void Run();
 	int EnQueueList(uint32_t addr, uint32_t stall_addr);
