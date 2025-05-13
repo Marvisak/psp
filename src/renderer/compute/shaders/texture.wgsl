@@ -44,21 +44,21 @@ fn fetch_clut(index: u32) -> vec4u {
     }
 }
 
-fn fetchTexel(pos: vec2i, dims: vec2i) -> vec4u {
+fn fetchTexel(pos: vec2f, dims: vec2f) -> vec4u {
     var tex_pos = pos;
     if (U_CLAMP == 1) {
-        tex_pos.x = clamp(tex_pos.x, 0, dims.x);
+        tex_pos.x = clamp(tex_pos.x, 0.0, dims.x - 1);
     } else {
-        tex_pos.x %= dims.x;
+        tex_pos.x -= dims.x * floor(tex_pos.x / dims.x);
     }
 
     if (V_CLAMP == 1) {
-        tex_pos.y = clamp(tex_pos.y, 0, dims.y);
+        tex_pos.y = clamp(tex_pos.y, 0.0, dims.y - 1);
     } else {
-        tex_pos.y %= dims.y;
+        tex_pos.y -= dims.y * floor(tex_pos.y / dims.y);
     }
 
-    var texel = textureLoad(texture, pos, 0);
+    var texel = textureLoad(texture, vec2u(tex_pos), 0);
     
     if (CLUT_FORMAT != 100) {
         texel = fetch_clut(texel.r);
@@ -68,9 +68,9 @@ fn fetchTexel(pos: vec2i, dims: vec2i) -> vec4u {
 }
 
 fn filterTexture(uv: vec2f) -> vec4u {
-    let dims = textureDimensions(texture);
-    let pos = uv * vec2f(dims);
+    let dims = vec2f(textureDimensions(texture));
+    let pos = uv * dims;
 
-    return fetchTexel(vec2i(pos), vec2i(dims)); 
+    return fetchTexel(pos, dims); 
 }
 )"

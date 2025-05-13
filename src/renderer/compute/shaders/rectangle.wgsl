@@ -15,7 +15,7 @@ fn draw(@builtin(global_invocation_id) id: vec3u) {
         return;
     }
 
-    let t = fid.xy / (vertices.end.pos.xy - vertices.start.pos.xy);
+    let t = (fid.xy + 0.5) / (vertices.end.pos.xy - vertices.start.pos.xy);
     let uv = vertices.start.uv + t * (vertices.end.uv - vertices.start.uv);
 
     drawPixel(vec4u(pos), uv, vertices.end.color);

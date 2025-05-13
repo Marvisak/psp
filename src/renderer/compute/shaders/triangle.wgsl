@@ -12,7 +12,7 @@ fn topLeft(v0: vec4f, v1: vec4f) -> bool {
 @compute @workgroup_size(8, 8)
 fn draw(@builtin(global_invocation_id) id: vec3u) {
     let fid = vec4f(vec3f(id), 0.0);
-    let pos = vertices[3].pos + fid;
+    let pos = vertices[3].pos + fid + 0.5;
 
     let bias0 = select(-1.0, 0.0, topLeft(vertices[1].pos, vertices[2].pos));
     let bias1 = select(-1.0, 0.0, topLeft(vertices[2].pos, vertices[0].pos));
@@ -22,9 +22,8 @@ fn draw(@builtin(global_invocation_id) id: vec3u) {
     let e1 = edge(vertices[2].pos, vertices[0].pos, pos);
     let e2 = edge(vertices[0].pos, vertices[1].pos, pos);
     if ((e0 + bias0) >= 0 && (e1 + bias1) >= 0 && (e2 + bias2) >= 0) {
-        let area = edge(vertices[0].pos, vertices[1].pos, vertices[2].pos);
-
-        let uv = (vertices[0].uv * e0 + vertices[1].uv * e1 + vertices[2].uv * e2) / area;
+        let eSum = e0 + e1 + e2;
+        let uv = (vertices[0].uv * e0 + vertices[1].uv * e1 + vertices[2].uv * e2) / eSum;
 
         drawPixel(vec4u(pos), uv, vertices[0].color);
     }
