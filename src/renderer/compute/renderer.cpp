@@ -787,8 +787,12 @@ void ComputeRenderer::UpdateRenderData() {
 	RenderData data{};
 	data.scissor_start = scissor_start;
 	data.scissor_end = scissor_end;
+	data.clut_shift = clut_shift;
+	data.clut_mask = clut_mask;
+	data.clut_offset = clut_offset;
 
 	queue.writeBuffer(compute_render_data_buffer, 0, &data, sizeof(RenderData));
+	WaitUntilWorkDone();
 }
 
 void ComputeRenderer::FlushRender() {
@@ -894,6 +898,18 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 		bpp = 1;
 		clut = true;
 		uint8_t* buffer = reinterpret_cast<uint8_t*>(psp->VirtualToPhysical(texture.buffer));
+		for (int y = 0; y < texture.height; y++) {
+			int texture_index = y * texture.width;
+			int clut_index = y * texture.pitch;
+			for (int x = 0; x < texture.width; x++) {
+				texture_data[texture_index + x] = buffer[clut_index + x];
+			}
+		}
+		break;
+	}
+	case SCEGU_PFIDX32: {
+		clut = true;
+		uint32_t* buffer = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(texture.buffer));
 		for (int y = 0; y < texture.height; y++) {
 			int texture_index = y * texture.width;
 			int clut_index = y * texture.pitch;

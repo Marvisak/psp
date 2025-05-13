@@ -2,16 +2,7 @@ R"(
 @group(2) @binding(0) var texture: texture_2d<u32>;
 @group(2) @binding(1) var<storage, read> clut : array<u32, 256>;
 
-fn u32ToRGBA8888(color: u32) -> vec4u {
-    let a = (color >> 24) & 0xFF;
-    let b = (color >> 16) & 0xFF;
-    let g = (color >> 8)  & 0xFF;
-    let r = (color >> 0)  & 0xFF;
-
-    return vec4u(r, g, b, a);
-}
-
-fn RGB565ToRBA8888(color: u32) -> vec4u {
+fn RGB565ToRGBA8888(color: u32) -> vec4u {
     let b = (color >> 11) & 0x1F; 
     let g = (color >> 5)  & 0x3F; 
     let r = (color >> 0)  & 0x1F; 
@@ -24,18 +15,42 @@ fn RGB565ToRBA8888(color: u32) -> vec4u {
     );
 }
 
-fn fetch_clut(index: u32) -> vec4u {
+fn RGBA4444ToRGBA8888(color: u32) -> vec4u {
+    let a = (color >> 12) & 0xF; 
+    let b = (color >> 8)  & 0xF; 
+    let g = (color >> 4)  & 0xF; 
+    let r = (color >> 0)  & 0xF; 
+
+    return vec4u(
+        (r << 4) | r,
+        (g << 4) | g,
+        (b << 4) | b,
+        (a << 4) | a,
+    );
+}
+
+fn fetchClut(index: u32) -> vec4u {
+    let i = ((index >> renderData.clutShift) & renderData.clutMask) | (renderData.clutOffset & select(0x1FFu, 0xFFu, CLUT_FORMAT == 3));
+
     switch (CLUT_FORMAT) {
     case 0u: {
-        let word = clut[index / 2];
+        let word = clut[i / 2];
         if (index % 2 == 0) {
-            return RGB565ToRBA8888(word & 0xFFFF);
+            return RGB565ToRGBA8888(word & 0xFFFF);
         } else {
-            return RGB565ToRBA8888(word >> 16);
+            return RGB565ToRGBA8888(word >> 16);
+        }
+    }
+    case 2u: {
+        let word = clut[i / 2];
+        if (index % 2 == 0) {
+            return RGBA4444ToRGBA8888(word & 0xFFFF);
+        } else {
+            return RGBA4444ToRGBA8888(word >> 16);
         }
     }
     case 3u: {
-        return u32ToRGBA8888(clut[index]);
+        return unpack4xU8(clut[i]);
     }
     default: {
         // Just some value that should be hard to miss
@@ -61,7 +76,7 @@ fn fetchTexel(pos: vec2f, dims: vec2f) -> vec4u {
     var texel = textureLoad(texture, vec2u(tex_pos), 0);
     
     if (CLUT_FORMAT != 100) {
-        texel = fetch_clut(texel.r);
+        texel = fetchClut(texel.r);
     }
 
     return texel;

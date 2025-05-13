@@ -7,7 +7,10 @@ struct Vertex {
 
 struct RenderData {
     scissorStart: vec2u,
-    scissorEnd: vec2u
+    scissorEnd: vec2u,
+    clutShift: u32,
+    clutMask: u32,
+    clutOffset: u32
 }
 
 override TEXTURES_ENABLED: u32 = 0;

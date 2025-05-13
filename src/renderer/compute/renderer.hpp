@@ -31,9 +31,12 @@ private:
 		alignas(16) glm::uvec4 color;
 	};
 
-	struct alignas(16) RenderData {
-		glm::uvec2 scissor_start;
-		glm::uvec2 scissor_end;
+	struct RenderData {
+		alignas(8) glm::uvec2 scissor_start;
+		alignas(8) glm::uvec2 scissor_end;
+		alignas(4) uint32_t clut_shift;
+		alignas(4) uint32_t clut_mask;
+		alignas(4) uint32_t clut_offset;
 	};
 
 	struct TextureCacheEntry {
