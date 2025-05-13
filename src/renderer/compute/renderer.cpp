@@ -325,6 +325,7 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	compute_vertex_buffer_desc.size = sizeof(ComputeVertex) * MAX_BUFFER_VERTEX_COUNT;
 	compute_vertex_buffer_desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
 	compute_vertex_buffer = device.createBuffer(compute_vertex_buffer_desc);
+	compute_vertices = operator new(sizeof(ComputeVertex) * MAX_BUFFER_VERTEX_COUNT);
 
 	wgpu::BindGroupEntry compute_render_data_bindings[2]{};
 	compute_render_data_bindings[0].binding = 0;
@@ -351,6 +352,8 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	clut_buffer_desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage;
 	clut_buffer = device.createBuffer(clut_buffer_desc);
 
+	compute_encoder = device.createCommandEncoder();
+
 	Resize(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
 }
 
@@ -359,10 +362,10 @@ ComputeRenderer::~ComputeRenderer() {
 		framebuffer_conversion_pipelines[i].release();
 	}
 
-	for (auto& [_, entry] : texture_cache) {
-		FreeTexture(entry);
-	}
+	ClearTextureCache();
 
+	delete[] compute_vertices;
+	compute_encoder.release();
 	clut_buffer.release();
 	compute_texture_bind_group_layout.release();
 	compute_transitional_buffer.release();
@@ -525,8 +528,6 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 		UpdateRenderTexture();
 	}
 
-	auto pipeline = GetShader(SCEGU_PRIM_RECTANGLES);
-
 	start.pos = glm::round(start.pos);
 	end.pos = glm::round(end.pos);
 
@@ -547,10 +548,11 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 		return;
 	}
 
+	auto pipeline = GetShader(SCEGU_PRIM_RECTANGLES);
+
 	auto offset = PushVertices({ start, end });
 
-	auto encoder = device.createCommandEncoder();
-	auto compute_pass = encoder.beginComputePass();
+	auto compute_pass = compute_encoder.beginComputePass();
 
 	compute_pass.setPipeline(pipeline);
 	compute_pass.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
@@ -568,9 +570,7 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 	compute_pass.end();
 	compute_pass.release();
-
-	auto command = encoder.finish();
-	commands.push_back(command);
+	queue_empty = false;
 }
 
 void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
@@ -604,8 +604,7 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 
 	auto offset = PushVertices({ v0, v1, v2, bounding });
 
-	auto encoder = device.createCommandEncoder();
-	auto compute_pass = encoder.beginComputePass();
+	auto compute_pass = compute_encoder.beginComputePass();
 
 	compute_pass.setPipeline(pipeline);
 	compute_pass.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
@@ -623,14 +622,35 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 
 	compute_pass.end();
 	compute_pass.release();
-
-	auto command = encoder.finish();
-	commands.push_back(command);
+	queue_empty = false;
 }
 
 void ComputeRenderer::DrawTriangleFan(std::vector<Vertex> vertices) {
 	for (int i = 1; i < vertices.size() - 1; i++) {
 		DrawTriangle(vertices[0], vertices[i], vertices[i + 1]);
+	}
+}
+
+void ComputeRenderer::ClearTextureCache() {
+	for (auto& [_, entry] : texture_cache) {
+		FreeTexture(entry);
+	}
+
+	texture_cache.clear();
+}
+
+void ComputeRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
+	addr &= 0x3FFFFFFF;
+	uint32_t addr_end = addr + size;
+	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
+		uint32_t texture_end = it->first + it->second.size / 2;
+		if (addr <= texture_end && addr_end >= it->first) {
+			FreeTexture(it->second);
+			texture_cache.erase(it++);
+		}
+		else {
+			it++;
+		}
 	}
 }
 
@@ -725,7 +745,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 	compute_pipeline_desc.compute.module = shader_module;
 	compute_pipeline_desc.compute.constants = constants;
 	compute_pipeline_desc.compute.constantCount = 7;
-	compute_pipeline_desc.layout = textures_enabled ? compute_texture_layout : compute_layout;
+	compute_pipeline_desc.layout = id.textures_enabled ? compute_texture_layout : compute_layout;
 	auto compute_pipeline = device.createComputePipeline(compute_pipeline_desc);
 	shader_module.release();
 
@@ -802,17 +822,23 @@ void ComputeRenderer::UpdateRenderData() {
 	data.blend_bfix = blend_bfix;
 
 	queue.writeBuffer(compute_render_data_buffer, 0, &data, sizeof(RenderData));
+	queue.writeBuffer(compute_vertex_buffer, 0, compute_vertices, compute_vertex_buffer_offset);
 	WaitUntilWorkDone();
 }
 
 void ComputeRenderer::FlushRender() {
-	if (commands.empty()) {
+	if (queue_empty) {
 		return;
 	}
 
+	auto command = compute_encoder.finish();
+	compute_encoder.release();
+
 	UpdateRenderData();
-	queue.submit(commands.size(), commands.data());
+	queue.submit(command);
 	WaitUntilWorkDone();
+
+	compute_encoder = device.createCommandEncoder();
 
 	auto width = compute_texture.getWidth();
 	int bpp = compute_texture.getFormat() == wgpu::TextureFormat::RGBA8Uint ? 4 : 2;
@@ -830,10 +856,10 @@ void ComputeRenderer::FlushRender() {
 
 	encoder.copyTextureToBuffer(source, destination, { width, 512, 1 });
 
-	auto command = encoder.finish();
+	auto copy_command = encoder.finish();
 	encoder.release();
 
-	queue.submit(command);
+	queue.submit(copy_command);
 	WaitUntilWorkDone();
 
 	bool done = false;
@@ -852,29 +878,24 @@ void ComputeRenderer::FlushRender() {
 		queue.submit(0, nullptr);
 	}
 
-	auto framebuffer = PSP::GetInstance()->VirtualToPhysical(GetFrameBufferAddress() + current_fbp);
+	auto framebuffer = PSP::GetInstance()->VirtualToPhysical(0x44000000 | (current_fbp & 0x1FFFF0));
 	memcpy(framebuffer, compute_transitional_buffer.getMappedRange(0, size), size);
 	compute_transitional_buffer.unmap();
 
 	compute_vertex_buffer_offset = 0;
-	commands.clear();
 }
 
 uint32_t ComputeRenderer::PushVertices(std::vector<Vertex> vertices) {
-	std::vector<ComputeVertex> compute_vertices{};
+	auto offset = compute_vertex_buffer_offset;
 	for (auto& vertex : vertices) {
-		ComputeVertex compute_vertex{};
-		compute_vertex.pos = vertex.pos;
-		compute_vertex.uv = vertex.uv;
-		compute_vertex.color = glm::uvec4(vertex.color.r, vertex.color.g, vertex.color.b, vertex.color.a);
-		compute_vertices.push_back(compute_vertex);
+		auto compute_vertex = reinterpret_cast<ComputeVertex*>(reinterpret_cast<uintptr_t>(compute_vertices) + compute_vertex_buffer_offset);
+		compute_vertex->pos = vertex.pos;
+		compute_vertex->uv = vertex.uv;
+		compute_vertex->color = glm::uvec4(vertex.color.r, vertex.color.g, vertex.color.b, vertex.color.a);
+		compute_vertex_buffer_offset += sizeof(ComputeVertex);
 	}
 
-	auto size = compute_vertices.size() * sizeof(ComputeVertex);
-	queue.writeBuffer(compute_vertex_buffer, compute_vertex_buffer_offset, compute_vertices.data(), size);
-
-	auto offset = compute_vertex_buffer_offset;
-	compute_vertex_buffer_offset += ALIGN(size, buffer_alignment);
+	compute_vertex_buffer_offset = ALIGN(compute_vertex_buffer_offset, buffer_alignment);
 	return offset;
 }
 
@@ -896,11 +917,49 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 
 	bool clut = false;
 	switch (texture_format) {
+	case SCEGU_PF5650:
+	case SCEGU_PF5551:
+	case SCEGU_PF4444: {
+		bpp = 2;
+		uint16_t* buffer = reinterpret_cast<uint16_t*>(psp->VirtualToPhysical(texture.buffer));
+		for (int y = 0; y < texture.height; y++) {
+			for (int x = 0; x < texture.width; x++) {
+				uint16_t color = buffer[y * texture.pitch + x];
+				if (texture_format == SCEGU_PF5650) {
+					texture_data[y * texture.width + x] = BGR565ToABGR8888(color).abgr;
+				}
+				else if (texture_format == SCEGU_PF5551) {
+					texture_data[y * texture.width + x] = ABGR1555ToABGR8888(color).abgr;
+				}
+				else if (texture_format == SCEGU_PF4444) {
+					texture_data[y * texture.width + x] = ABGR4444ToABGR8888(color).abgr;
+				}
+			}
+		}
+		break;
+	}
 	case SCEGU_PF8888: {
 		bpp = 4;
 		uint32_t* buffer = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(texture.buffer));
 		for (int y = 0; y < texture.height; y++) {
 			memcpy(&texture_data.data()[y * texture.width], &buffer[y * texture.pitch], texture.width * 4);
+		}
+		break;
+	}
+	case SCEGU_PFIDX4: {
+		bpp = 1;
+		clut = true;
+		uint8_t* buffer = reinterpret_cast<uint8_t*>(psp->VirtualToPhysical(texture.buffer));
+		for (int y = 0; y < texture.height; y++) {
+			int texture_index = y * texture.width;
+			int clut_index = y * texture.pitch / 2;
+			for (int x = 0; x < texture.width; x += 2, clut_index++) {
+				uint8_t value = buffer[clut_index];
+				texture_data[texture_index + x] = value & 0xF;
+				if ((x + 1) < texture.width) {
+					texture_data[texture_index + x + 1] = value >> 4;
+				}
+			}
 		}
 		break;
 	}
@@ -918,6 +977,7 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 		break;
 	}
 	case SCEGU_PFIDX32: {
+		bpp = 4;
 		clut = true;
 		uint32_t* buffer = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(texture.buffer));
 		for (int y = 0; y < texture.height; y++) {

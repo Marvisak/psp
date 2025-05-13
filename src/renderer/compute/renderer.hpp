@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <webgpu/webgpu.hpp>
 
-constexpr auto MAX_BUFFER_VERTEX_COUNT = 2048;
+constexpr auto MAX_BUFFER_VERTEX_COUNT = 16384;
 
 class ComputeRenderer : public Renderer {
 public:
@@ -20,8 +20,8 @@ public:
 	void DrawTriangle(Vertex v0, Vertex v1, Vertex v2);
 	void DrawTriangleStrip(std::vector<Vertex> vertices) {}
 	void DrawTriangleFan(std::vector<Vertex> vertices);
-	void ClearTextureCache() {}
-	void ClearTextureCache(uint32_t addr, uint32_t size) {}
+	void ClearTextureCache();
+	void ClearTextureCache(uint32_t addr, uint32_t size);
 	void FlushRender();
 	void CLoad(uint32_t opcode);
 private:
@@ -89,8 +89,9 @@ private:
 	wgpu::BindGroup framebuffer_conversion_bind_group;
 	wgpu::ComputePipeline framebuffer_conversion_pipelines[3];
 
-	std::vector<wgpu::CommandBuffer> commands{};
 	std::unordered_map<uint32_t, wgpu::ComputePipeline> compute_pipelines{};
+	bool queue_empty = true;
+	wgpu::CommandEncoder compute_encoder{};
 	wgpu::BindGroupLayout compute_texture_bind_group_layout;
 	wgpu::BindGroupLayout compute_buffer_bind_group_layout;
 	wgpu::BindGroup compute_buffer_bind_group;
@@ -100,6 +101,7 @@ private:
 	wgpu::PipelineLayout compute_texture_layout;
 	bool compute_texture_valid = false;
 	wgpu::Texture compute_texture;
+	void* compute_vertices;
 	uint32_t compute_vertex_buffer_offset = 0;
 	wgpu::Buffer compute_vertex_buffer;
 	wgpu::Buffer compute_render_data_buffer{};
