@@ -37,6 +37,8 @@ private:
 		alignas(4) uint32_t clut_shift;
 		alignas(4) uint32_t clut_mask;
 		alignas(4) uint32_t clut_offset;
+		alignas(16) glm::ivec4 blend_afix;
+		alignas(16) glm::ivec4 blend_bfix;
 	};
 
 	struct TextureCacheEntry {
@@ -54,6 +56,9 @@ private:
 			bool u_clamp : 1;
 			bool v_clamp : 1;
 			uint8_t clut_format : 2;
+			uint8_t blend_operation : 3;
+			uint8_t blend_source : 4;
+			uint8_t blend_destination : 4;
 		};
 	};
 

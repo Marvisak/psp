@@ -672,6 +672,11 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 				id.clut_format = clut_format;
 			}
 		}
+		if (blend) {
+			id.blend_operation = blend_operation;
+			id.blend_source = blend_source;
+			id.blend_destination = blend_destination;
+		}
 	}
 
 	if (compute_pipelines.contains(id.full)) {
@@ -679,10 +684,13 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 	}
 
 	WGPUConstantEntry constants[] {
-		{ .key = wgpu::StringView("TEXTURES_ENABLED"), .value = textures_enabled ? 1.0f : 0.0f },
+		{ .key = wgpu::StringView("TEXTURES_ENABLED"), .value = id.textures_enabled ? 1.0f : 0.0f },
 		{ .key = wgpu::StringView("U_CLAMP"), .value = u_clamp ? 1.0f : 0.0f },
 		{ .key = wgpu::StringView("V_CLAMP"), .value = v_clamp ? 1.0f : 0.0f },
 		{ .key = wgpu::StringView("CLUT_FORMAT"), .value = clut ? clut_format : 100.0f },
+		{ .key = wgpu::StringView("BLEND_OPERATION"), .value = !clear_mode && blend ? blend_operation : 100.0f },
+		{ .key = wgpu::StringView("BLEND_SOURCE"), .value = static_cast<double>(blend_source) },
+		{ .key = wgpu::StringView("BLEND_DESTINATION"), .value = static_cast<double>(blend_destination) },
 	};
 
 	std::string code = common_shader;
@@ -716,7 +724,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 	compute_pipeline_desc.compute.entryPoint = wgpu::StringView("draw");
 	compute_pipeline_desc.compute.module = shader_module;
 	compute_pipeline_desc.compute.constants = constants;
-	compute_pipeline_desc.compute.constantCount = 4;
+	compute_pipeline_desc.compute.constantCount = 7;
 	compute_pipeline_desc.layout = textures_enabled ? compute_texture_layout : compute_layout;
 	auto compute_pipeline = device.createComputePipeline(compute_pipeline_desc);
 	shader_module.release();
@@ -790,6 +798,8 @@ void ComputeRenderer::UpdateRenderData() {
 	data.clut_shift = clut_shift;
 	data.clut_mask = clut_mask;
 	data.clut_offset = clut_offset;
+	data.blend_afix = blend_afix;
+	data.blend_bfix = blend_bfix;
 
 	queue.writeBuffer(compute_render_data_buffer, 0, &data, sizeof(RenderData));
 	WaitUntilWorkDone();
