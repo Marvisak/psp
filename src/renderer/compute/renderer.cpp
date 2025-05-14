@@ -916,6 +916,7 @@ void ComputeRenderer::FlushRender() {
 	memcpy(framebuffer, compute_transitional_buffer.getMappedRange(0, size), size);
 	compute_transitional_buffer.unmap();
 
+	queue_empty = true;
 	compute_vertex_buffer_offset = 0;
 	clut_cache.fill(0);
 }
