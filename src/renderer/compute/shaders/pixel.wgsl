@@ -53,6 +53,20 @@ fn blend(src: vec4i, dst: vec4i) -> vec4u {
     return vec4u(clamp(result, vec4i(0), vec4i(255)));
 }
 
+fn test(func: u32, src: u32, dst: u32) -> bool {
+    switch (func) {
+    case 0u: { return false; }
+    case 1u: { return true; }
+    case 2u: { return src == dst; }
+    case 3u: { return src != dst; }
+    case 4u: { return src < dst; }
+    case 5u: { return src <= dst; }
+    case 6u: { return src > dst; }
+    case 7u: { return src >= dst; }
+    default: { return true; }
+    }
+}
+
 fn drawPixel(pos: vec4u, uv: vec2f, c: vec4u) {
     if (pos.x < renderData.scissorStart.x || pos.x > renderData.scissorEnd.x 
     ||  pos.y < renderData.scissorStart.y || pos.y > renderData.scissorEnd.y) {
@@ -62,6 +76,12 @@ fn drawPixel(pos: vec4u, uv: vec2f, c: vec4u) {
     var color = c;
     if (TEXTURES_ENABLED == 1) {
         color = filterTexture(uv);
+    }
+
+    if (ALPHA_FUNC != 100) {
+        if (!test(ALPHA_FUNC, color.a & renderData.alphaMask, renderData.alphaRef)) {
+            return;
+        }
     }
 
     let dst = textureLoad(framebuffer, pos.xy);

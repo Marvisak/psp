@@ -700,6 +700,10 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 			id.blend_source = blend_source;
 			id.blend_destination = blend_destination;
 		}
+
+		if (alpha_test) {
+			id.alpha_func = alpha_test_func;
+		}
 	}
 
 	if (compute_pipelines.contains(id.full)) {
@@ -714,6 +718,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 		{ .key = wgpu::StringView("BLEND_OPERATION"), .value = !clear_mode && blend ? blend_operation : 100.0f },
 		{ .key = wgpu::StringView("BLEND_SOURCE"), .value = static_cast<double>(blend_source) },
 		{ .key = wgpu::StringView("BLEND_DESTINATION"), .value = static_cast<double>(blend_destination) },
+		{ .key = wgpu::StringView("ALPHA_FUNC"), .value = !clear_mode && alpha_test ? alpha_test_func : 100.0f },
 	};
 
 	std::string code = common_shader;
@@ -747,7 +752,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 	compute_pipeline_desc.compute.entryPoint = wgpu::StringView("draw");
 	compute_pipeline_desc.compute.module = shader_module;
 	compute_pipeline_desc.compute.constants = constants;
-	compute_pipeline_desc.compute.constantCount = 7;
+	compute_pipeline_desc.compute.constantCount = 8;
 	compute_pipeline_desc.layout = id.textures_enabled ? compute_texture_layout : compute_layout;
 	auto compute_pipeline = device.createComputePipeline(compute_pipeline_desc);
 	shader_module.release();
@@ -823,6 +828,8 @@ void ComputeRenderer::UpdateRenderData() {
 	data.clut_offset = clut_offset;
 	data.blend_afix = blend_afix;
 	data.blend_bfix = blend_bfix;
+	data.alphaMask = alpha_test_mask;
+	data.alphaRef = alpha_test_ref & alpha_test_mask;
 
 	queue.writeBuffer(compute_render_data_buffer, 0, &data, sizeof(RenderData));
 	queue.writeBuffer(compute_vertex_buffer, 0, compute_vertices, compute_vertex_buffer_offset);
