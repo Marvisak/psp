@@ -22,8 +22,7 @@ uint16_t QUAD_INDICES[]{
 };
 
 ComputeRenderer::ComputeRenderer() : Renderer() {
-	wgpu::InstanceDescriptor desc{};
-	instance = wgpu::createInstance(desc);
+	instance = wgpu::createInstance();
 
 	surface = SDL_GetWGPUSurface(instance, window);
 
@@ -934,11 +933,9 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 				uint16_t color = buffer[y * texture.pitch + x];
 				if (texture_format == SCEGU_PF5650) {
 					texture_data[y * texture.width + x] = BGR565ToABGR8888(color).abgr;
-				}
-				else if (texture_format == SCEGU_PF5551) {
+				} else if (texture_format == SCEGU_PF5551) {
 					texture_data[y * texture.width + x] = ABGR1555ToABGR8888(color).abgr;
-				}
-				else if (texture_format == SCEGU_PF4444) {
+				} else if (texture_format == SCEGU_PF4444) {
 					texture_data[y * texture.width + x] = ABGR4444ToABGR8888(color).abgr;
 				}
 			}
@@ -1003,10 +1000,11 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 
 	cache.size = texture.width * texture.height * bpp;
 
+	// textures larger than 512x512 will have issues with UV interpolation, let's just hope this doesn't happen
 	wgpu::TextureDescriptor texture_desc{};
 	texture_desc.dimension = wgpu::TextureDimension::_2D;
 	texture_desc.format = clut ? wgpu::TextureFormat::R32Uint : wgpu::TextureFormat::RGBA8Uint;
-	texture_desc.size = { texture.width, texture.height, 1 };
+	texture_desc.size = { std::min(texture.width, 512u), std::min(texture.height, 512u), 1 };
 	texture_desc.sampleCount = 1;
 	texture_desc.mipLevelCount = 1;
 	texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
@@ -1019,7 +1017,7 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 	data_layout.bytesPerRow = texture.width * 4;
 	data_layout.rowsPerImage = texture.height;
 
-	queue.writeTexture(destination, texture_data.data(), texture_data.size() * 4, data_layout, {texture.width, texture.height, 1});
+	queue.writeTexture(destination, texture_data.data(), texture_data.size() * 4, data_layout, {std::min(texture.width, 512u), std::min(texture.height, 512u), 1});
 
 	wgpu::BindGroupEntry texture_bindings[2]{};
 	texture_bindings[0].binding = 0;

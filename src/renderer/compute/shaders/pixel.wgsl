@@ -68,6 +68,7 @@ fn drawPixel(pos: vec4u, uv: vec2f, c: vec4u) {
     if (BLEND_OPERATION != 100) {
         color = blend(vec4i(color), vec4i(dst));
     }
+    color.a = dst.a;
 
     textureStore(framebuffer, pos.xy, color); 
 }
