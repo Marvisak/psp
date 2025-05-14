@@ -76,7 +76,7 @@ fn fetchTexel(pos: vec2f, dims: vec2f) -> vec4u {
     var texel = textureLoad(texture, vec2u(tex_pos), 0);
     
     if (CLUT_FORMAT != 100) {
-        texel = fetchClut(texel.r);
+        texel = fetchClut(pack4xU8(texel));
     }
 
     return texel;
