@@ -633,6 +633,7 @@ void Renderer::XStart(uint32_t opcode) {
 	auto src = psp->VirtualToPhysical(transfer_source.buffer);
 	auto dest = psp->VirtualToPhysical(transfer_dest.buffer);
 
+	FlushRender();
 	int bpp = 0;
 	for (int y = 0; y <= transfer_height; y++) {
 		uint32_t src_index = (transfer_source.y + y) * transfer_source.pitch + transfer_source.x;
@@ -645,6 +646,7 @@ void Renderer::XStart(uint32_t opcode) {
 			memcpy(reinterpret_cast<uint16_t*>(dest) + dest_index, reinterpret_cast<uint16_t*>(src) + src_index, (transfer_width + 1) * 2);
 		}
 	}
+	RenderFramebufferChange();
 
 	executed_cycles = ((transfer_height + 1) * (transfer_width + 1) * bpp * 16) / 10;
 }
