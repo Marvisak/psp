@@ -6,6 +6,7 @@
 #include <webgpu/webgpu.hpp>
 
 constexpr auto MAX_BUFFER_VERTEX_COUNT = 16384;
+constexpr auto MAX_BUFFER_CLUT_COUNT = 20;
 
 class ComputeRenderer : public Renderer {
 public:
@@ -113,10 +114,12 @@ private:
 	uint32_t current_fbp = 0;
 
 	std::unordered_map<uint32_t, TextureCacheEntry> texture_cache{};
-	wgpu::Buffer clut_buffer{};
+	std::array<uint32_t, MAX_BUFFER_CLUT_COUNT> clut_cache{};
+	int current_clut = 0;
+	wgpu::Buffer clut_buffer;
 
-	wgpu::Buffer frame_width_buffer{};
-	wgpu::Sampler nearest_sampler{};
+	wgpu::Buffer frame_width_buffer;
+	wgpu::Sampler nearest_sampler;
 	wgpu::Texture framebuffer_texture;
 	uint32_t frame_buffer = 0;
 	int pixel_format = 0;

@@ -35,7 +35,7 @@ fn fetchClut(index: u32) -> vec4u {
     switch (CLUT_FORMAT) {
     case 0u: {
         let word = clut[i / 2];
-        if (index % 2 == 0) {
+        if (i % 2 == 0) {
             return RGB565ToRGBA8888(word & 0xFFFF);
         } else {
             return RGB565ToRGBA8888(word >> 16);
@@ -43,7 +43,7 @@ fn fetchClut(index: u32) -> vec4u {
     }
     case 2u: {
         let word = clut[i / 2];
-        if (index % 2 == 0) {
+        if (i % 2 == 0) {
             return RGBA4444ToRGBA8888(word & 0xFFFF);
         } else {
             return RGBA4444ToRGBA8888(word >> 16);

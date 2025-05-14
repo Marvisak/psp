@@ -263,6 +263,7 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	compute_texture_binding_layouts[1].binding = 1;
 	compute_texture_binding_layouts[1].visibility = wgpu::ShaderStage::Compute;
 	compute_texture_binding_layouts[1].buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
+	compute_texture_binding_layouts[1].buffer.hasDynamicOffset = true;
 	compute_texture_binding_layouts[1].buffer.minBindingSize = 1024;
 
 	wgpu::BindGroupLayoutDescriptor compute_texture_bind_group_layout_desc{};
@@ -347,7 +348,7 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	compute_transitional_buffer = device.createBuffer(compute_transitional_buffer_desc);
 
 	wgpu::BufferDescriptor clut_buffer_desc{};
-	clut_buffer_desc.size = 1024;
+	clut_buffer_desc.size = 1024 * MAX_BUFFER_CLUT_COUNT;
 	clut_buffer_desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage;
 	clut_buffer = device.createBuffer(clut_buffer_desc);
 
@@ -569,7 +570,8 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 	if (textures_enabled) {
 		auto texture_bind_group = GetTexture();
-		compute_pass_encoder.setBindGroup(2, texture_bind_group, 0, nullptr);
+		uint32_t clut_offset = current_clut * 1024;
+		compute_pass_encoder.setBindGroup(2, texture_bind_group, 1, &clut_offset);
 	}
 
 	uint32_t workgroup_count_x = (width + 7) / 8;
@@ -617,7 +619,8 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 
 	if (textures_enabled) {
 		auto texture_bind_group = GetTexture();
-		compute_pass_encoder.setBindGroup(2, texture_bind_group, 0, nullptr);
+		uint32_t clut_offset = current_clut * 1024;
+		compute_pass_encoder.setBindGroup(2, texture_bind_group, 1, &clut_offset);
 	}
 
 	uint32_t workgroup_count_x = (max_x - min_x + 7) / 8;
@@ -640,6 +643,7 @@ void ComputeRenderer::ClearTextureCache() {
 	}
 
 	texture_cache.clear();
+	clut_cache.fill(0);
 }
 
 void ComputeRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
@@ -655,12 +659,29 @@ void ComputeRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
 			it++;
 		}
 	}
+	clut_cache.fill(0);
 }
 
 void ComputeRenderer::CLoad(uint32_t opcode) {
 	Renderer::CLoad(opcode);
 
-	queue.writeBuffer(clut_buffer, 0, clut.data(), clut.size());
+	int free_clut = -1;
+	for (int i = 0; i < clut_cache.size(); i++) {
+		if (clut_cache[i] == clut_addr) {
+			current_clut = i;
+			return;
+		} else if (clut_cache[i] == 0) {
+			free_clut = i;
+		}
+	}
+
+	if (free_clut != -1) {
+		queue.writeBuffer(clut_buffer, free_clut * 1024, clut.data(), clut.size());
+		current_clut = free_clut;
+		clut_cache[free_clut] = clut_addr;
+	} else {
+		spdlog::error("ComputeRenderer: clut cache is full");
+	}
 }
 
 void ComputeRenderer::WaitUntilWorkDone() {
@@ -896,6 +917,7 @@ void ComputeRenderer::FlushRender() {
 	compute_transitional_buffer.unmap();
 
 	compute_vertex_buffer_offset = 0;
+	clut_cache.fill(0);
 }
 
 uint32_t ComputeRenderer::PushVertices(std::vector<Vertex> vertices) {

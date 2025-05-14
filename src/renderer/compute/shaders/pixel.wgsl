@@ -37,12 +37,15 @@ fn blend(src: vec4i, dst: vec4i) -> vec4u {
     switch (BLEND_OPERATION) {
     case 0u: {
         result = ((src * 2 + 1) * (asel * 2 + 1) / 1024) + ((dst * 2 + 1) * (bsel * 2 + 1) / 1024);
+        break;
     } 
     case 1u: {
         result = ((src * 2 + 1) * (asel * 2 + 1) / 1024) - ((dst * 2 + 1) * (bsel * 2 + 1) / 1024);
+        break;
     } 
     case 2u: {
         result = ((dst * 2 + 1) * (bsel * 2 + 1) / 1024) - ((src * 2 + 1) * (asel * 2 + 1) / 1024);
+        break;
     } 
     case 3u: { return vec4u(min(src, dst)); }
     case 4u: { return vec4u(max(src, dst)); }
@@ -88,7 +91,8 @@ fn drawPixel(pos: vec4u, uv: vec2f, c: vec4u) {
     if (BLEND_OPERATION != 100) {
         color = blend(vec4i(color), vec4i(dst));
     }
-    color.a = dst.a;
+    color.a = 0xAA;
+    // color.a = dst.a;
 
     textureStore(framebuffer, pos.xy, color); 
 }
