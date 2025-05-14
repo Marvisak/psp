@@ -353,6 +353,7 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	clut_buffer = device.createBuffer(clut_buffer_desc);
 
 	compute_encoder = device.createCommandEncoder();
+	compute_pass_encoder = compute_encoder.beginComputePass();
 
 	Resize(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
 }
@@ -481,6 +482,17 @@ void ComputeRenderer::Frame() {
 	WaitUntilWorkDone();
 	surface.present();
 
+	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
+		it->second.unused_frames++;
+		if (it->second.unused_frames >= TEXTURE_CACHE_CLEAR_FRAMES) {
+			FreeTexture(it->second);
+			texture_cache.erase(it++);
+		}
+		else {
+			it++;
+		}
+	}
+
 	render_pass.release();
 	encoder.release();
 	command.release();
@@ -552,24 +564,20 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 	auto offset = PushVertices({ start, end });
 
-	auto compute_pass = compute_encoder.beginComputePass();
-
-	compute_pass.setPipeline(pipeline);
-	compute_pass.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
-	compute_pass.setBindGroup(1, compute_render_data_bind_group, 1, &offset);
+	compute_pass_encoder.setPipeline(pipeline);
+	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
+	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 1, &offset);
 
 	if (textures_enabled) {
 		auto texture_bind_group = GetTexture();
-		compute_pass.setBindGroup(2, texture_bind_group, 0, nullptr);
+		compute_pass_encoder.setBindGroup(2, texture_bind_group, 0, nullptr);
 	}
 
 	uint32_t workgroup_count_x = (width + 7) / 8;
 	uint32_t workgroup_count_y = (height + 7) / 8;
 
-	compute_pass.dispatchWorkgroups(workgroup_count_x, workgroup_count_y, 1);
+	compute_pass_encoder.dispatchWorkgroups(workgroup_count_x, workgroup_count_y, 1);
 
-	compute_pass.end();
-	compute_pass.release();
 	queue_empty = false;
 }
 
@@ -604,24 +612,20 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 
 	auto offset = PushVertices({ v0, v1, v2, bounding });
 
-	auto compute_pass = compute_encoder.beginComputePass();
-
-	compute_pass.setPipeline(pipeline);
-	compute_pass.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
-	compute_pass.setBindGroup(1, compute_render_data_bind_group, 1, &offset);
+	compute_pass_encoder.setPipeline(pipeline);
+	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
+	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 1, &offset);
 
 	if (textures_enabled) {
 		auto texture_bind_group = GetTexture();
-		compute_pass.setBindGroup(2, texture_bind_group, 0, nullptr);
+		compute_pass_encoder.setBindGroup(2, texture_bind_group, 0, nullptr);
 	}
 
 	uint32_t workgroup_count_x = (max_x - min_x + 7) / 8;
 	uint32_t workgroup_count_y = (max_y - min_y + 7) / 8;
 
-	compute_pass.dispatchWorkgroups(workgroup_count_x, workgroup_count_y, 1);
+	compute_pass_encoder.dispatchWorkgroups(workgroup_count_x, workgroup_count_y, 1);
 
-	compute_pass.end();
-	compute_pass.release();
 	queue_empty = false;
 }
 
@@ -831,6 +835,8 @@ void ComputeRenderer::FlushRender() {
 		return;
 	}
 
+	compute_pass_encoder.end();
+	compute_pass_encoder.release();
 	auto command = compute_encoder.finish();
 	compute_encoder.release();
 
@@ -839,6 +845,7 @@ void ComputeRenderer::FlushRender() {
 	WaitUntilWorkDone();
 
 	compute_encoder = device.createCommandEncoder();
+	compute_pass_encoder = compute_encoder.beginComputePass();
 
 	auto width = compute_texture.getWidth();
 	int bpp = compute_texture.getFormat() == wgpu::TextureFormat::RGBA8Uint ? 4 : 2;

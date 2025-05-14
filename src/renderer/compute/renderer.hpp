@@ -91,7 +91,8 @@ private:
 
 	std::unordered_map<uint32_t, wgpu::ComputePipeline> compute_pipelines{};
 	bool queue_empty = true;
-	wgpu::CommandEncoder compute_encoder{};
+	wgpu::CommandEncoder compute_encoder;
+	wgpu::ComputePassEncoder compute_pass_encoder;
 	wgpu::BindGroupLayout compute_texture_bind_group_layout;
 	wgpu::BindGroupLayout compute_buffer_bind_group_layout;
 	wgpu::BindGroup compute_buffer_bind_group;
