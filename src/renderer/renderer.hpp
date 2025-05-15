@@ -286,6 +286,7 @@ protected:
 	int executed_cycles = 0;
 
 	SDL_Window* window;
+	bool frame_limiter = true;
 	int frames = 0;
 	int flips = 0;
 	std::chrono::steady_clock::time_point last_frame_time{};

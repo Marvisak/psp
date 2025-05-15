@@ -32,6 +32,16 @@ void Renderer::Frame() {
 		case SDL_EVENT_WINDOW_RESIZED:
 			Resize(event.window.data1, event.window.data2);
 			break;
+		case SDL_EVENT_KEY_DOWN:
+			if (event.key.key == SDLK_TAB) {
+				frame_limiter = false;
+			}
+			break;
+		case SDL_EVENT_KEY_UP:
+			if (event.key.key == SDLK_TAB) {
+				frame_limiter = true;
+			}
+			break;
 		}
 	}
 
@@ -46,7 +56,7 @@ void Renderer::Frame() {
 	}
 
 	auto frame_time = now - last_frame_time;
-	if (frame_time < FRAME_DURATION) {
+	if (frame_time < FRAME_DURATION && frame_limiter) {
 		while ((std::chrono::steady_clock::now() - last_frame_time) < FRAME_DURATION) {
 			std::this_thread::yield();
 		}
