@@ -70,7 +70,7 @@ fn test(func: u32, src: u32, dst: u32) -> bool {
     }
 }
 
-fn drawPixel(pos: vec4u, uv: vec2f, c: vec4u) {
+fn drawPixel(pos: vec4i, uv: vec2f, c: vec4u) {
     if (pos.x < renderData.scissorStart.x || pos.x > renderData.scissorEnd.x 
     ||  pos.y < renderData.scissorStart.y || pos.y > renderData.scissorEnd.y) {
         return;

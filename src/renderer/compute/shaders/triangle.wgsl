@@ -25,7 +25,7 @@ fn draw(@builtin(global_invocation_id) id: vec3u) {
         let eSum = e0 + e1 + e2;
         let uv = (vertices[0].uv * e0 + vertices[1].uv * e1 + vertices[2].uv * e2) / eSum;
 
-        drawPixel(vec4u(pos), uv, vertices[0].color);
+        drawPixel(vec4i(pos), uv, vertices[0].color);
     }
 }
 )"

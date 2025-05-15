@@ -6,8 +6,8 @@ struct Vertex {
 }
 
 struct RenderData {
-    scissorStart: vec2u,
-    scissorEnd: vec2u,
+    scissorStart: vec2i,
+    scissorEnd: vec2i,
     clutShift: u32,
     clutMask: u32,
     clutOffset: u32,
