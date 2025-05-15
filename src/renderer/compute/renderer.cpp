@@ -441,7 +441,6 @@ void ComputeRenderer::Frame() {
 			data_layout.rowsPerImage = BASE_HEIGHT;
 
 			queue.writeTexture(destination, framebuffer, frame_width * BASE_HEIGHT * 4, data_layout, {std::min<uint32_t>(BASE_WIDTH, frame_width), BASE_HEIGHT, 1});
-			WaitUntilWorkDone();
 		} else {
 			wgpu::TexelCopyTextureInfo destination{};
 			destination.texture = framebuffer_conversion_texture;
@@ -451,7 +450,6 @@ void ComputeRenderer::Frame() {
 			data_layout.rowsPerImage = BASE_HEIGHT;
 
 			queue.writeTexture(destination, framebuffer, frame_width * BASE_HEIGHT * 2, data_layout, { std::min<uint32_t>(BASE_WIDTH, frame_width), BASE_HEIGHT, 1 });
-			WaitUntilWorkDone();
 
 			auto compute_pass = encoder.beginComputePass();
 
@@ -482,7 +480,6 @@ void ComputeRenderer::Frame() {
 
 	auto command = encoder.finish();
 	queue.submit(command);
-	WaitUntilWorkDone();
 	surface.present();
 
 	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
@@ -713,24 +710,6 @@ void ComputeRenderer::CLoad(uint32_t opcode) {
 	}
 }
 
-void ComputeRenderer::WaitUntilWorkDone() {
-	bool done = false;
-	wgpu::QueueWorkDoneCallbackInfo callback_info{};
-	callback_info.mode = wgpu::CallbackMode::AllowProcessEvents;
-	callback_info.userdata1 = &done;
-	callback_info.callback = [](WGPUQueueWorkDoneStatus status, void* done, void* _) {
-		if (status == wgpu::QueueWorkDoneStatus::Success) {
-			*reinterpret_cast<bool*>(done) = true;
-		}
-	};
-
-	queue.onSubmittedWorkDone(callback_info);
-
-	while (!done) {
-		queue.submit(0, nullptr);
-	}
-}
-
 wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 	ShaderID id{};
 
@@ -864,7 +843,6 @@ void ComputeRenderer::UpdateRenderTexture() {
 	auto framebuffer = PSP::GetInstance()->VirtualToPhysical(GetFrameBufferAddress());
 
 	queue.writeTexture(destination, framebuffer, fbw * 512 * bpp, data_layout, { fbw, 512, 1 });
-	WaitUntilWorkDone();
 
 	compute_texture_valid = true;
 }
@@ -883,7 +861,6 @@ void ComputeRenderer::UpdateRenderData() {
 
 	queue.writeBuffer(compute_render_data_buffer, 0, &data, sizeof(RenderData));
 	queue.writeBuffer(compute_vertex_buffer, 0, compute_vertices, compute_vertex_buffer_offset);
-	WaitUntilWorkDone();
 }
 
 void ComputeRenderer::FlushRender() {
@@ -893,21 +870,11 @@ void ComputeRenderer::FlushRender() {
 
 	compute_pass_encoder.end();
 	compute_pass_encoder.release();
-	auto command = compute_encoder.finish();
-	compute_encoder.release();
 
-	UpdateRenderData();
-	queue.submit(command);
-	WaitUntilWorkDone();
-
-	compute_encoder = device.createCommandEncoder();
-	compute_pass_encoder = compute_encoder.beginComputePass();
 
 	auto width = compute_texture.getWidth();
 	int bpp = compute_texture.getFormat() == wgpu::TextureFormat::RGBA8Uint ? 4 : 2;
 	auto size = 512 * width * bpp;
-
-	auto encoder = device.createCommandEncoder();
 
 	wgpu::TexelCopyTextureInfo source{};
 	source.texture = compute_texture;
@@ -917,13 +884,16 @@ void ComputeRenderer::FlushRender() {
 	destination.layout.bytesPerRow = width * bpp;
 	destination.layout.rowsPerImage = 512;
 
-	encoder.copyTextureToBuffer(source, destination, { width, 512, 1 });
+	compute_encoder.copyTextureToBuffer(source, destination, { width, 512, 1 });
 
-	auto copy_command = encoder.finish();
-	encoder.release();
+	auto command = compute_encoder.finish();
+	compute_encoder.release();
 
-	queue.submit(copy_command);
-	WaitUntilWorkDone();
+	UpdateRenderData();
+	queue.submit(command);
+
+	compute_encoder = device.createCommandEncoder();
+	compute_pass_encoder = compute_encoder.beginComputePass();
 
 	bool done = false;
 	wgpu::BufferMapCallbackInfo map_callback_info{};

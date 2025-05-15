@@ -66,7 +66,6 @@ private:
 		};
 	};
 
-	void WaitUntilWorkDone();
 	wgpu::ComputePipeline GetShader(uint8_t primitive_type);
 	void UpdateRenderTexture();
 	void UpdateRenderData();
