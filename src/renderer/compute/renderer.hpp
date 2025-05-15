@@ -6,7 +6,7 @@
 #include <webgpu/webgpu.hpp>
 
 constexpr auto MAX_BUFFER_VERTEX_COUNT = 16384;
-constexpr auto MAX_BUFFER_CLUT_COUNT = 20;
+constexpr auto MAX_BUFFER_CLUT_COUNT = 100;
 
 class ComputeRenderer : public Renderer {
 public:
@@ -19,7 +19,7 @@ public:
 	void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format);
 	void DrawRectangle(Vertex start, Vertex end);
 	void DrawTriangle(Vertex v0, Vertex v1, Vertex v2);
-	void DrawTriangleStrip(std::vector<Vertex> vertices) {}
+	void DrawTriangleStrip(std::vector<Vertex> vertices);
 	void DrawTriangleFan(std::vector<Vertex> vertices);
 	void ClearTextureCache();
 	void ClearTextureCache(uint32_t addr, uint32_t size);
@@ -72,7 +72,6 @@ private:
 	void UpdateRenderData();
 	uint32_t PushVertices(std::vector<Vertex> vertices);
 	wgpu::BindGroup GetTexture();
-	void FreeTexture(TextureCacheEntry& entry);
 
 	wgpu::Instance instance;
 	wgpu::Surface surface;
@@ -114,6 +113,7 @@ private:
 	uint32_t current_fbp = 0;
 
 	std::unordered_map<uint32_t, TextureCacheEntry> texture_cache{};
+	std::vector<TextureCacheEntry> deleted_textures{};
 	std::array<uint32_t, MAX_BUFFER_CLUT_COUNT> clut_cache{};
 	int current_clut = 0;
 	wgpu::Buffer clut_buffer;

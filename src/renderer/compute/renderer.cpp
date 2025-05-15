@@ -363,7 +363,10 @@ ComputeRenderer::~ComputeRenderer() {
 		framebuffer_conversion_pipelines[i].release();
 	}
 
-	ClearTextureCache();
+	for (auto& [_, entry] : texture_cache) {
+		entry.bind_group.release();
+		entry.texture.destroy();
+	}
 
 	delete[] compute_vertices;
 	compute_encoder.release();
@@ -485,7 +488,7 @@ void ComputeRenderer::Frame() {
 	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
 		it->second.unused_frames++;
 		if (it->second.unused_frames >= TEXTURE_CACHE_CLEAR_FRAMES) {
-			FreeTexture(it->second);
+			deleted_textures.push_back(it->second);
 			texture_cache.erase(it++);
 		}
 		else {
@@ -600,7 +603,22 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 		return;
 	}
 
-	if (area < 0) {
+
+	if (!clear_mode && culling) {
+		switch (cull_type) {
+		case SCEGU_CCW:
+			if (area < 0) {
+				return;
+			}
+			break;
+		case SCEGU_CW:
+			if (area > 0) {
+				return;
+			}
+			std::swap(v0, v1);
+			break;
+		}
+	} else if (area < 0) {
 		std::swap(v0, v1);
 	}
 
@@ -633,6 +651,12 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	queue_empty = false;
 }
 
+void ComputeRenderer::DrawTriangleStrip(std::vector<Vertex> vertices) {
+	for (int i = 2; i < vertices.size(); i++) {
+		DrawTriangle(vertices[i - 2], vertices[i - 1], vertices[i]);
+	}
+}
+
 void ComputeRenderer::DrawTriangleFan(std::vector<Vertex> vertices) {
 	for (int i = 1; i < vertices.size() - 1; i++) {
 		DrawTriangle(vertices[0], vertices[i], vertices[i + 1]);
@@ -641,7 +665,7 @@ void ComputeRenderer::DrawTriangleFan(std::vector<Vertex> vertices) {
 
 void ComputeRenderer::ClearTextureCache() {
 	for (auto& [_, entry] : texture_cache) {
-		FreeTexture(entry);
+		deleted_textures.push_back(entry);
 	}
 
 	texture_cache.clear();
@@ -653,7 +677,7 @@ void ComputeRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
 	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
 		uint32_t texture_end = it->first + it->second.size / 2;
 		if (addr <= texture_end && addr_end >= it->first) {
-			FreeTexture(it->second);
+			deleted_textures.push_back(it->second);
 			texture_cache.erase(it++);
 		}
 		else {
@@ -927,6 +951,12 @@ void ComputeRenderer::FlushRender() {
 	uint32_t current_checksum = clut_cache[current_clut];
 	clut_cache.fill(0);
 	clut_cache[current_clut] = current_checksum;
+
+	for (auto& entry : deleted_textures) {
+		entry.bind_group.release();
+		entry.texture.destroy();
+	}
+	deleted_textures.clear();
 }
 
 uint32_t ComputeRenderer::PushVertices(std::vector<Vertex> vertices) {
@@ -1074,9 +1104,4 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 	texture_cache[texture.buffer] = cache;
 
 	return cache.bind_group;
-}
-
-void ComputeRenderer::FreeTexture(TextureCacheEntry& entry) {
-	entry.bind_group.release();
-	entry.texture.release();
 }
