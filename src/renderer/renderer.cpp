@@ -48,7 +48,7 @@ void Renderer::Frame() {
 	frames++;
 	auto now = std::chrono::steady_clock::now();
 	if (now >= second_timer) {
-		std::string title = std::format("PSP | {} FPS | {} Flips", frames, flips);
+		std::string title = std::format("PSP | {} FPS | {} Game FPS", frames, flips);
 		SDL_SetWindowTitle(window, title.c_str());
 		second_timer = now + std::chrono::seconds(1);
 		frames = 0;

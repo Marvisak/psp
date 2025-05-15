@@ -36,7 +36,7 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 		spdlog::error("ComputeRenderer: error when accessing adapter info");
 	}
 	else {
-		spdlog::info("Using {}", std::string(adapter_info.device.data, adapter_info.device.length));
+		spdlog::info("ComputeRenderer: Using {}", std::string(adapter_info.device.data, adapter_info.device.length));
 	}
 
 	WGPUFeatureName features[] = {

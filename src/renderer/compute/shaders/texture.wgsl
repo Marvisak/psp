@@ -3,9 +3,9 @@ R"(
 @group(2) @binding(1) var<storage, read> clut : array<u32, 256>;
 
 fn RGB565ToRGBA8888(color: u32) -> vec4u {
-    let r = extractBits(color, 0u, 5u);
-    let g = extractBits(color, 5u, 6u);
     let b = extractBits(color, 11u, 5u);
+    let g = extractBits(color, 5u, 6u);
+    let r = extractBits(color, 0u, 5u);
 
     return vec4u(   
         (r << 3) | (r >> 2),
