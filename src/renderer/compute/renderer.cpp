@@ -909,7 +909,7 @@ void ComputeRenderer::FlushRender() {
 		if (status == wgpu::MapAsyncStatus::Success) {
 			*reinterpret_cast<bool*>(done) = true;
 		}
-		};
+	};
 
 	compute_transitional_buffer.mapAsync(wgpu::MapMode::Read, 0, size, map_callback_info);
 
@@ -923,7 +923,10 @@ void ComputeRenderer::FlushRender() {
 
 	queue_empty = true;
 	compute_vertex_buffer_offset = 0;
+
+	uint32_t current_checksum = clut_cache[current_clut];
 	clut_cache.fill(0);
+	clut_cache[current_clut] = current_checksum;
 }
 
 uint32_t ComputeRenderer::PushVertices(std::vector<Vertex> vertices) {
