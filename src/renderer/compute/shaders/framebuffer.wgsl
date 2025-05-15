@@ -37,9 +37,9 @@ fn rgb565(@builtin(global_invocation_id) id: vec3u) {
 
     let pixel = textureLoad(input_conversion_texture, id.xy, 0).r;
 
-    let b = f32((pixel >> 11) & 0x1F) / 31.0;
-    let g = f32((pixel >> 5)  & 0x3F) / 63.0;
-    let r = f32((pixel >> 0)  & 0x1F) / 31.0;
+    let b = f32(extractBits(pixel, 11u, 5u)) / 31.0;
+    let g = f32(extractBits(pixel, 5u, 6u)) / 63.0;
+    let r = f32(extractBits(pixel, 0u, 5u)) / 31.0;
 
     textureStore(output_conversion_texture, id.xy, vec4f(r, g, b, 1.0));
 }
@@ -53,10 +53,10 @@ fn rgba5551(@builtin(global_invocation_id) id: vec3u) {
 
     let pixel = textureLoad(input_conversion_texture, id.xy, 0).r;
 
-    let a = f32((pixel >> 15) & 0x01);
-    let b = f32((pixel >> 10) & 0x1F) / 31.0;
-    let g = f32((pixel >> 5) & 0x1F) / 31.0;
-    let r = f32((pixel >> 0) & 0x1F) / 31.0;
+    let a = f32(extractBits(pixel, 15u, 1u));
+    let b = f32(extractBits(pixel, 10u, 5u)) / 31.0;
+    let g = f32(extractBits(pixel, 5u, 5u)) / 31.0;
+    let r = f32(extractBits(pixel, 0u, 5u)) / 31.0;
 
     textureStore(output_conversion_texture, id.xy, vec4f(r, g, b, a));
 }
@@ -70,10 +70,10 @@ fn rgba4444(@builtin(global_invocation_id) id: vec3u) {
 
     let pixel = textureLoad(input_conversion_texture, id.xy, 0).r;
 
-    let a = f32((pixel >> 12) & 0xF) / 15.0;
-    let b = f32((pixel >> 8)  & 0xF) / 15.0;
-    let g = f32((pixel >> 4)  & 0xF) / 15.0;
-    let r = f32((pixel >> 0)  & 0xF) / 15.0;
+    let a = f32(extractBits(pixel, 12u, 4u)) / 15.0;
+    let b = f32(extractBits(pixel, 8u, 4u))  / 15.0;
+    let g = f32(extractBits(pixel, 4u, 4u))  / 15.0;
+    let r = f32(extractBits(pixel, 0u, 4u))  / 15.0;
 
     textureStore(output_conversion_texture, id.xy, vec4f(r, g, b, a));
 }
