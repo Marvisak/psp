@@ -190,7 +190,7 @@ static bool sceDisplayIsVblank() {
 }
 
 static float sceDisplayGetFramePerSec() {
-	return 59.9400599f;
+	return REFRESH_RATE;
 }
 
 static int sceDisplayGetVcount() {

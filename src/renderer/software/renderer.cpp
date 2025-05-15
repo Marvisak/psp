@@ -38,6 +38,8 @@ void SoftwareRenderer::Frame() {
 }
 
 void SoftwareRenderer::SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format) {
+	Renderer::SetFrameBuffer(frame_buffer, frame_width, pixel_format);
+
 	SDL_PixelFormat sdl_pixel_format{};
 	switch (pixel_format) {
 	case SCE_DISPLAY_PIXEL_RGB565: sdl_pixel_format = SDL_PIXELFORMAT_BGR565; frame_width *= 2; break;

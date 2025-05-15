@@ -38,15 +38,18 @@ void Renderer::Frame() {
 	frames++;
 	auto now = std::chrono::steady_clock::now();
 	if (now >= second_timer) {
-		std::string title = std::format("PSP | {} FPS", frames);
+		std::string title = std::format("PSP | {} FPS | {} Flips", frames, flips);
 		SDL_SetWindowTitle(window, title.c_str());
 		second_timer = now + std::chrono::seconds(1);
 		frames = 0;
+		flips = 0;
 	}
 
 	auto frame_time = now - last_frame_time;
 	if (frame_time < FRAME_DURATION) {
-		std::this_thread::sleep_for(FRAME_DURATION - frame_time);
+		while ((std::chrono::steady_clock::now() - last_frame_time) < FRAME_DURATION) {
+			std::this_thread::yield();
+		}
 	}
 	last_frame_time = std::chrono::steady_clock::now();
 }

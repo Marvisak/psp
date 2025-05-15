@@ -48,7 +48,7 @@ constexpr auto BASE_WIDTH = 480;
 constexpr auto BASE_HEIGHT = 272;
 constexpr auto BASE_WINDOW_WIDTH = BASE_WIDTH * 2;
 constexpr auto BASE_WINDOW_HEIGHT = BASE_HEIGHT * 2;
-constexpr auto REFRESH_RATE = 60;
+constexpr auto REFRESH_RATE = 59.9400599f;
 constexpr auto FRAME_DURATION = std::chrono::duration<double, std::milli>(1000 / REFRESH_RATE);
 
 struct WaitObject;
@@ -87,9 +87,9 @@ public:
 	~Renderer();
 
 	virtual void Frame();
+	virtual void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format) { flips++; }
 	virtual void Resize(int width, int height) = 0;
 	virtual void RenderFramebufferChange() = 0;
-	virtual void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format) = 0;
 	virtual void DrawRectangle(Vertex start, Vertex end) = 0;
 	virtual void DrawTriangle(Vertex v0, Vertex v1, Vertex v2) = 0;
 	virtual void DrawTriangleStrip(std::vector<Vertex> vertices) = 0;
@@ -287,6 +287,7 @@ protected:
 
 	SDL_Window* window;
 	int frames = 0;
+	int flips = 0;
 	std::chrono::steady_clock::time_point last_frame_time{};
 	std::chrono::steady_clock::time_point second_timer{};
 };

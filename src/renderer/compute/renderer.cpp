@@ -524,6 +524,8 @@ void ComputeRenderer::Resize(int width, int height) {
 }
 
 void ComputeRenderer::SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format) {
+	Renderer::SetFrameBuffer(frame_buffer, frame_width, pixel_format);
+
 	this->frame_buffer = frame_buffer;
 	this->pixel_format = pixel_format;
 
@@ -643,7 +645,6 @@ void ComputeRenderer::ClearTextureCache() {
 	}
 
 	texture_cache.clear();
-	clut_cache.fill(0);
 }
 
 void ComputeRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
@@ -659,15 +660,19 @@ void ComputeRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
 			it++;
 		}
 	}
-	clut_cache.fill(0);
 }
 
 void ComputeRenderer::CLoad(uint32_t opcode) {
 	Renderer::CLoad(opcode);
 
+	uint32_t checksum = 0;
+	for (int i = 0; i < 1024; i++) {
+		checksum += clut[i] * i;
+	}
+
 	int free_clut = -1;
 	for (int i = 0; i < clut_cache.size(); i++) {
-		if (clut_cache[i] == clut_addr) {
+		if (clut_cache[i] == checksum) {
 			current_clut = i;
 			return;
 		} else if (clut_cache[i] == 0) {
@@ -678,7 +683,7 @@ void ComputeRenderer::CLoad(uint32_t opcode) {
 	if (free_clut != -1) {
 		queue.writeBuffer(clut_buffer, free_clut * 1024, clut.data(), clut.size());
 		current_clut = free_clut;
-		clut_cache[free_clut] = clut_addr;
+		clut_cache[free_clut] = checksum;
 	} else {
 		spdlog::error("ComputeRenderer: clut cache is full");
 	}
@@ -904,7 +909,7 @@ void ComputeRenderer::FlushRender() {
 		if (status == wgpu::MapAsyncStatus::Success) {
 			*reinterpret_cast<bool*>(done) = true;
 		}
-	};
+		};
 
 	compute_transitional_buffer.mapAsync(wgpu::MapMode::Read, 0, size, map_callback_info);
 
