@@ -68,22 +68,27 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	SetupFramebufferConversion(framebuffer_shader_module);
 	framebuffer_shader_module.release();
 
-	wgpu::BindGroupLayoutEntry compute_texture_binding_layouts[2]{};
-	compute_texture_binding_layouts[0].binding = 0;
-	compute_texture_binding_layouts[0].visibility = wgpu::ShaderStage::Compute;
-	compute_texture_binding_layouts[0].texture.sampleType = wgpu::TextureSampleType::Uint;
-	compute_texture_binding_layouts[0].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-
-	compute_texture_binding_layouts[1].binding = 1;
-	compute_texture_binding_layouts[1].visibility = wgpu::ShaderStage::Compute;
-	compute_texture_binding_layouts[1].buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
-	compute_texture_binding_layouts[1].buffer.hasDynamicOffset = true;
-	compute_texture_binding_layouts[1].buffer.minBindingSize = 1024;
+	wgpu::BindGroupLayoutEntry compute_texture_binding_layout{};
+	compute_texture_binding_layout.binding = 0;
+	compute_texture_binding_layout.visibility = wgpu::ShaderStage::Compute;
+	compute_texture_binding_layout.texture.sampleType = wgpu::TextureSampleType::Uint;
+	compute_texture_binding_layout.texture.viewDimension = wgpu::TextureViewDimension::_2D;
 
 	wgpu::BindGroupLayoutDescriptor compute_texture_bind_group_layout_desc{};
-	compute_texture_bind_group_layout_desc.entryCount = 2;
-	compute_texture_bind_group_layout_desc.entries = compute_texture_binding_layouts;
+	compute_texture_bind_group_layout_desc.entryCount = 1;
+	compute_texture_bind_group_layout_desc.entries = &compute_texture_binding_layout;
 	compute_texture_bind_group_layout = device.createBindGroupLayout(compute_texture_bind_group_layout_desc);
+
+	wgpu::BindGroupLayoutEntry compute_clut_binding_layout{};
+	compute_clut_binding_layout.binding = 0;
+	compute_clut_binding_layout.visibility = wgpu::ShaderStage::Compute;
+	compute_clut_binding_layout.texture.sampleType = wgpu::TextureSampleType::Uint;
+	compute_clut_binding_layout.texture.viewDimension = wgpu::TextureViewDimension::_1D;
+
+	wgpu::BindGroupLayoutDescriptor compute_clut_bind_group_layout_desc{};
+	compute_clut_bind_group_layout_desc.entryCount = 1;
+	compute_clut_bind_group_layout_desc.entries = &compute_clut_binding_layout;
+	compute_clut_bind_group_layout = device.createBindGroupLayout(compute_clut_bind_group_layout_desc);
 
 	wgpu::BindGroupLayoutEntry compute_buffer_binding_layouts[1]{};
 	compute_buffer_binding_layouts[0].binding = 0;
@@ -117,11 +122,12 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	WGPUBindGroupLayout compute_bind_group_layouts[] = {
 		compute_buffer_bind_group_layout,
 		compute_render_data_bind_group_layout,
-		compute_texture_bind_group_layout
+		compute_texture_bind_group_layout,
+		compute_clut_bind_group_layout
 	};
 
 	wgpu::PipelineLayoutDescriptor compute_texture_layout_desc{};
-	compute_texture_layout_desc.bindGroupLayoutCount = 3;
+	compute_texture_layout_desc.bindGroupLayoutCount = 4;
 	compute_texture_layout_desc.bindGroupLayouts = compute_bind_group_layouts;
 	compute_texture_layout = device.createPipelineLayout(compute_texture_layout_desc);
 
@@ -150,7 +156,6 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	compute_render_data_bind_group = device.createBindGroup(compute_render_data_bind_group_desc);
 
 	compute_transitional_buffer = CreateBuffer(512 * 512 * 4, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead);
-	clut_buffer = CreateBuffer(1024 * MAX_BUFFER_CLUT_COUNT, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage);
 
 	Resize(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
 
@@ -168,9 +173,14 @@ ComputeRenderer::~ComputeRenderer() {
 		entry.texture.destroy();
 	}
 
+	for (auto& [_, entry] : clut_cache) {
+		entry.bind_group.release();
+		entry.texture.destroy();
+	}
+
 	delete[] compute_vertices;
 	compute_encoder.release();
-	clut_buffer.release();
+	compute_clut_bind_group_layout.release();
 	compute_texture_bind_group_layout.release();
 	compute_transitional_buffer.release();
 	compute_render_data_bind_group.release();
@@ -372,8 +382,8 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 	if (textures_enabled) {
 		auto texture_bind_group = GetTexture();
-		uint32_t clut_offset = current_clut * 1024;
-		compute_pass_encoder.setBindGroup(2, texture_bind_group, 1, &clut_offset);
+		compute_pass_encoder.setBindGroup(2, texture_bind_group, 0, nullptr);
+		compute_pass_encoder.setBindGroup(3, clut_cache[current_clut].bind_group, 0, nullptr);
 	}
 
 	uint32_t workgroup_count_x = (width + 7) / 8;
@@ -435,8 +445,8 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 
 	if (textures_enabled) {
 		auto texture_bind_group = GetTexture();
-		uint32_t clut_offset = current_clut * 1024;
-		compute_pass_encoder.setBindGroup(2, texture_bind_group, 1, &clut_offset);
+		compute_pass_encoder.setBindGroup(2, texture_bind_group, 0, nullptr);
+		compute_pass_encoder.setBindGroup(3, clut_cache[current_clut].bind_group, 0, nullptr);
 	}
 
 	uint32_t workgroup_count_x = (max_x - min_x + 7) / 8;
@@ -489,24 +499,61 @@ void ComputeRenderer::CLoad(uint32_t opcode) {
 	for (int i = 0; i < 1024; i++) {
 		checksum += clut[i] * i;
 	}
+	current_clut = checksum;
 
-	int free_clut = -1;
-	for (int i = 0; i < clut_cache.size(); i++) {
-		if (clut_cache[i] == checksum) {
-			current_clut = i;
-			return;
-		} else if (clut_cache[i] == 0) {
-			free_clut = i;
+	if (clut_cache.contains(checksum)) {
+		return;
+	}
+
+	ClutCacheEntry cache{};
+
+	std::vector<uint32_t> clut_data;
+
+	switch (clut_format) {
+	case SCEGU_PF5650:
+		clut_data.resize(512);
+		for (int i = 0; i < 512; i++) {
+			clut_data[i] = BGR565ToABGR8888(reinterpret_cast<uint16_t*>(clut.data())[i]).abgr;
 		}
+		break;
+	case SCEGU_PF8888:
+		clut_data.resize(256);
+		memcpy(clut_data.data(), clut.data(), 1024);
+		break;
+	default:
+		spdlog::error("ComputeRenderer: unknown clut format {}", clut_format);
+		break;
 	}
 
-	if (free_clut != -1) {
-		queue.writeBuffer(clut_buffer, free_clut * 1024, clut.data(), clut.size());
-		current_clut = free_clut;
-		clut_cache[free_clut] = checksum;
-	} else {
-		spdlog::error("ComputeRenderer: clut cache is full");
-	}
+	wgpu::TextureDescriptor texture_desc{};
+	texture_desc.dimension = wgpu::TextureDimension::_1D;
+	texture_desc.format = wgpu::TextureFormat::RGBA8Uint;
+	texture_desc.size = { 256, 1, 1 };
+	texture_desc.sampleCount = 1;
+	texture_desc.mipLevelCount = 1;
+	texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
+	cache.texture = device.createTexture(texture_desc);
+
+	wgpu::TexelCopyTextureInfo destination{};
+	destination.texture = cache.texture;
+
+	wgpu::TexelCopyBufferLayout data_layout{};
+	data_layout.bytesPerRow = 1024;
+	data_layout.rowsPerImage = 1;
+
+	queue.writeTexture(destination, clut_data.data(), clut_data.size() * 4, data_layout, { 256, 1, 1 });
+
+	wgpu::BindGroupEntry texture_binding{};
+	texture_binding.binding = 0;
+	texture_binding.textureView = cache.texture.createView();
+
+	wgpu::BindGroupDescriptor texture_bind_group_desc{};
+	texture_bind_group_desc.layout = compute_clut_bind_group_layout;
+	texture_bind_group_desc.entryCount = 1;
+	texture_bind_group_desc.entries = &texture_binding;
+	cache.bind_group = device.createBindGroup(texture_bind_group_desc);
+
+	clut_cache[checksum] = cache;
 }
 
 wgpu::ShaderModule ComputeRenderer::CreateShaderModule(wgpu::StringView code) {
@@ -898,10 +945,6 @@ void ComputeRenderer::FlushRender() {
 	queue_empty = true;
 	compute_vertex_buffer_offset = 0;
 
-	uint32_t current_checksum = clut_cache[current_clut];
-	clut_cache.fill(0);
-	clut_cache[current_clut] = current_checksum;
-
 	for (auto& entry : deleted_textures) {
 		entry.bind_group.release();
 		entry.texture.destroy();
@@ -1037,18 +1080,14 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 
 	queue.writeTexture(destination, texture_data.data(), texture_data.size() * 4, data_layout, {std::min(texture.width, 512u), std::min(texture.height, 512u), 1});
 
-	wgpu::BindGroupEntry texture_bindings[2]{};
-	texture_bindings[0].binding = 0;
-	texture_bindings[0].textureView = cache.texture.createView();
-
-	texture_bindings[1].binding = 1;
-	texture_bindings[1].buffer = clut_buffer;
-	texture_bindings[1].size = 1024;
+	wgpu::BindGroupEntry texture_binding{};
+	texture_binding.binding = 0;
+	texture_binding.textureView = cache.texture.createView();
 
 	wgpu::BindGroupDescriptor texture_bind_group_desc{};
 	texture_bind_group_desc.layout = compute_texture_bind_group_layout;
-	texture_bind_group_desc.entryCount = 2;
-	texture_bind_group_desc.entries = texture_bindings;
+	texture_bind_group_desc.entryCount = 1;
+	texture_bind_group_desc.entries = &texture_binding;
 	cache.bind_group = device.createBindGroup(texture_bind_group_desc);
 
 	texture_cache[texture.buffer] = cache;

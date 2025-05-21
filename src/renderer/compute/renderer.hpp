@@ -6,7 +6,6 @@
 #include <webgpu/webgpu.hpp>
 
 constexpr auto MAX_BUFFER_VERTEX_COUNT = 16384;
-constexpr auto MAX_BUFFER_CLUT_COUNT = 100;
 
 class ComputeRenderer : public Renderer {
 public:
@@ -47,6 +46,11 @@ private:
 	struct TextureCacheEntry {
 		int unused_frames;
 		uint32_t size;
+		wgpu::Texture texture;
+		wgpu::BindGroup bind_group;
+	};
+
+	struct ClutCacheEntry {
 		wgpu::Texture texture;
 		wgpu::BindGroup bind_group;
 	};
@@ -103,6 +107,7 @@ private:
 	wgpu::CommandEncoder compute_encoder;
 	wgpu::ComputePassEncoder compute_pass_encoder;
 	wgpu::BindGroupLayout compute_texture_bind_group_layout;
+	wgpu::BindGroupLayout compute_clut_bind_group_layout;
 	wgpu::BindGroupLayout compute_buffer_bind_group_layout;
 	wgpu::BindGroup compute_buffer_bind_group;
 	wgpu::BindGroupLayout compute_render_data_bind_group_layout;
@@ -120,9 +125,8 @@ private:
 
 	std::unordered_map<uint32_t, TextureCacheEntry> texture_cache{};
 	std::vector<TextureCacheEntry> deleted_textures{};
-	std::array<uint32_t, MAX_BUFFER_CLUT_COUNT> clut_cache{};
-	int current_clut = 0;
-	wgpu::Buffer clut_buffer;
+	std::unordered_map<uint32_t, ClutCacheEntry> clut_cache{};
+	uint32_t current_clut = 0;
 
 	wgpu::Buffer frame_width_buffer;
 	wgpu::Sampler nearest_sampler;

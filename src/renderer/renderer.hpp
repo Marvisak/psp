@@ -84,7 +84,7 @@ struct Transfer {
 
 class Renderer {
 public:
-	~Renderer();
+	virtual ~Renderer();
 
 	virtual void Frame();
 	virtual void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format) { flips++; }
