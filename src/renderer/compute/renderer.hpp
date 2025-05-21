@@ -66,6 +66,13 @@ private:
 		};
 	};
 
+	wgpu::ShaderModule CreateShaderModule(wgpu::StringView code);
+	wgpu::Buffer CreateBuffer(uint64_t size, wgpu::BufferUsage usage);
+
+	void SetupRenderPipeline(wgpu::ShaderModule shader_module);
+	void SetupRenderBindGroup();
+	void SetupFramebufferConversion(wgpu::ShaderModule shader_module);
+
 	wgpu::ComputePipeline GetShader(uint8_t primitive_type);
 	void UpdateRenderTexture();
 	void UpdateRenderData();
