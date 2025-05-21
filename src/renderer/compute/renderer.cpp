@@ -302,6 +302,7 @@ void ComputeRenderer::Frame() {
 			it++;
 		}
 	}
+	cleared_cache = false;
 
 	render_pass.release();
 	encoder.release();
@@ -470,14 +471,23 @@ void ComputeRenderer::DrawTriangleFan(std::vector<Vertex> vertices) {
 }
 
 void ComputeRenderer::ClearTextureCache() {
+	if (cleared_cache) {
+		return;
+	}
+
 	for (auto& [_, entry] : texture_cache) {
 		deleted_textures.push_back(entry);
 	}
-
+	
+	cleared_cache = true;
 	texture_cache.clear();
 }
 
 void ComputeRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
+	if (cleared_cache) {
+		return;
+	}
+
 	addr &= 0x3FFFFFFF;
 	uint32_t addr_end = addr + size;
 	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
@@ -490,6 +500,7 @@ void ComputeRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
 			it++;
 		}
 	}
+	cleared_cache = true;
 }
 
 void ComputeRenderer::CLoad(uint32_t opcode) {

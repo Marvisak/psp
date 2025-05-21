@@ -123,6 +123,9 @@ private:
 	wgpu::Buffer compute_transitional_buffer;
 	uint32_t current_fbp = 0;
 
+	// Some games just loooove clearing the cache, which absolutelly butchers performance
+	// So let's just clear it once per frame and be done with it
+	bool cleared_cache = false;
 	std::unordered_map<uint32_t, TextureCacheEntry> texture_cache{};
 	std::vector<TextureCacheEntry> deleted_textures{};
 	std::unordered_map<uint32_t, ClutCacheEntry> clut_cache{};
