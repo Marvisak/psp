@@ -518,24 +518,6 @@ void ComputeRenderer::CLoad(uint32_t opcode) {
 
 	ClutCacheEntry cache{};
 
-	std::vector<uint32_t> clut_data;
-
-	switch (clut_format) {
-	case SCEGU_PF5650:
-		clut_data.resize(512);
-		for (int i = 0; i < 512; i++) {
-			clut_data[i] = BGR565ToABGR8888(reinterpret_cast<uint16_t*>(clut.data())[i]).abgr;
-		}
-		break;
-	case SCEGU_PF8888:
-		clut_data.resize(256);
-		memcpy(clut_data.data(), clut.data(), 1024);
-		break;
-	default:
-		spdlog::error("ComputeRenderer: unknown clut format {}", clut_format);
-		break;
-	}
-
 	wgpu::TextureDescriptor texture_desc{};
 	texture_desc.dimension = wgpu::TextureDimension::_1D;
 	texture_desc.format = wgpu::TextureFormat::RGBA8Uint;
@@ -552,7 +534,7 @@ void ComputeRenderer::CLoad(uint32_t opcode) {
 	data_layout.bytesPerRow = 1024;
 	data_layout.rowsPerImage = 1;
 
-	queue.writeTexture(destination, clut_data.data(), clut_data.size() * 4, data_layout, { 256, 1, 1 });
+	queue.writeTexture(destination, clut.data(), 1024, data_layout, { 256, 1, 1 });
 
 	wgpu::BindGroupEntry texture_binding{};
 	texture_binding.binding = 0;

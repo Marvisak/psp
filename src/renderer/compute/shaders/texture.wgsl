@@ -2,6 +2,19 @@ R"(
 @group(2) @binding(0) var texture: texture_2d<u32>;
 @group(3) @binding(0) var clut : texture_1d<u32>;
 
+fn fetchClut(index: u32) -> vec4u {
+    let i = ((index >> renderData.clutShift) & renderData.clutMask) | (renderData.clutOffset & select(0x1FFu, 0xFFu, CLUT_FORMAT == 3));
+    switch (CLUT_FORMAT) {
+    case 3u: {
+        return textureLoad(clut, i, 0);
+    }
+    default: {
+        // Just some value that should be hard to miss
+        return vec4u(255, 0, 0, 255);
+    }
+    }
+}
+
 fn fetchTexel(pos: vec2f, dims: vec2f) -> vec4u {
     var tex_pos = pos;
     if (U_CLAMP == 1) {
@@ -19,8 +32,7 @@ fn fetchTexel(pos: vec2f, dims: vec2f) -> vec4u {
     var texel = textureLoad(texture, vec2u(tex_pos), 0);
     
     if (CLUT_FORMAT != 100) {
-        let index = ((texel.r >> renderData.clutShift) & renderData.clutMask) | (renderData.clutOffset & select(0x1FFu, 0xFFu, CLUT_FORMAT == 3));
-        texel = textureLoad(clut, index, 0);
+        texel = fetchClut(texel.r);
     }
 
     return texel;

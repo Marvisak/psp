@@ -130,6 +130,8 @@ void Renderer::Run() {
 		case CMD_SHADE: gouraud_shading = command & 1; break;
 		case CMD_MATERIAL: material_update = command & 1; break;
 		case CMD_MAC: ambient_color = command & 0xFFFFFF; break;
+		case CMD_MDC: spdlog::warn("Renderer: unimplemented GE command CMD_MDC"); break;
+		case CMD_MSC: spdlog::warn("Renderer: unimplemented GE command CMD_MSC"); break;
 		case CMD_MAA: ambient_alpha = command & 0xFF; break;
 		case CMD_MK: spdlog::warn("Renderer: unimplemented GE command CMD_MK"); break;
 		case CMD_CULL: cull_type = command & 0x1; break;
@@ -154,7 +156,7 @@ void Renderer::Run() {
 		case CMD_TSIZE6:
 		case CMD_TSIZE7:
 			TSize(command); break;
-		case CMD_TMODE: TMode(command); break;
+		case CMD_TMODE: texture_swizzling = command & 1; break;
 		case CMD_TPF: texture_format = command & 0xFFFFFF; break;
 		case CMD_CLOAD: CLoad(command); break;
 		case CMD_CLUT: CLUT(command); break;
@@ -589,13 +591,6 @@ void Renderer::TSize(uint32_t opcode) {
 	auto& texture = textures[(opcode >> 24) - CMD_TSIZE0];
 	texture.width = 1 << (opcode & 0xF);
 	texture.height = 1 << ((opcode >> 8) & 0xF);
-}
-
-void Renderer::TMode(uint32_t opcode) {
-	if ((opcode & 1) != 0) {
-		spdlog::error("Renderer: texture swizzling not implemented");
-		return;
-	}
 }
 
 void Renderer::TFunc(uint32_t opcode) {

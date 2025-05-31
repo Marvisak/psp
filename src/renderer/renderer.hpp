@@ -157,7 +157,6 @@ public:
 	void WorldD(uint32_t opcode);
 	void ViewD(uint32_t opcode);
 	void ProjD(uint32_t opcode);
-	void TMode(uint32_t opcode);
 	virtual void CLoad(uint32_t opcode);
 	void CLUT(uint32_t opcode);
 	void TSize(uint32_t opcode);
@@ -248,6 +247,7 @@ protected:
 	std::array<Texture, 8> textures{};
 	bool textures_enabled = false;
 	bool texture_alpha = false;
+	bool texture_swizzling = false;
 	bool fragment_double = false;
 	uint8_t texture_format = 0;
 	uint8_t texture_function = 0;
@@ -363,6 +363,8 @@ enum GECommand {
 	CMD_SHADE = 0x50,
 	CMD_MATERIAL = 0x53,
 	CMD_MAC = 0x55,
+	CMD_MDC = 0x56,
+	CMD_MSC = 0x57,
 	CMD_MAA = 0x58,
 	CMD_MK = 0x5B,
 	CMD_CULL = 0x9B,
