@@ -132,8 +132,8 @@ private:
 
 	std::unordered_map<uint32_t, TextureCacheEntry> texture_cache{};
 	std::vector<TextureCacheEntry> deleted_textures{};
-	std::unordered_map<uint32_t, ClutCacheEntry> clut_cache{};
-	uint32_t current_clut = 0;
+	std::unordered_map<uint64_t, ClutCacheEntry> clut_cache{};
+	uint64_t current_clut = 0;
 
 	wgpu::Buffer frame_width_buffer;
 	wgpu::Sampler nearest_sampler;

@@ -495,9 +495,10 @@ void ComputeRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
 void ComputeRenderer::CLoad(uint32_t opcode) {
 	Renderer::CLoad(opcode);
 
-	uint32_t checksum = 0;
-	for (int i = 0; i < 1024; i++) {
-		checksum += clut[i] * i;
+	uint64_t checksum = 14695981039346656037ull;
+	for (auto byte : clut) {
+		checksum ^= byte;
+		checksum *= 1099511628211ull;
 	}
 	current_clut = checksum;
 
