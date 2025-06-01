@@ -24,8 +24,9 @@ MemoryAllocator::~MemoryAllocator() {
 }
 
 uint32_t MemoryAllocator::Alloc(uint32_t size, std::string name, uint32_t alignment) {
-	if (alignment == -1)
+	if (alignment == -1) {
 		alignment = default_alignment;
+	}
 	size = ALIGN(size, alignment);
 	
 	if (size > this->size) {
@@ -66,8 +67,9 @@ uint32_t MemoryAllocator::Alloc(uint32_t size, std::string name, uint32_t alignm
 }
 
 uint32_t MemoryAllocator::AllocTop(uint32_t size, std::string name, uint32_t alignment) {
-	if (alignment == -1)
+	if (alignment == -1) {
 		alignment = default_alignment;
+	}
 
 	if (size > this->size) {
 		spdlog::error("MemoryAllocator: bogus size {} bytes", size);
@@ -110,8 +112,9 @@ uint32_t MemoryAllocator::AllocTop(uint32_t size, std::string name, uint32_t ali
 }
 
 uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, std::string name, uint32_t alignment) {
-	if (alignment == -1)
+	if (alignment == -1) {
 		alignment = default_alignment;
+	}
 
 	if (addr & (alignment - 1)) {
 		uint32_t aligned_addr = addr & ~(alignment - 1);

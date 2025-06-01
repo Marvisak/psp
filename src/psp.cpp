@@ -19,8 +19,21 @@ PSP::PSP(RendererType renderer_type) {
 	instance = this;
 	ram = std::make_unique<uint8_t[]>(USER_MEMORY_END - KERNEL_MEMORY_START);
 	vram = std::make_unique<uint8_t[]>(VRAM_END - VRAM_START);
+	page_table = std::make_unique<uintptr_t[]>(0x100000000 / PAGE_SIZE);
+	int vram_page_table_count = (VRAM_END - VRAM_START) / PAGE_SIZE;
+	for (int i = 0; i < vram_page_table_count; i++) {
+		page_table[i + 64] = reinterpret_cast<uintptr_t>(&vram[i * PAGE_SIZE]);
+	}
+
+	int ram_page_table_count = (USER_MEMORY_END - KERNEL_MEMORY_START) / PAGE_SIZE;
+	for (int i = 0; i < ram_page_table_count; i++) {
+		page_table[i + 128] = reinterpret_cast<uintptr_t>(&ram[i * PAGE_SIZE]);
+	}
+
 	kernel = std::make_unique<Kernel>();
 	cpu = std::make_unique<CPU>();
+
+
 
 	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
 		spdlog::error("PSP: SDL init error {}", SDL_GetError());
@@ -140,13 +153,13 @@ bool PSP::LoadMemStick(std::string path) {
 void* PSP::VirtualToPhysical(uint32_t addr) {
 	addr &= 0x0FFFFFFF;
 
-	if (addr >= VRAM_START && addr <= VRAM_END) {
-		return vram.get() + ((addr - VRAM_START) % 0x1FFFFF);
-	} else if (addr >= KERNEL_MEMORY_START && addr <= USER_MEMORY_END) {
-		return ram.get() + addr - KERNEL_MEMORY_START;
+	auto page = page_table[addr >> 20];
+	if (!page) {
+		spdlog::error("PSP: cannot convert {:x} to physical addr", addr);
+		return nullptr;
 	}
-	spdlog::error("PSP: cannot convert {:x} to physical addr", addr);
-	return nullptr;
+
+	return reinterpret_cast<uint8_t*>(page) + (addr & 0xFFFFF);
 }
 
 uint32_t PSP::GetMaxSize(uint32_t addr) {

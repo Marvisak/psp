@@ -8,12 +8,13 @@
 #include "renderer/renderer.hpp"
 #include "kernel/kernel.hpp"
 
+constexpr auto PAGE_SIZE = 0x100000;
 constexpr auto RAM_SIZE = 0x4000000;
 constexpr auto KERNEL_MEMORY_START = 0x08000000;
 constexpr auto USER_MEMORY_START = 0x08800000;
 constexpr auto USER_MEMORY_END = KERNEL_MEMORY_START + RAM_SIZE;
 constexpr auto VRAM_START = 0x04000000;
-constexpr auto VRAM_END = 0x047FFFFF;
+constexpr auto VRAM_END = 0x04800000;
 
 constexpr auto CPU_HZ = 222000000;
 
@@ -111,6 +112,7 @@ private:
 	std::vector<std::shared_ptr<ScheduledEvent>> events;
 	std::unique_ptr<uint8_t[]> ram;
 	std::unique_ptr<uint8_t[]> vram;
+	std::unique_ptr<uintptr_t[]> page_table;
 };
 
 void UnixTimestampToDateTime(tm* time, ScePspDateTime* out);
