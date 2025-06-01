@@ -30,7 +30,10 @@ override ALPHA_FUNC: u32 = 100;
 override USE_TEXTURE_ALPHA: u32 = 0;
 override FRAGMENT_DOUBLE : u32 = 0;
 override TEXTURE_FUNCTION : u32 = 0;
+override DEPTH_FUNC: u32 = 100;
+override DEPTH_WRITE: u32 = 0;
 
 @group(0) @binding(0) var framebuffer: texture_storage_2d<rgba8uint, read_write>;
+@group(0) @binding(1) var depth_buffer: texture_storage_2d<r16uint, read_write>;
 @group(1) @binding(0) var<uniform> renderData: RenderData; 
 )"

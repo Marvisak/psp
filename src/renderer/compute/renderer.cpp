@@ -90,15 +90,21 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	compute_clut_bind_group_layout_desc.entries = &compute_clut_binding_layout;
 	compute_clut_bind_group_layout = device.createBindGroupLayout(compute_clut_bind_group_layout_desc);
 
-	wgpu::BindGroupLayoutEntry compute_buffer_binding_layouts[1]{};
+	wgpu::BindGroupLayoutEntry compute_buffer_binding_layouts[2]{};
 	compute_buffer_binding_layouts[0].binding = 0;
 	compute_buffer_binding_layouts[0].visibility = wgpu::ShaderStage::Compute;
 	compute_buffer_binding_layouts[0].storageTexture.access = wgpu::StorageTextureAccess::ReadWrite;
 	compute_buffer_binding_layouts[0].storageTexture.format = wgpu::TextureFormat::RGBA8Uint;
 	compute_buffer_binding_layouts[0].storageTexture.viewDimension = wgpu::TextureViewDimension::_2D;
 
+	compute_buffer_binding_layouts[1].binding = 1;
+	compute_buffer_binding_layouts[1].visibility = wgpu::ShaderStage::Compute;
+	compute_buffer_binding_layouts[1].storageTexture.access = wgpu::StorageTextureAccess::ReadWrite;
+	compute_buffer_binding_layouts[1].storageTexture.format = wgpu::TextureFormat::R16Uint;
+	compute_buffer_binding_layouts[1].storageTexture.viewDimension = wgpu::TextureViewDimension::_2D;
+
 	wgpu::BindGroupLayoutDescriptor compute_buffer_bind_group_layout_desc{};
-	compute_buffer_bind_group_layout_desc.entryCount = 1;
+	compute_buffer_bind_group_layout_desc.entryCount = 2;
 	compute_buffer_bind_group_layout_desc.entries = compute_buffer_binding_layouts;
 	compute_buffer_bind_group_layout = device.createBindGroupLayout(compute_buffer_bind_group_layout_desc);
 
@@ -156,6 +162,7 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 	compute_render_data_bind_group = device.createBindGroup(compute_render_data_bind_group_desc);
 
 	compute_transitional_buffer = CreateBuffer(512 * 512 * 4, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead);
+	compute_depth_transitional_buffer = CreateBuffer(512 * 512 * 2, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead);
 
 	Resize(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
 
@@ -183,6 +190,7 @@ ComputeRenderer::~ComputeRenderer() {
 	compute_clut_bind_group_layout.release();
 	compute_texture_bind_group_layout.release();
 	compute_transitional_buffer.release();
+	compute_depth_transitional_buffer.release();
 	compute_render_data_bind_group.release();
 	compute_render_data_bind_group_layout.release();
 	if (compute_buffer_bind_group) {
@@ -192,6 +200,9 @@ ComputeRenderer::~ComputeRenderer() {
 	compute_layout.release();
 	if (compute_texture) {
 		compute_texture.release();
+	}
+	if (compute_depth_texture) {
+		compute_depth_texture.release();
 	}
 	framebuffer_conversion_texture.release();
 	framebuffer_conversion_bind_group.release();
@@ -404,9 +415,9 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 		UpdateRenderTexture();
 	}
 
-	v0.pos = glm::round(v0.pos);
-	v1.pos = glm::round(v1.pos);
-	v2.pos = glm::round(v2.pos);
+	v0.pos = glm::vec4(glm::round(glm::vec3(v0.pos)), v0.pos.w);
+	v1.pos = glm::vec4(glm::round(glm::vec3(v1.pos)), v1.pos.w);
+	v2.pos = glm::vec4(glm::round(glm::vec3(v2.pos)), v2.pos.w);
 
 	float area = (v1.pos.x - v0.pos.x) * (v2.pos.y - v0.pos.y) - (v1.pos.y - v0.pos.y) * (v2.pos.x - v0.pos.x);
 	if (area == 0) {
@@ -439,7 +450,6 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	// This is the most ghetto code I have ever written, but it does the job and makes everything simple
 	Vertex bounding{};
 	bounding.pos = glm::vec4(min_x, min_y, 0.0, 0.0);
-
 
 	auto filter = GetFilter(v1.uv.x - v0.uv.x, v2.uv.y - v0.uv.y);
 	auto pipeline = GetShader(SCEGU_PRIM_TRIANGLES, filter);
@@ -764,6 +774,14 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 		if (alpha_test) {
 			id.alpha_func = alpha_test_func;
 		}
+
+		id.depth_test = depth_test;
+		if (depth_test) {
+			id.depth_func = depth_test_func;
+		}
+		id.depth_write = depth_write;
+	} else {
+		id.depth_write = clear_mode_depth;
 	}
 
 	if (compute_pipelines.contains(id.full)) {
@@ -783,6 +801,9 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 		{ .key = wgpu::StringView("USE_TEXTURE_ALPHA"), .value = id.texture_alpha ? 1.0f : 0.0f },
 		{ .key = wgpu::StringView("FRAGMENT_DOUBLE"), .value = id.fragment_double ? 1.0f : 0.0f },
 		{ .key = wgpu::StringView("TEXTURE_FUNCTION"), .value = static_cast<double>(texture_function) },
+		{ .key = wgpu::StringView("DEPTH_FUNC"), .value = id.depth_test ? depth_test_func : 100.0f },
+		{ .key = wgpu::StringView("DEPTH_WRITE"), .value = id.depth_write ? 1.0f : 0.0f },
+
 	};
 
 	std::string code = common_shader;
@@ -809,7 +830,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 	compute_pipeline_desc.compute.entryPoint = wgpu::StringView("draw");
 	compute_pipeline_desc.compute.module = shader_module;
 	compute_pipeline_desc.compute.constants = constants;
-	compute_pipeline_desc.compute.constantCount = 12;
+	compute_pipeline_desc.compute.constantCount = 14;
 	compute_pipeline_desc.layout = id.textures_enabled ? compute_texture_layout : compute_layout;
 	auto compute_pipeline = device.createComputePipeline(compute_pipeline_desc);
 	shader_module.release();
@@ -823,17 +844,20 @@ void ComputeRenderer::UpdateRenderTexture() {
 	auto format = fpf == SCE_DISPLAY_PIXEL_RGBA8888 ? wgpu::TextureFormat::RGBA8Uint : wgpu::TextureFormat::R16Uint;
 
 	bool create_texture = true;
-	if (compute_texture) {
+	if (compute_texture && compute_depth_texture) {
 		FlushRender();
 
-		if (compute_texture.getFormat() == format && compute_texture.getWidth() == fbw) {
+		if (compute_texture.getFormat() == format && compute_texture.getWidth() == fbw
+			&& compute_depth_texture.getWidth() == zbw) {
 			create_texture = false;
 		} else {
 			compute_texture.release();
+			compute_depth_texture.release();
 		}
 	}
 
 	current_fbp = fbp;
+	current_zbp = zbp;
 	if (create_texture) {
 		wgpu::TextureDescriptor texture_desc{};
 		texture_desc.dimension = wgpu::TextureDimension::_2D;
@@ -844,17 +868,29 @@ void ComputeRenderer::UpdateRenderTexture() {
 		texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::StorageBinding;
 		compute_texture = device.createTexture(texture_desc);
 
+		wgpu::TextureDescriptor depth_buffer_texture_desc{};
+		depth_buffer_texture_desc.dimension = wgpu::TextureDimension::_2D;
+		depth_buffer_texture_desc.format = wgpu::TextureFormat::R16Uint;
+		depth_buffer_texture_desc.size = { zbw, 512, 1 };
+		depth_buffer_texture_desc.sampleCount = 1;
+		depth_buffer_texture_desc.mipLevelCount = 1;
+		depth_buffer_texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::StorageBinding;
+		compute_depth_texture = device.createTexture(depth_buffer_texture_desc);
+
 		if (compute_buffer_bind_group) {
 			compute_buffer_bind_group.release();
 		}
 
-		wgpu::BindGroupEntry compute_buffer_bindings[1]{};
+		wgpu::BindGroupEntry compute_buffer_bindings[2]{};
 		compute_buffer_bindings[0].binding = 0;
 		compute_buffer_bindings[0].textureView = compute_texture.createView();
 
+		compute_buffer_bindings[1].binding = 1;
+		compute_buffer_bindings[1].textureView = compute_depth_texture.createView();
+
 		wgpu::BindGroupDescriptor compute_bind_group_desc{};
 		compute_bind_group_desc.layout = compute_buffer_bind_group_layout;
-		compute_bind_group_desc.entryCount = 1;
+		compute_bind_group_desc.entryCount = 2;
 		compute_bind_group_desc.entries = compute_buffer_bindings;
 		compute_buffer_bind_group = device.createBindGroup(compute_bind_group_desc);
 	}
@@ -871,6 +907,16 @@ void ComputeRenderer::UpdateRenderTexture() {
 	auto framebuffer = PSP::GetInstance()->VirtualToPhysical(GetFrameBufferAddress());
 
 	queue.writeTexture(destination, framebuffer, fbw * 512 * bpp, data_layout, { fbw, 512, 1 });
+
+	wgpu::TexelCopyTextureInfo depth_destination{};
+	depth_destination.texture = compute_depth_texture;
+
+	wgpu::TexelCopyBufferLayout depth_data_layout{};
+	depth_data_layout.bytesPerRow = zbw * 2;
+	depth_data_layout.rowsPerImage = 512;
+
+	auto depth_buffer = PSP::GetInstance()->VirtualToPhysical(GetDepthBufferAddress());
+	queue.writeTexture(depth_destination, depth_buffer, zbw * 512 * 2, depth_data_layout, { zbw, 512, 1 });
 
 	compute_texture_valid = true;
 }
@@ -900,19 +946,32 @@ void ComputeRenderer::FlushRender() {
 	compute_pass_encoder.end();
 	compute_pass_encoder.release();
 
-	auto width = compute_texture.getWidth();
+	auto framebuffer_width = compute_texture.getWidth();
 	int bpp = compute_texture.getFormat() == wgpu::TextureFormat::RGBA8Uint ? 4 : 2;
-	auto size = 512 * width * bpp;
+	auto framebuffer_size = 512 * framebuffer_width * bpp;
 
 	wgpu::TexelCopyTextureInfo source{};
 	source.texture = compute_texture;
 
 	wgpu::TexelCopyBufferInfo destination{};
 	destination.buffer = compute_transitional_buffer;
-	destination.layout.bytesPerRow = width * bpp;
+	destination.layout.bytesPerRow = framebuffer_width * bpp;
 	destination.layout.rowsPerImage = 512;
 
-	compute_encoder.copyTextureToBuffer(source, destination, { width, 512, 1 });
+	compute_encoder.copyTextureToBuffer(source, destination, { framebuffer_width, 512, 1 });
+
+	auto depth_buffer_width = compute_depth_texture.getWidth();
+	auto depth_buffer_size = 512 * depth_buffer_width * 2;
+
+	wgpu::TexelCopyTextureInfo depth_buffer_source{};
+	depth_buffer_source.texture = compute_depth_texture;
+
+	wgpu::TexelCopyBufferInfo depth_buffer_destination{};
+	depth_buffer_destination.buffer = compute_depth_transitional_buffer;
+	depth_buffer_destination.layout.bytesPerRow = depth_buffer_width * 2;
+	depth_buffer_destination.layout.rowsPerImage = 512;
+
+	compute_encoder.copyTextureToBuffer(depth_buffer_source, depth_buffer_destination, { depth_buffer_width, 512, 1 });
 
 	auto command = compute_encoder.finish();
 	compute_encoder.release();
@@ -923,25 +982,34 @@ void ComputeRenderer::FlushRender() {
 	compute_encoder = device.createCommandEncoder();
 	compute_pass_encoder = compute_encoder.beginComputePass();
 
-	bool done = false;
+	bool framebuffer_done = false;
+	bool depth_buffer_done = false;
+
 	wgpu::BufferMapCallbackInfo map_callback_info{};
 	map_callback_info.mode = wgpu::CallbackMode::AllowProcessEvents;
-	map_callback_info.userdata1 = &done;
 	map_callback_info.callback = [](WGPUMapAsyncStatus status, WGPUStringView message, void* done, void* _) {
 		if (status == wgpu::MapAsyncStatus::Success) {
 			*reinterpret_cast<bool*>(done) = true;
 		}
 	};
 
-	compute_transitional_buffer.mapAsync(wgpu::MapMode::Read, 0, size, map_callback_info);
+	map_callback_info.userdata1 = &framebuffer_done;
+	compute_transitional_buffer.mapAsync(wgpu::MapMode::Read, 0, framebuffer_size, map_callback_info);
 
-	while (!done) {
+	map_callback_info.userdata1 = &depth_buffer_done;
+	compute_depth_transitional_buffer.mapAsync(wgpu::MapMode::Read, 0, depth_buffer_size, map_callback_info);
+
+	while (!framebuffer_done || !depth_buffer_done) {
 		queue.submit(0, nullptr);
 	}
 
 	auto framebuffer = PSP::GetInstance()->VirtualToPhysical(0x44000000 | (current_fbp & 0x1FFFF0));
-	memcpy(framebuffer, compute_transitional_buffer.getMappedRange(0, size), size);
+	memcpy(framebuffer, compute_transitional_buffer.getMappedRange(0, framebuffer_size), framebuffer_size);
 	compute_transitional_buffer.unmap();
+
+	auto depth_buffer = PSP::GetInstance()->VirtualToPhysical(0x44600000 | (zbp & 0x1FFFF0));
+	memcpy(depth_buffer, compute_depth_transitional_buffer.getMappedRange(0, depth_buffer_size), depth_buffer_size);
+	compute_depth_transitional_buffer.unmap();
 
 	queue_empty = true;
 	compute_vertex_buffer_offset = 0;

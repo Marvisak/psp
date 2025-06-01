@@ -57,7 +57,7 @@ private:
 	};
 
 	union ShaderID {
-		uint32_t full;
+		uint64_t full;
 		struct {
 			uint8_t primitive_type : 3;
 			bool textures_enabled : 1;
@@ -75,6 +75,9 @@ private:
 			bool texture_alpha : 1;
 			bool fragment_double : 1;
 			uint8_t texture_function : 3;
+			bool depth_write : 1;
+			bool depth_test : 1;
+			uint8_t depth_func : 3;
 		};
 	};
 
@@ -110,7 +113,7 @@ private:
 	wgpu::BindGroup framebuffer_conversion_bind_group;
 	wgpu::ComputePipeline framebuffer_conversion_pipelines[3];
 
-	std::unordered_map<uint32_t, wgpu::ComputePipeline> compute_pipelines{};
+	std::unordered_map<uint64_t, wgpu::ComputePipeline> compute_pipelines{};
 	bool queue_empty = true;
 	wgpu::CommandEncoder compute_encoder;
 	wgpu::ComputePassEncoder compute_pass_encoder;
@@ -124,12 +127,15 @@ private:
 	wgpu::PipelineLayout compute_texture_layout;
 	bool compute_texture_valid = false;
 	wgpu::Texture compute_texture;
+	wgpu::Texture compute_depth_texture;
 	void* compute_vertices;
 	uint32_t compute_vertex_buffer_offset = 0;
 	wgpu::Buffer compute_vertex_buffer;
-	wgpu::Buffer compute_render_data_buffer{};
+	wgpu::Buffer compute_render_data_buffer;
 	wgpu::Buffer compute_transitional_buffer;
+	wgpu::Buffer compute_depth_transitional_buffer;
 	uint32_t current_fbp = 0;
+	uint32_t current_zbp = 0;
 
 	std::unordered_map<uint32_t, TextureCacheEntry> texture_cache{};
 	std::vector<TextureCacheEntry> deleted_textures{};

@@ -71,7 +71,7 @@ void SoftwareRenderer::SetFrameBuffer(uint32_t frame_buffer, int frame_width, in
 
 void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 	uint32_t* frame_buffer_start = reinterpret_cast<uint32_t*>(PSP::GetInstance()->VirtualToPhysical(GetFrameBufferAddress()));
-	uint16_t* z_buffer_start = reinterpret_cast<uint16_t*>(PSP::GetInstance()->VirtualToPhysical(GetZBufferAddress()));
+	uint16_t* depth_buffer_start = reinterpret_cast<uint16_t*>(PSP::GetInstance()->VirtualToPhysical(GetDepthBufferAddress()));
 	
 	glm::ivec3 min = glm::round(start.pos);
 	glm::ivec3 max = glm::round(end.pos);
@@ -123,14 +123,14 @@ void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 		};
 
 		uint32_t frame_buffer_index = y * fbw;
-		uint32_t z_buffer_index = y * zbw;
+		uint32_t depth_buffer_index = y * zbw;
 		for (int x = scissor_min_x; x < scissor_max_x; x++, uv.x += du) {
 			if (!through && (max.z < min_z || max.z > max_z)) {
 				return;
 			}
 
 			if (!clear_mode && depth_test) {
-				if (!Test(z_test_func, max.z, z_buffer_start[z_buffer_index + x])) {
+				if (!Test(depth_test_func, max.z, depth_buffer_start[depth_buffer_index + x])) {
 					continue;
 				}
 			}
@@ -158,7 +158,7 @@ void SoftwareRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 			frame_buffer_start[frame_buffer_index + x] = color.abgr;
 			if (depth_write && depth_test) {
-				z_buffer_start[z_buffer_index + x] = max.z;
+				depth_buffer_start[depth_buffer_index + x] = max.z;
 			}
 		}
 	}
@@ -174,7 +174,7 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	};
 
 	uint32_t* frame_buffer_start = reinterpret_cast<uint32_t*>(PSP::GetInstance()->VirtualToPhysical(GetFrameBufferAddress()));
-	uint16_t* z_buffer_start = reinterpret_cast<uint16_t*>(PSP::GetInstance()->VirtualToPhysical(GetZBufferAddress()));
+	uint16_t* depth_buffer_start = reinterpret_cast<uint16_t*>(PSP::GetInstance()->VirtualToPhysical(GetDepthBufferAddress()));
 
 	int min_x = floorf(std::min({ v0.pos.x, v1.pos.x, v2.pos.x }));
 	int max_x = ceilf(std::max({ v0.pos.x, v1.pos.x, v2.pos.x }));
@@ -261,7 +261,7 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 				}
 
 				if (!clear_mode && depth_test) {
-					if (!Test(z_test_func, z, z_buffer_start[p.x + p.y * zbw])) {
+					if (!Test(depth_test_func, z, depth_buffer_start[p.x + p.y * zbw])) {
 						continue;
 					}
 				}
@@ -295,7 +295,7 @@ void SoftwareRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 
 				frame_buffer_start[p.x + p.y * fbw] = color.abgr;
 				if (depth_write) {
-					z_buffer_start[p.x + p.y * zbw] = z;
+					depth_buffer_start[p.x + p.y * zbw] = z;
 				}
 			}
 		}

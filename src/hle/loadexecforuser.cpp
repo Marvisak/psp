@@ -6,6 +6,7 @@
 #include "../kernel/callback.hpp"
 
 static void sceKernelExitGame() {
+	PSP::GetInstance()->GetRenderer()->Frame();
 	PSP::GetInstance()->ForceExit();
 }
 

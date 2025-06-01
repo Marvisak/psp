@@ -76,6 +76,13 @@ fn drawPixel(pos: vec4i, uv: vec2f, c: vec4u) {
         return;
     }
 
+    let dstDepth = textureLoad(depth_buffer, pos.xy).r;
+    if DEPTH_FUNC != 100 {
+        if !test(DEPTH_FUNC, u32(pos.z), dstDepth) {
+            return;
+        }
+    }
+
     var color = c;
     if TEXTURE_FORMAT != 100 {
         color = filterTexture(uv, color);
@@ -94,5 +101,8 @@ fn drawPixel(pos: vec4i, uv: vec2f, c: vec4u) {
     color.a = dst.a;
 
     textureStore(framebuffer, pos.xy, color); 
+    if DEPTH_WRITE == 1 {
+        textureStore(depth_buffer, pos.xy, vec4u(pos.z));
+    }
 }
 )"

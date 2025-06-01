@@ -137,8 +137,8 @@ void Renderer::Run() {
 		case CMD_CULL: cull_type = command & 0x1; break;
 		case CMD_FBP: RenderFramebufferChange(); fbp &= 0xFF000000; fbp |= command & 0xFFFFFF; break;
 		case CMD_FBW: RenderFramebufferChange(); fbp &= 0x00FFFFFF; fbp |= (command & 0xFF0000) << 8; fbw = command & 0x07FC; break;
-		case CMD_ZBP: zbp &= 0xFF000000; zbp |= command & 0xFFFFFF; break;
-		case CMD_ZBW: zbp &= 0x00FFFFFF; zbp |= (command & 0xFF0000) << 8; zbw = command & 0x07FC; break;
+		case CMD_ZBP: RenderFramebufferChange(); zbp &= 0xFF000000; zbp |= command & 0xFFFFFF; break;
+		case CMD_ZBW: RenderFramebufferChange(); zbp &= 0x00FFFFFF; zbp |= (command & 0xFF0000) << 8; zbw = command & 0x07FC; break;
 		case CMD_TBP0: textures[0].buffer &= 0xFF000000; textures[0].buffer |= command & 0xFFFFFF; break;
 		case CMD_TBW0: textures[0].buffer &= 0x00FFFFFF; textures[0].buffer |= (command & 0xFF0000) << 8; textures[0].pitch = command & 0x1FFF; break;
 		case CMD_CBP: clut_addr &= 0x0F000000; clut_addr |= command & 0xFFFFF0; break;
@@ -168,13 +168,13 @@ void Renderer::Run() {
 		case CMD_TFLUSH: break;
 		case CMD_TSYNC: break;
 		case CMD_FPF: RenderFramebufferChange(); fpf = command & 7; break;
-		case CMD_CMODE: clear_mode = command & 1; break;
+		case CMD_CMODE: clear_mode = (command & 1) != 0; clear_mode_depth = (command & 0x400) != 0; break;
 		case CMD_SCISSOR1: scissor_start.x = command & 0x1FF; scissor_start.y = command >> 10 & 0x1FF; break;
 		case CMD_SCISSOR2: scissor_end.x = command & 0x1FF; scissor_end.y = command >> 10 & 0x1FF; break;
 		case CMD_MINZ: min_z = command & 0xFFFF; break;
 		case CMD_MAXZ: max_z = command & 0xFFFF; break;
 		case CMD_ATEST: alpha_test_func = command & 0x7; alpha_test_ref = (command >> 8) & 0xFF; alpha_test_mask = (command >> 16) & 0xFF; break;
-		case CMD_ZTEST: z_test_func = command & 0x7; break;
+		case CMD_ZTEST: depth_test_func = command & 0x7; break;
 		case CMD_BLEND: Blend(command); break;
 		case CMD_FIXA: blend_afix = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;
 		case CMD_FIXB: blend_bfix = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;

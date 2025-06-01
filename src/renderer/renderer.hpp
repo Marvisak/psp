@@ -118,7 +118,7 @@ public:
 		return 0x44000000 | (fbp & 0x1FFFF0);
 	}
 
-	uint32_t GetZBufferAddress() const {
+	uint32_t GetDepthBufferAddress() const {
 		return 0x44600000 | (zbp & 0x1FFFF0);
 	}
 
@@ -199,6 +199,8 @@ protected:
 	glm::uvec2 viewport_offset{};
 
 	bool clear_mode = false;
+	bool clear_mode_depth = false;
+
 	bool depth_test = false;
 	bool alpha_test = false;
 
@@ -215,7 +217,7 @@ protected:
 	uint16_t zbw = 0;
 	uint16_t min_z = 0;
 	uint16_t max_z = 65535;
-	uint8_t z_test_func = 0;
+	uint8_t depth_test_func = 0;
 	bool depth_write = false;
 
 	glm::uvec2 scissor_start{};

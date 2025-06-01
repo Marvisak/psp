@@ -33,12 +33,12 @@ fn fetchTexel(pos: vec2f, dims: vec2f) -> vec4u {
             let lower = textureLoad(texture, u_tex_pos, 0).r;
             let higher = textureLoad(texture, vec2u(u_tex_pos.x + 1, u_tex_pos.y), 0).r;
 
-            let r = extractBits(lower, 0u, 4u);
-            let g = extractBits(lower, 4u, 4u);
-            let b = extractBits(higher, 0u, 4u);
-            let a = extractBits(higher, 4u, 4u);
+            let a = extractBits(lower, 0u, 4u);
+            let b = extractBits(lower, 4u, 4u);
+            let g = extractBits(higher, 0u, 4u);
+            let r = extractBits(higher, 4u, 4u);
 
-            return vec4u(r, g, b, a);
+            return vec4u((r << 4) | r, (g << 4) | g, (b << 4) | b, (a << 4) | a);
         }
         case 3u: {
             u_tex_pos.x *= 4;
@@ -111,6 +111,7 @@ fn blendTexture(texel: vec4i, color: vec4i) -> vec4u {
 fn filterTexture(uv: vec2f, color: vec4u) -> vec4u {
     var dims = vec2f(textureDimensions(texture));
     switch TEXTURE_FORMAT {
+        case 2u: { dims.x /= 2; break; }
         case 3u: { dims.x /= 4; break; }
         case 4u: { dims.x *= 2; break; }
         default: { break; }
