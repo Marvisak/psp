@@ -31,7 +31,7 @@ fn fsMain(in: VertexOutput) -> @location(0) vec4f {
 @compute @workgroup_size(8, 8)
 fn rgb565(@builtin(global_invocation_id) id: vec3u) {
     let dims = textureDimensions(input_conversion_texture);
-    if (id.x >= dims.x || id.y >= dims.y) {
+    if id.x >= dims.x || id.y >= dims.y {
         return;
     }
 
@@ -47,7 +47,7 @@ fn rgb565(@builtin(global_invocation_id) id: vec3u) {
 @compute @workgroup_size(8, 8)
 fn rgba5551(@builtin(global_invocation_id) id: vec3u) {
     let dims = textureDimensions(input_conversion_texture);
-    if (id.x >= dims.x || id.y >= dims.y) {
+    if id.x >= dims.x || id.y >= dims.y {
         return;
     }
 
@@ -64,7 +64,7 @@ fn rgba5551(@builtin(global_invocation_id) id: vec3u) {
 @compute @workgroup_size(8, 8)
 fn rgba4444(@builtin(global_invocation_id) id: vec3u) {
     let dims = textureDimensions(input_conversion_texture);
-    if (id.x >= dims.x || id.y >= dims.y) {
+    if id.x >= dims.x || id.y >= dims.y {
         return;
     }
 

@@ -140,7 +140,7 @@ void Renderer::Run() {
 		case CMD_ZBP: zbp &= 0xFF000000; zbp |= command & 0xFFFFFF; break;
 		case CMD_ZBW: zbp &= 0x00FFFFFF; zbp |= (command & 0xFF0000) << 8; zbw = command & 0x07FC; break;
 		case CMD_TBP0: textures[0].buffer &= 0xFF000000; textures[0].buffer |= command & 0xFFFFFF; break;
-		case CMD_TBW0: textures[0].buffer &= 0x00FFFFFF; textures[0].buffer |= (command & 0xFF0000) << 8; textures[0].pitch = command & 0x07FC; break;
+		case CMD_TBW0: textures[0].buffer &= 0x00FFFFFF; textures[0].buffer |= (command & 0xFF0000) << 8; textures[0].pitch = command & 0x1FFF; break;
 		case CMD_CBP: clut_addr &= 0x0F000000; clut_addr |= command & 0xFFFFF0; break;
 		case CMD_CBW: clut_addr &= 0x00FFFFFF; clut_addr |= (command & 0xF0000) << 8; break;
 		case CMD_XBP1: transfer_source.buffer &= 0xFF000000; transfer_source.buffer |= command & 0xFFFFF0; break;

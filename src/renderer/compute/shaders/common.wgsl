@@ -14,7 +14,8 @@ struct RenderData {
     blendAFix: vec4i,
     blendBFix: vec4i,
     alphaMask: u32,
-    alphaRef: u32
+    alphaRef: u32,
+    environmentTexture: vec4i
 }
 
 override TEXTURE_FORMAT: u32 = 100;
@@ -25,6 +26,9 @@ override BLEND_OPERATION: u32 = 100;
 override BLEND_SOURCE: u32 = 0;
 override BLEND_DESTINATION: u32 = 0;
 override ALPHA_FUNC: u32 = 100;
+override USE_TEXTURE_ALPHA: u32 = 0;
+override FRAGMENT_DOUBLE : u32 = 0;
+override TEXTURE_FUNCTION : u32 = 0;
 
 @group(0) @binding(0) var framebuffer: texture_storage_2d<rgba8uint, read_write>;
 @group(1) @binding(0) var<uniform> renderData: RenderData; 

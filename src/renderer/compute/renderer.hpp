@@ -41,6 +41,7 @@ private:
 		alignas(16) glm::ivec4 blend_bfix;
 		alignas(4) uint32_t alphaMask;
 		alignas(4) uint32_t alphaRef;
+		alignas(16) glm::ivec4 environment_texture;
 	};
 
 	struct TextureCacheEntry {
@@ -64,10 +65,15 @@ private:
 			bool u_clamp : 1;
 			bool v_clamp : 1;
 			uint8_t clut_format : 2;
+			bool blend_enabled : 1;
 			uint8_t blend_operation : 3;
 			uint8_t blend_source : 4;
 			uint8_t blend_destination : 4;
+			bool alpha_test : 1;
 			uint8_t alpha_func : 3;
+			bool texture_alpha : 1;
+			bool fragment_double : 1;
+			uint8_t texture_function : 3;
 		};
 	};
 

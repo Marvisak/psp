@@ -21,7 +21,7 @@ fn draw(@builtin(global_invocation_id) id: vec3u) {
     let e0 = edge(vertices[1].pos, vertices[2].pos, pos);
     let e1 = edge(vertices[2].pos, vertices[0].pos, pos);
     let e2 = edge(vertices[0].pos, vertices[1].pos, pos);
-    if ((e0 + bias0) >= 0 && (e1 + bias1) >= 0 && (e2 + bias2) >= 0) {
+    if (e0 + bias0) >= 0 && (e1 + bias1) >= 0 && (e2 + bias2) >= 0 {
         let eSum = e0 + e1 + e2;
         let uv = (vertices[0].uv * e0 + vertices[1].uv * e1 + vertices[2].uv * e2) / eSum;
 

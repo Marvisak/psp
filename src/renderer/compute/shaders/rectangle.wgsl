@@ -11,7 +11,7 @@ fn draw(@builtin(global_invocation_id) id: vec3u) {
     let fid = vec4f(vec3f(id), 0.0);
     let pos = vertices.start.pos + fid;
 
-    if (pos.x >= vertices.end.pos.x || pos.y >= vertices.end.pos.y) {
+    if pos.x >= vertices.end.pos.x || pos.y >= vertices.end.pos.y {
         return;
     }
 

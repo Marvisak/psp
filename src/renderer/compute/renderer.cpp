@@ -736,16 +736,22 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 			id.texture_format = texture_format;
 			id.u_clamp = u_clamp;
 			id.v_clamp = v_clamp;
+			id.fragment_double = fragment_double;
+			id.texture_alpha = texture_alpha;
+			id.texture_function = texture_function;
 			if (texture_format >= SCEGU_PFIDX4 && texture_format <= SCEGU_PFIDX32) {
 				id.clut_format = clut_format;
 			}
 		}
+
+		id.blend_enabled = blend;
 		if (blend) {
 			id.blend_operation = blend_operation;
 			id.blend_source = blend_source;
 			id.blend_destination = blend_destination;
 		}
 
+		id.alpha_test = alpha_test;
 		if (alpha_test) {
 			id.alpha_func = alpha_test_func;
 		}
@@ -757,20 +763,23 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 
 	WGPUConstantEntry constants[] {
 		{ .key = wgpu::StringView("TEXTURE_FORMAT"), .value = id.textures_enabled ? texture_format : 100.0f },
-		{ .key = wgpu::StringView("U_CLAMP"), .value = u_clamp ? 1.0f : 0.0f },
-		{ .key = wgpu::StringView("V_CLAMP"), .value = v_clamp ? 1.0f : 0.0f },
+		{ .key = wgpu::StringView("U_CLAMP"), .value = id.u_clamp ? 1.0f : 0.0f },
+		{ .key = wgpu::StringView("V_CLAMP"), .value = id.v_clamp ? 1.0f : 0.0f },
 		{ .key = wgpu::StringView("CLUT_FORMAT"), .value = static_cast<double>(clut_format) },
-		{ .key = wgpu::StringView("BLEND_OPERATION"), .value = !clear_mode && blend ? blend_operation : 100.0f },
+		{ .key = wgpu::StringView("BLEND_OPERATION"), .value = id.blend_enabled ? blend_operation : 100.0f },
 		{ .key = wgpu::StringView("BLEND_SOURCE"), .value = static_cast<double>(blend_source) },
 		{ .key = wgpu::StringView("BLEND_DESTINATION"), .value = static_cast<double>(blend_destination) },
-		{ .key = wgpu::StringView("ALPHA_FUNC"), .value = !clear_mode && alpha_test ? alpha_test_func : 100.0f },
+		{ .key = wgpu::StringView("ALPHA_FUNC"), .value = id.alpha_test ? alpha_test_func : 100.0f },
+		{ .key = wgpu::StringView("USE_TEXTURE_ALPHA"), .value = id.texture_alpha ? 1.0f : 0.0f },
+		{ .key = wgpu::StringView("FRAGMENT_DOUBLE"), .value = id.fragment_double ? 1.0f : 0.0f },
+		{ .key = wgpu::StringView("TEXTURE_FUNCTION"), .value = static_cast<double>(texture_function) },
 	};
 
 	std::string code = common_shader;
 	if (id.textures_enabled) {
 		code += texture_shader;
 	} else {
-		code += "fn filterTexture(uv: vec2f) -> vec4u { return vec4u(0, 0, 0, 0); }";
+		code += "fn filterTexture(uv: vec2f, color: vec4u) -> vec4u { return vec4u(0, 0, 0, 0); }";
 	}
 
 	code += pixel_shader;
@@ -790,7 +799,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 	compute_pipeline_desc.compute.entryPoint = wgpu::StringView("draw");
 	compute_pipeline_desc.compute.module = shader_module;
 	compute_pipeline_desc.compute.constants = constants;
-	compute_pipeline_desc.compute.constantCount = 8;
+	compute_pipeline_desc.compute.constantCount = 11;
 	compute_pipeline_desc.layout = id.textures_enabled ? compute_texture_layout : compute_layout;
 	auto compute_pipeline = device.createComputePipeline(compute_pipeline_desc);
 	shader_module.release();
@@ -867,6 +876,7 @@ void ComputeRenderer::UpdateRenderData() {
 	data.blend_bfix = blend_bfix;
 	data.alphaMask = alpha_test_mask;
 	data.alphaRef = alpha_test_ref & alpha_test_mask;
+	data.environment_texture = environment_texture;
 
 	queue.writeBuffer(compute_render_data_buffer, 0, &data, sizeof(RenderData));
 	queue.writeBuffer(compute_vertex_buffer, 0, compute_vertices, compute_vertex_buffer_offset);
@@ -965,6 +975,9 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 		break;
 	case SCEGU_PFIDX8:
 		bpp = 1.0;
+		break;
+	case SCEGU_PF8888:
+		bpp = 4.0;
 		break;
 	default:
 		spdlog::error("ComputeRenderer: unknown texture format {}", texture_format);
