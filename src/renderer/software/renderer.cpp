@@ -461,22 +461,6 @@ bool SoftwareRenderer::Test(uint8_t test, int src, int dst) {
 	return true;
 }
 
-uint8_t SoftwareRenderer::GetFilter(float du, float dv) {
-	int detail{};
-
-	switch (texture_level_mode) {
-	case SCEGU_LOD_AUTO:
-		detail = std::log2(std::max(std::abs(du * textures[0].height), std::abs(dv * textures[0].width)));
-		break;
-	default:
-		spdlog::error("SoftwareRenderer: unimplemented texture level mode {}", texture_level_mode);
-		break;
-	}
-	detail += texture_level_offset;
-
-	return detail > 0 ? texture_minify_filter : texture_magnify_filter;
-}
-
 Color SoftwareRenderer::GetTexel(int x, int y, const std::vector<Color>& tex_data) {
 	auto& texture = textures[0];
 	if (u_clamp) {

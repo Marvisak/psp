@@ -423,6 +423,22 @@ Vertex Renderer::ParseVertex() {
 	return v;
 }
 
+uint8_t Renderer::GetFilter(float du, float dv) {
+	int detail{};
+
+	switch (texture_level_mode) {
+	case SCEGU_LOD_AUTO:
+		detail = std::log2(std::max(std::abs(du * textures[0].height), std::abs(dv * textures[0].width)));
+		break;
+	default:
+		spdlog::error("Renderer: unimplemented texture level mode {}", texture_level_mode);
+		break;
+	}
+	detail += texture_level_offset;
+
+	return detail > 0 ? texture_minify_filter : texture_magnify_filter;
+}
+
 Color Renderer::ABGR1555ToABGR8888(uint16_t color) {
 	uint8_t a = (color >> 15) & 0x1;
 	uint8_t b = (color >> 10) & 0x1F;

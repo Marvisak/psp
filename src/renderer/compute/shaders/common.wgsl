@@ -19,6 +19,7 @@ struct RenderData {
 }
 
 override TEXTURE_FORMAT: u32 = 100;
+override BILINEAR: u32 = 0;
 override U_CLAMP: u32 = 0;
 override V_CLAMP: u32 = 0;
 override CLUT_FORMAT: u32 = 0;

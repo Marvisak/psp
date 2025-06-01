@@ -28,9 +28,21 @@ fn fetchTexel(pos: vec2f, dims: vec2f) -> vec4u {
 
     var u_tex_pos = vec2u(tex_pos);
     switch TEXTURE_FORMAT {
+        case 2u: {
+            u_tex_pos.x *= 2;
+            let lower = textureLoad(texture, u_tex_pos, 0).r;
+            let higher = textureLoad(texture, vec2u(u_tex_pos.x + 1, u_tex_pos.y), 0).r;
+
+            let r = extractBits(lower, 0u, 4u);
+            let g = extractBits(lower, 4u, 4u);
+            let b = extractBits(higher, 0u, 4u);
+            let a = extractBits(higher, 4u, 4u);
+
+            return vec4u(r, g, b, a);
+        }
         case 3u: {
             u_tex_pos.x *= 4;
-            let r = textureLoad(texture, vec2u(u_tex_pos.x, u_tex_pos.y), 0).r;
+            let r = textureLoad(texture, u_tex_pos, 0).r;
             let g = textureLoad(texture, vec2u(u_tex_pos.x + 1, u_tex_pos.y), 0).r;
             let b = textureLoad(texture, vec2u(u_tex_pos.x + 2, u_tex_pos.y), 0).r;
             let a = textureLoad(texture, vec2u(u_tex_pos.x + 3, u_tex_pos.y), 0).r;
@@ -105,7 +117,21 @@ fn filterTexture(uv: vec2f, color: vec4u) -> vec4u {
     }
 
     let pos = uv * dims;
-    let texel = fetchTexel(pos, dims);
+    var texel = vec4u(0);
+
+    if BILINEAR == 1 {
+        let f = fract(pos - 0.5);
+        let top_left = floor(pos - 0.5);
+
+        let tl = vec4f(fetchTexel(vec2f(top_left.x + 0.5, top_left.y + 0.5), dims)) / 255;
+        let tr = vec4f(fetchTexel(vec2f(top_left.x + 1.5, top_left.y + 0.5), dims)) / 255;
+        let bl = vec4f(fetchTexel(vec2f(top_left.x + 0.5, top_left.y + 1.5), dims)) / 255;
+        let br = vec4f(fetchTexel(vec2f(top_left.x + 1.5, top_left.y + 1.5), dims)) / 255;
+
+        texel = vec4u(mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y) * 255);
+    } else {
+        texel = fetchTexel(pos, dims);
+    }
 
     return blendTexture(vec4i(texel), vec4i(color));
 }

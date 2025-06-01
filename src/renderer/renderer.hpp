@@ -144,6 +144,8 @@ public:
 	Vertex ParseVertex();
 	void TransformVertex(Vertex& v) const;
 
+	uint8_t GetFilter(float du, float dv);
+
 	Color ABGR4444ToABGR8888(uint16_t color);
 	Color ABGR1555ToABGR8888(uint16_t color);
 	Color BGR565ToABGR8888(uint16_t color);

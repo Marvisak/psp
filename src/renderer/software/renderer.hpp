@@ -54,7 +54,6 @@ public:
 	void WriteDXT5(const DXT5Block* block, glm::ivec4 palette[4], Color* dst, int pitch);
 
 	bool Test(uint8_t test, int src, int dst);
-	uint8_t GetFilter(float du, float dv);
 	Color GetTexel(int x, int y, const std::vector<Color>& tex_data);
 
 	Color Blend(Color src, Color dest);

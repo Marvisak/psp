@@ -62,6 +62,7 @@ private:
 			uint8_t primitive_type : 3;
 			bool textures_enabled : 1;
 			uint8_t texture_format : 4;
+			bool bilinear : 1;
 			bool u_clamp : 1;
 			bool v_clamp : 1;
 			uint8_t clut_format : 2;
@@ -84,7 +85,7 @@ private:
 	void SetupRenderBindGroup();
 	void SetupFramebufferConversion(wgpu::ShaderModule shader_module);
 
-	wgpu::ComputePipeline GetShader(uint8_t primitive_type);
+	wgpu::ComputePipeline GetShader(uint8_t primitive_type, uint8_t filter);
 	void UpdateRenderTexture();
 	void UpdateRenderData();
 	uint32_t PushVertices(std::vector<Vertex> vertices);

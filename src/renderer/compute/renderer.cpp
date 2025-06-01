@@ -185,10 +185,14 @@ ComputeRenderer::~ComputeRenderer() {
 	compute_transitional_buffer.release();
 	compute_render_data_bind_group.release();
 	compute_render_data_bind_group_layout.release();
-	compute_buffer_bind_group.release();
+	if (compute_buffer_bind_group) {
+		compute_buffer_bind_group.release();
+	}
 	compute_buffer_bind_group_layout.release();
 	compute_layout.release();
-	compute_texture.release();
+	if (compute_texture) {
+		compute_texture.release();
+	}
 	framebuffer_conversion_texture.release();
 	framebuffer_conversion_bind_group.release();
 	framebuffer_conversion_layout.release();
@@ -372,7 +376,8 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 		return;
 	}
 
-	auto pipeline = GetShader(SCEGU_PRIM_RECTANGLES);
+	auto filter = GetFilter((end.uv.x - start.uv.x) / width, (end.uv.y - start.uv.y) / height);
+	auto pipeline = GetShader(SCEGU_PRIM_RECTANGLES, filter);
 
 	auto offset = PushVertices({ start, end });
 
@@ -398,8 +403,6 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	if (!compute_texture_valid) {
 		UpdateRenderTexture();
 	}
-
-	auto pipeline = GetShader(SCEGU_PRIM_TRIANGLES);
 
 	v0.pos = glm::round(v0.pos);
 	v1.pos = glm::round(v1.pos);
@@ -436,6 +439,10 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	// This is the most ghetto code I have ever written, but it does the job and makes everything simple
 	Vertex bounding{};
 	bounding.pos = glm::vec4(min_x, min_y, 0.0, 0.0);
+
+
+	auto filter = GetFilter(v1.uv.x - v0.uv.x, v2.uv.y - v0.uv.y);
+	auto pipeline = GetShader(SCEGU_PRIM_TRIANGLES, filter);
 
 	auto offset = PushVertices({ v0, v1, v2, bounding });
 
@@ -727,13 +734,14 @@ void ComputeRenderer::SetupFramebufferConversion(wgpu::ShaderModule shader_modul
 	framebuffer_conversion_bind_group = device.createBindGroup(framebuffer_conversion_bind_group_desc);
 }
 
-wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
+wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t filter) {
 	ShaderID id{};
 
 	id.primitive_type = primitive_type;
 	if (!clear_mode) {
 		id.textures_enabled = textures_enabled;
 		if (textures_enabled) {
+			id.bilinear = (filter & 1) != 0;
 			id.texture_format = texture_format;
 			id.u_clamp = u_clamp;
 			id.v_clamp = v_clamp;
@@ -764,6 +772,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 
 	WGPUConstantEntry constants[] {
 		{ .key = wgpu::StringView("TEXTURE_FORMAT"), .value = id.textures_enabled ? texture_format : 100.0f },
+		{ .key = wgpu::StringView("BILINEAR"), .value = id.bilinear ? 1.0f : 0.0f },
 		{ .key = wgpu::StringView("U_CLAMP"), .value = id.u_clamp ? 1.0f : 0.0f },
 		{ .key = wgpu::StringView("V_CLAMP"), .value = id.v_clamp ? 1.0f : 0.0f },
 		{ .key = wgpu::StringView("CLUT_FORMAT"), .value = static_cast<double>(clut_format) },
@@ -800,7 +809,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 	compute_pipeline_desc.compute.entryPoint = wgpu::StringView("draw");
 	compute_pipeline_desc.compute.module = shader_module;
 	compute_pipeline_desc.compute.constants = constants;
-	compute_pipeline_desc.compute.constantCount = 11;
+	compute_pipeline_desc.compute.constantCount = 12;
 	compute_pipeline_desc.layout = id.textures_enabled ? compute_texture_layout : compute_layout;
 	auto compute_pipeline = device.createComputePipeline(compute_pipeline_desc);
 	shader_module.release();
@@ -976,6 +985,9 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 		break;
 	case SCEGU_PFIDX8:
 		bpp = 1.0;
+		break;
+	case SCEGU_PF4444:
+		bpp = 2.0;
 		break;
 	case SCEGU_PF8888:
 		bpp = 4.0;
