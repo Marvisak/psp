@@ -60,6 +60,7 @@ fn blendTexture(texel: vec4i, color: vec4i) -> vec4u {
                 result  = (color + 1) * texel / 256;
             }
             result.a = select(color.a, (color.a + 1) * texel.a / 256, USE_TEXTURE_ALPHA == 1);
+            break;
         }
         case 1u: {
             if USE_TEXTURE_ALPHA == 1 {
@@ -69,15 +70,18 @@ fn blendTexture(texel: vec4i, color: vec4i) -> vec4u {
                 result = select(texel, texel * 2, FRAGMENT_DOUBLE == 1);
             }
             result.a = color.a;
+            break;
         }
         case 2u: {
             result = ((255 - texel) * color + texel * renderData.environmentTexture + 255);
             result /= select(256, 128, FRAGMENT_DOUBLE == 1);
             result.a = select(color.a, (color.a + 1) * texel.a / 256, USE_TEXTURE_ALPHA == 1);
+            break;
         }
         case 3u: {
             result = select(texel, texel * 2, FRAGMENT_DOUBLE == 1);
             result.a = select(color.a, texel.a, USE_TEXTURE_ALPHA == 1);
+            break;
         }
         case 4u: {
             result = texel + color;
@@ -85,6 +89,7 @@ fn blendTexture(texel: vec4i, color: vec4i) -> vec4u {
                 result *= 2;
             }
             result.a = select(color.a, (color.a + 1) * texel.a / 256, USE_TEXTURE_ALPHA == 1);
+            break;
         }
         default: { break; }
     }

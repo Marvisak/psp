@@ -9,9 +9,9 @@ fn blend(src: vec4i, dst: vec4i) -> vec4u {
             case 0u: { asel = dst; break; }
             case 1u: { asel = 255 - dst; break; }
             case 2u: { asel = vec4i(src.a); break; }
-            case 3u: { asel = 255 - vec4i(src.a); break; }
+            case 3u: { asel = vec4i(255 - src.a); break; }
             case 4u: { asel = vec4i(dst.a); break; }
-            case 5u: { asel = 255 - vec4i(dst.a); break; }
+            case 5u: { asel = vec4i(255 - dst.a); break; }
             case 6u: { asel = vec4i(2 * src.a); break; }
             case 7u: { asel = vec4i(255 - min(2 * src.a, 255)); break; }
             case 8u: { asel = vec4i(2 * dst.a); break; }
@@ -23,9 +23,9 @@ fn blend(src: vec4i, dst: vec4i) -> vec4u {
             case 0u: { bsel = src; break; }
             case 1u: { bsel = 255 - src; break; }
             case 2u: { bsel = vec4i(src.a); break; }
-            case 3u: { bsel = 255 - vec4i(src.a); break; }
+            case 3u: { bsel = vec4i(255 - src.a); break; }
             case 4u: { bsel = vec4i(dst.a); break; }
-            case 5u: { bsel = 255 - vec4i(dst.a); break; }
+            case 5u: { bsel = vec4i(255 - dst.a); break; }
             case 6u: { bsel = vec4i(2 * src.a); break; }
             case 7u: { bsel = vec4i(255 - min(2 * src.a, 255)); break; }
             case 8u: { bsel = vec4i(2 * dst.a); break; }
