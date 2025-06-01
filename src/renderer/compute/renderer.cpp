@@ -302,7 +302,6 @@ void ComputeRenderer::Frame() {
 			it++;
 		}
 	}
-	cleared_cache = false;
 
 	render_pass.release();
 	encoder.release();
@@ -381,7 +380,7 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
 	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 1, &offset);
 
-	if (textures_enabled) {
+	if (!clear_mode && textures_enabled) {
 		auto texture_bind_group = GetTexture();
 		compute_pass_encoder.setBindGroup(2, texture_bind_group, 0, nullptr);
 		compute_pass_encoder.setBindGroup(3, clut_cache[current_clut].bind_group, 0, nullptr);
@@ -444,7 +443,7 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
 	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 1, &offset);
 
-	if (textures_enabled) {
+	if (!clear_mode && textures_enabled) {
 		auto texture_bind_group = GetTexture();
 		compute_pass_encoder.setBindGroup(2, texture_bind_group, 0, nullptr);
 		compute_pass_encoder.setBindGroup(3, clut_cache[current_clut].bind_group, 0, nullptr);
@@ -471,23 +470,14 @@ void ComputeRenderer::DrawTriangleFan(std::vector<Vertex> vertices) {
 }
 
 void ComputeRenderer::ClearTextureCache() {
-	if (cleared_cache) {
-		return;
-	}
-
 	for (auto& [_, entry] : texture_cache) {
 		deleted_textures.push_back(entry);
 	}
 	
-	cleared_cache = true;
 	texture_cache.clear();
 }
 
 void ComputeRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
-	if (cleared_cache) {
-		return;
-	}
-
 	addr &= 0x3FFFFFFF;
 	uint32_t addr_end = addr + size;
 	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
@@ -500,7 +490,6 @@ void ComputeRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
 			it++;
 		}
 	}
-	cleared_cache = true;
 }
 
 void ComputeRenderer::CLoad(uint32_t opcode) {
@@ -740,14 +729,14 @@ void ComputeRenderer::SetupFramebufferConversion(wgpu::ShaderModule shader_modul
 wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 	ShaderID id{};
 
-	bool clut = texture_format >= SCEGU_PFIDX4 && texture_format <= SCEGU_PFIDX32;
 	id.primitive_type = primitive_type;
 	if (!clear_mode) {
 		id.textures_enabled = textures_enabled;
 		if (textures_enabled) {
+			id.texture_format = texture_format;
 			id.u_clamp = u_clamp;
 			id.v_clamp = v_clamp;
-			if (clut) {
+			if (texture_format >= SCEGU_PFIDX4 && texture_format <= SCEGU_PFIDX32) {
 				id.clut_format = clut_format;
 			}
 		}
@@ -767,10 +756,10 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type) {
 	}
 
 	WGPUConstantEntry constants[] {
-		{ .key = wgpu::StringView("TEXTURES_ENABLED"), .value = id.textures_enabled ? 1.0f : 0.0f },
+		{ .key = wgpu::StringView("TEXTURE_FORMAT"), .value = id.textures_enabled ? texture_format : 100.0f },
 		{ .key = wgpu::StringView("U_CLAMP"), .value = u_clamp ? 1.0f : 0.0f },
 		{ .key = wgpu::StringView("V_CLAMP"), .value = v_clamp ? 1.0f : 0.0f },
-		{ .key = wgpu::StringView("CLUT_FORMAT"), .value = clut ? clut_format : 100.0f },
+		{ .key = wgpu::StringView("CLUT_FORMAT"), .value = static_cast<double>(clut_format) },
 		{ .key = wgpu::StringView("BLEND_OPERATION"), .value = !clear_mode && blend ? blend_operation : 100.0f },
 		{ .key = wgpu::StringView("BLEND_SOURCE"), .value = static_cast<double>(blend_source) },
 		{ .key = wgpu::StringView("BLEND_DESTINATION"), .value = static_cast<double>(blend_destination) },
@@ -891,7 +880,6 @@ void ComputeRenderer::FlushRender() {
 	compute_pass_encoder.end();
 	compute_pass_encoder.release();
 
-
 	auto width = compute_texture.getWidth();
 	int bpp = compute_texture.getFormat() == wgpu::TextureFormat::RGBA8Uint ? 4 : 2;
 	auto size = 512 * width * bpp;
@@ -968,97 +956,31 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 	}
 
 	auto psp = PSP::GetInstance();
-	int bpp{};
+	float bpp{};
 	TextureCacheEntry cache{};
 
-	// At this point let's do this in software, if this function ever becomes an issue we can move it to compute
-	std::vector<uint32_t> texture_data{};
-	texture_data.resize(texture.width * texture.height);
-
-	bool clut = false;
 	switch (texture_format) {
-	case SCEGU_PF5650:
-	case SCEGU_PF5551:
-	case SCEGU_PF4444: {
-		bpp = 2;
-		uint16_t* buffer = reinterpret_cast<uint16_t*>(psp->VirtualToPhysical(texture.buffer));
-		for (int y = 0; y < texture.height; y++) {
-			for (int x = 0; x < texture.width; x++) {
-				uint16_t color = buffer[y * texture.pitch + x];
-				if (texture_format == SCEGU_PF5650) {
-					texture_data[y * texture.width + x] = BGR565ToABGR8888(color).abgr;
-				} else if (texture_format == SCEGU_PF5551) {
-					texture_data[y * texture.width + x] = ABGR1555ToABGR8888(color).abgr;
-				} else if (texture_format == SCEGU_PF4444) {
-					texture_data[y * texture.width + x] = ABGR4444ToABGR8888(color).abgr;
-				}
-			}
-		}
+	case SCEGU_PFIDX4:
+		bpp = 0.5;
 		break;
-	}
-	case SCEGU_PF8888: {
-		bpp = 4;
-		uint32_t* buffer = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(texture.buffer));
-		for (int y = 0; y < texture.height; y++) {
-			memcpy(&texture_data.data()[y * texture.width], &buffer[y * texture.pitch], texture.width * 4);
-		}
+	case SCEGU_PFIDX8:
+		bpp = 1.0;
 		break;
-	}
-	case SCEGU_PFIDX4: {
-		bpp = 1;
-		clut = true;
-		uint8_t* buffer = reinterpret_cast<uint8_t*>(psp->VirtualToPhysical(texture.buffer));
-		for (int y = 0; y < texture.height; y++) {
-			int texture_index = y * texture.width;
-			int clut_index = y * texture.pitch / 2;
-			for (int x = 0; x < texture.width; x += 2, clut_index++) {
-				uint8_t value = buffer[clut_index];
-				texture_data[texture_index + x] = value & 0xF;
-				if ((x + 1) < texture.width) {
-					texture_data[texture_index + x + 1] = value >> 4;
-				}
-			}
-		}
-		break;
-	}
-	case SCEGU_PFIDX8: {
-		bpp = 1;
-		clut = true;
-		uint8_t* buffer = reinterpret_cast<uint8_t*>(psp->VirtualToPhysical(texture.buffer));
-		for (int y = 0; y < texture.height; y++) {
-			int texture_index = y * texture.width;
-			int clut_index = y * texture.pitch;
-			for (int x = 0; x < texture.width; x++) {
-				texture_data[texture_index + x] = buffer[clut_index + x];
-			}
-		}
-		break;
-	}
-	case SCEGU_PFIDX32: {
-		bpp = 4;
-		clut = true;
-		uint32_t* buffer = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(texture.buffer));
-		for (int y = 0; y < texture.height; y++) {
-			int texture_index = y * texture.width;
-			int clut_index = y * texture.pitch;
-			for (int x = 0; x < texture.width; x++) {
-				texture_data[texture_index + x] = buffer[clut_index + x];
-			}
-		}
-		break;
-	}
 	default:
 		spdlog::error("ComputeRenderer: unknown texture format {}", texture_format);
 		return nullptr;
 	}
 
-	cache.size = texture.width * texture.height * bpp;
+	cache.size = texture.pitch * texture.height * bpp;
+
+	uint32_t clamped_width = std::min(texture.width, 512u) * bpp;
+	uint32_t clamped_height = std::min(texture.height, 512u);
 
 	// textures larger than 512x512 will have issues with UV interpolation, let's just hope this doesn't happen
 	wgpu::TextureDescriptor texture_desc{};
 	texture_desc.dimension = wgpu::TextureDimension::_2D;
-	texture_desc.format = clut ? wgpu::TextureFormat::R32Uint : wgpu::TextureFormat::RGBA8Uint;
-	texture_desc.size = { std::min(texture.width, 512u), std::min(texture.height, 512u), 1 };
+	texture_desc.format = wgpu::TextureFormat::R8Uint;
+	texture_desc.size = { clamped_width, clamped_height, 1 };
 	texture_desc.sampleCount = 1;
 	texture_desc.mipLevelCount = 1;
 	texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
@@ -1068,10 +990,10 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 	destination.texture = cache.texture;
 
 	wgpu::TexelCopyBufferLayout data_layout{};
-	data_layout.bytesPerRow = texture.width * 4;
+	data_layout.bytesPerRow = texture.pitch * bpp;
 	data_layout.rowsPerImage = texture.height;
 
-	queue.writeTexture(destination, texture_data.data(), texture_data.size() * 4, data_layout, {std::min(texture.width, 512u), std::min(texture.height, 512u), 1});
+	queue.writeTexture(destination, psp->VirtualToPhysical(texture.buffer), cache.size, data_layout, { std::min(data_layout.bytesPerRow, clamped_width), clamped_height, 1 });
 
 	wgpu::BindGroupEntry texture_binding{};
 	texture_binding.binding = 0;

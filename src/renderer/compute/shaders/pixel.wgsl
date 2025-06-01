@@ -77,7 +77,7 @@ fn drawPixel(pos: vec4i, uv: vec2f, c: vec4u) {
     }
 
     var color = c;
-    if (TEXTURES_ENABLED == 1) {
+    if (TEXTURE_FORMAT != 100) {
         color = filterTexture(uv);
     }
 

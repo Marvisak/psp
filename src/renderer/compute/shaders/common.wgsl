@@ -17,11 +17,10 @@ struct RenderData {
     alphaRef: u32
 }
 
-override TEXTURES_ENABLED: u32 = 0;
-override TEXTURE_FORMAT: u32 = 0;
+override TEXTURE_FORMAT: u32 = 100;
 override U_CLAMP: u32 = 0;
 override V_CLAMP: u32 = 0;
-override CLUT_FORMAT: u32 = 100;
+override CLUT_FORMAT: u32 = 0;
 override BLEND_OPERATION: u32 = 100;
 override BLEND_SOURCE: u32 = 0;
 override BLEND_DESTINATION: u32 = 0;
