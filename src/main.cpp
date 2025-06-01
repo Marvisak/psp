@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
         {"off", spdlog::level::off} };
     app.add_option("-l,--loglevel", level, "Log level")->transform(CLI::CheckedTransformer(levels, CLI::ignore_case));
 
-    RendererType renderer_type = RendererType::SOFTWARE;
+    RendererType renderer_type = RendererType::COMPUTE;
     std::map<std::string, RendererType> renderer_types{
         {"software", RendererType::SOFTWARE},
         {"compute", RendererType::COMPUTE}
