@@ -1087,7 +1087,34 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 	data_layout.bytesPerRow = texture.pitch * bpp;
 	data_layout.rowsPerImage = texture.height;
 
-	queue.writeTexture(destination, psp->VirtualToPhysical(texture.buffer), cache.size, data_layout, { std::min(data_layout.bytesPerRow, clamped_width), clamped_height, 1 });
+	uint32_t* buffer = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(texture.buffer));
+
+	std::vector<uint32_t> unswizzled_texture{};
+	if (texture_swizzling) {
+		unswizzled_texture.resize(cache.size);
+
+		// Shamelessly stolen from ppsspp
+		int bxc = data_layout.bytesPerRow / 16;
+		int byc = (texture.height + 7) / 8;
+
+		uint32_t* ydest = unswizzled_texture.data();
+		for (int by = 0; by < byc; by++) {
+			uint32_t* xdest = ydest;
+			for (int bx = 0; bx < bxc; bx++) {
+				uint32_t* dest = xdest;
+				for (int n = 0; n < 8; n++) {
+					memcpy(dest, buffer, 16);
+					dest += (data_layout.bytesPerRow >> 2);
+					buffer += 4;
+				}
+				xdest += 4;
+			}
+			ydest += (data_layout.bytesPerRow >> 2) * 8;
+		}
+		buffer = unswizzled_texture.data();
+	}
+
+	queue.writeTexture(destination, buffer, cache.size, data_layout, { std::min(data_layout.bytesPerRow, clamped_width), clamped_height, 1 });
 
 	wgpu::BindGroupEntry texture_binding{};
 	texture_binding.binding = 0;
