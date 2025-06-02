@@ -204,7 +204,7 @@ protected:
 	bool depth_test = false;
 	bool alpha_test = false;
 
-	bool bounding_box_success = false;
+	bool clip_plane = false;
 
 	bool gouraud_shading = false;
 
@@ -215,13 +215,13 @@ protected:
 
 	uint32_t zbp = 0;
 	uint16_t zbw = 0;
-	uint16_t min_z = 0;
-	uint16_t max_z = 65535;
+	int16_t min_z = 0;
+	int16_t max_z = 65535;
 	uint8_t depth_test_func = 0;
 	bool depth_write = false;
 
-	glm::uvec2 scissor_start{};
-	glm::uvec2 scissor_end{};
+	glm::ivec2 scissor_start{};
+	glm::ivec2 scissor_end{};
 
 	bool blend = false;
 	uint8_t blend_operation = 0;
@@ -263,10 +263,8 @@ protected:
 	bool v_clamp = false;
 	glm::ivec4 environment_texture{};
 
-	float u_scale = 0;
-	float v_scale = 0;
-	float u_offset = 0;
-	float v_offset = 0;
+	glm::vec2 uv_scale{};
+	glm::vec2 uv_offset{};
 
 	bool culling = false;
 	uint8_t cull_type = 0;

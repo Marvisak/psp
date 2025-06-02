@@ -103,6 +103,7 @@ void Renderer::Run() {
 		case CMD_OFFSET: offset = command << 8; break;
 		case CMD_REGION1: min_draw_area = glm::ivec2(command & 0x1FF, command >> 10 & 0x1FF); break;
 		case CMD_REGION2: max_draw_area = glm::ivec2(command & 0x1FF, command >> 10 & 0x1FF); break;
+		case CMD_CLE: clip_plane = command & 1; break;
 		case CMD_BCE: culling = command & 1; break;
 		case CMD_TME: textures_enabled = command & 1; break;
 		case CMD_ABE: blend = command & 1; break;
@@ -121,10 +122,10 @@ void Renderer::Run() {
 		case CMD_TX: viewport_pos.x = std::bit_cast<float>(command << 8); break;
 		case CMD_TY: viewport_pos.y = std::bit_cast<float>(command << 8); break;
 		case CMD_TZ: viewport_pos.z = std::bit_cast<float>(command << 8); break;
-		case CMD_SU: u_scale = std::bit_cast<float>(command << 8); break;
-		case CMD_SV: v_scale = std::bit_cast<float>(command << 8); break;
-		case CMD_TU: u_offset = std::bit_cast<float>(command << 8); break;
-		case CMD_TV: v_offset = std::bit_cast<float>(command << 8); break;
+		case CMD_SU: uv_scale.x = std::bit_cast<float>(command << 8); break;
+		case CMD_SV: uv_scale.y = std::bit_cast<float>(command << 8); break;
+		case CMD_TU: uv_offset.x = std::bit_cast<float>(command << 8); break;
+		case CMD_TV: uv_offset.y = std::bit_cast<float>(command << 8); break;
 		case CMD_OFFSETX: viewport_offset.x = command & 0xFFFFFF; break;
 		case CMD_OFFSETY: viewport_offset.y = command & 0xFFFFFF; break;
 		case CMD_SHADE: gouraud_shading = command & 1; break;
@@ -329,10 +330,8 @@ Vertex Renderer::ParseVertex() {
 			v.uv.x = static_cast<float>(psp->ReadMemory16(base_vaddr));
 			v.uv.y = static_cast<float>(psp->ReadMemory16(base_vaddr + 2));
 			if (!through) {
-				v.uv.x *= (1.f / 32768.f) * u_scale;
-				v.uv.y *= (1.f / 32768.f) * v_scale;
-				v.uv.x += u_offset;
-				v.uv.y += v_offset;
+				v.uv *= (1.f / 32768.f) * uv_scale;
+				v.uv += uv_offset;
 			}
 			base_vaddr += 4;
 			break;
@@ -531,6 +530,9 @@ void Renderer::BBox(DisplayList& dl, uint32_t opcode) {
 
 	executed_cycles += count * 22;
 
+	bool through_before = through;
+	through = true;
+
 	if (count > 0x200) {
 		uint32_t start_vaddr = vaddr;
 		ParseVertex();
@@ -542,16 +544,65 @@ void Renderer::BBox(DisplayList& dl, uint32_t opcode) {
 		count -= 0x100;
 	}
 
+	glm::mat4 viewproj = view_matrix * projection_matrix;
+
+	glm::vec2 base_offset = glm::vec2(viewport_offset) / 16.0f;
+	glm::vec2 min_offset = base_offset + glm::vec2(glm::max(min_draw_area, scissor_start)) - glm::vec2(1.0f);
+	glm::vec2 max_offset = base_offset + glm::vec2(glm::min(max_draw_area, scissor_end)) + glm::vec2(1.0f);
+	glm::vec2 min_viewport = (min_offset - glm::vec2(viewport_pos)) / glm::vec2(viewport_scale);
+	glm::vec2 max_viewport = (max_offset - glm::vec2(viewport_pos)) / glm::vec2(viewport_scale);
+	glm::vec2 viewport_size = max_viewport - min_viewport;
+
+	glm::mat4x4 apply_viewport{};
+	apply_viewport[0][0] = 2.0f / viewport_size.x;
+	apply_viewport[1][1] = 2.0f / viewport_size.y;
+	apply_viewport[2][2] = 1.0f;
+	apply_viewport[3][3] = 1.0f;
+
+	apply_viewport[0][3] = -(max_viewport.x + min_viewport.x) / viewport_size.x;
+	apply_viewport[1][3] = -(max_viewport.y + min_viewport.y) / viewport_size.y;
+
+	glm::mat4x4 mtx = viewproj * apply_viewport;
+
+	glm::vec4 planes[] = {
+		mtx[3] - mtx[0],
+		mtx[3] + mtx[0],
+		mtx[3] + mtx[1],
+		mtx[3] - mtx[1],
+		mtx[3] + mtx[2],
+		mtx[3] - mtx[2]
+	};
+
+	int plane_count = clip_plane ? 6 : 4;
+
 	int outside = 0;
 	for (int i = 0; i < count; i++) {
 		auto vertex = ParseVertex();
 
-		if (vertex.pos.x < min_draw_area.x || vertex.pos.y < min_draw_area.y || vertex.pos.x > max_draw_area.x || vertex.pos.y > max_draw_area.y) {
-			outside++;
+		glm::vec3 pos = vertex.pos * world_matrix;
+
+		for (int plane = 0; plane < plane_count; plane++) {
+			float value = glm::dot(glm::vec3(planes[plane]), pos) + planes[plane].w;
+			if (value <= -FLT_EPSILON) {
+				bool outside_edge = false;
+				switch (plane) {
+				case 0: outside_edge = max_offset.x >= 4096.0f; break;
+				case 1: outside_edge = min_offset.x < 1.0f; break;
+				case 2: outside_edge = min_offset.y < 1.0f; break;
+				case 3: outside_edge = max_offset.y >= 4096.0f; break;
+				}
+
+				if (!outside_edge) {
+					outside++;
+					break;
+				}
+			}
 		}
 	}
 
-	dl.bounding_box_check = (count - outside) != 0;
+	dl.bounding_box_check = outside != count;
+
+	through = through_before;
 }
 
 void Renderer::End(DisplayList& dl, uint32_t opcode) {
