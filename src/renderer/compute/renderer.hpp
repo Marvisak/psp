@@ -79,6 +79,7 @@ private:
 			bool depth_write : 1;
 			bool depth_test : 1;
 			uint8_t depth_func : 3;
+			bool gouraud_shading : 1;
 		};
 	};
 

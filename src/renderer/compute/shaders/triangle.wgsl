@@ -31,7 +31,16 @@ fn draw(@builtin(global_invocation_id) id: vec3u) {
             pos.z = (vertices[0].pos.z * e0 + vertices[1].pos.z * e1 + vertices[2].pos.z * e2) / eSum;
         }
 
-        drawPixel(vec4i(pos), uv, vertices[0].color);
+        var color = vertices[0].color;
+        if GOURAUD_SHADING == 1 {
+            let nColor0 = vec4f(vertices[0].color) / 255.0;
+            let nColor1 = vec4f(vertices[1].color) / 255.0;
+            let nColor2 = vec4f(vertices[2].color) / 255.0;
+
+            color = vec4u((nColor0 * e0 + nColor1 * e1 + nColor2 * e2) / eSum * 255.0);
+        }
+
+        drawPixel(vec4i(pos), uv, color);
     }
 }
 )"

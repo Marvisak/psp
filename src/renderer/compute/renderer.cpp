@@ -775,6 +775,8 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 			id.depth_func = depth_test_func;
 		}
 		id.depth_write = depth_write;
+
+		id.gouraud_shading = gouraud_shading;
 	} else {
 		id.depth_write = clear_mode_depth;
 	}
@@ -798,6 +800,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 		{ .key = wgpu::StringView("TEXTURE_FUNCTION"), .value = static_cast<double>(texture_function) },
 		{ .key = wgpu::StringView("DEPTH_FUNC"), .value = id.depth_test ? depth_test_func : 100.0f },
 		{ .key = wgpu::StringView("DEPTH_WRITE"), .value = id.depth_write ? 1.0f : 0.0f },
+		{ .key = wgpu::StringView("GOURAUD_SHADING"), .value = id.gouraud_shading ? 1.0f : 0.0f },
 
 	};
 
@@ -825,7 +828,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 	compute_pipeline_desc.compute.entryPoint = wgpu::StringView("draw");
 	compute_pipeline_desc.compute.module = shader_module;
 	compute_pipeline_desc.compute.constants = constants;
-	compute_pipeline_desc.compute.constantCount = 14;
+	compute_pipeline_desc.compute.constantCount = 15;
 	compute_pipeline_desc.layout = id.textures_enabled ? compute_texture_layout : compute_layout;
 	auto compute_pipeline = device.createComputePipeline(compute_pipeline_desc);
 	shader_module.release();
