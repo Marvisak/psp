@@ -488,23 +488,17 @@ void ComputeRenderer::DrawTriangleFan(std::vector<Vertex> vertices) {
 
 void ComputeRenderer::ClearTextureCache() {
 	for (auto& [_, entry] : texture_cache) {
-		deleted_textures.push_back(entry);
+		entry.dirty = true;
 	}
-	
-	texture_cache.clear();
 }
 
 void ComputeRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
 	addr &= 0x3FFFFFFF;
 	uint32_t addr_end = addr + size;
-	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
-		uint32_t texture_end = it->first + it->second.size / 2;
-		if (addr <= texture_end && addr_end >= it->first) {
-			deleted_textures.push_back(it->second);
-			texture_cache.erase(it++);
-		}
-		else {
-			it++;
+	for (auto& [addr, entry] : texture_cache) {
+		uint32_t texture_end = addr + entry.size / 2;
+		if (addr <= texture_end && addr_end >= addr) {
+			entry.dirty = true;
 		}
 	}
 }
@@ -1037,15 +1031,9 @@ uint32_t ComputeRenderer::PushVertices(std::vector<Vertex> vertices) {
 
 wgpu::BindGroup ComputeRenderer::GetTexture() {
 	auto& texture = textures[0];
-	if (texture_cache.contains(texture.buffer)) {
-		auto& cache = texture_cache[texture.buffer];
-		cache.unused_frames = 0;
-		return cache.bind_group;
-	}
 
 	auto psp = PSP::GetInstance();
 	float bpp{};
-	TextureCacheEntry cache{};
 
 	switch (texture_format) {
 	case SCEGU_PFIDX4:
@@ -1065,27 +1053,50 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 		return nullptr;
 	}
 
-	cache.size = texture.pitch * texture.height * bpp;
-
 	uint32_t clamped_width = std::min(texture.width, 512u) * bpp;
 	uint32_t clamped_height = std::min(texture.height, 512u);
 
-	// textures larger than 512x512 will have issues with UV interpolation, let's just hope this doesn't happen
-	wgpu::TextureDescriptor texture_desc{};
-	texture_desc.dimension = wgpu::TextureDimension::_2D;
-	texture_desc.format = wgpu::TextureFormat::R8Uint;
-	texture_desc.size = { clamped_width, clamped_height, 1 };
-	texture_desc.sampleCount = 1;
-	texture_desc.mipLevelCount = 1;
-	texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
-	cache.texture = device.createTexture(texture_desc);
+	bool recreate_texture = true;
+	TextureCacheEntry cache{};
+	if (texture_cache.contains(texture.buffer)) {
+		cache = texture_cache[texture.buffer];
+		cache.unused_frames = 0;
 
-	wgpu::TexelCopyTextureInfo destination{};
-	destination.texture = cache.texture;
+		if (!cache.dirty) {
+			return cache.bind_group;
+		}
 
-	wgpu::TexelCopyBufferLayout data_layout{};
-	data_layout.bytesPerRow = texture.pitch * bpp;
-	data_layout.rowsPerImage = texture.height;
+		if (cache.texture.getWidth() == clamped_width && cache.texture.getHeight() == clamped_height) {
+			recreate_texture = false;
+		} else {
+			deleted_textures.push_back(cache);
+		}
+	}
+
+	cache.size = texture.pitch * texture.height * bpp;
+
+	uint32_t pitch = texture.pitch * bpp;
+	if (recreate_texture) {
+		// textures larger than 512x512 will have issues with UV interpolation, let's just hope this doesn't happen
+		wgpu::TextureDescriptor texture_desc{};
+		texture_desc.dimension = wgpu::TextureDimension::_2D;
+		texture_desc.format = wgpu::TextureFormat::R8Uint;
+		texture_desc.size = { clamped_width, clamped_height, 1 };
+		texture_desc.sampleCount = 1;
+		texture_desc.mipLevelCount = 1;
+		texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
+		cache.texture = device.createTexture(texture_desc);
+
+		wgpu::BindGroupEntry texture_binding{};
+		texture_binding.binding = 0;
+		texture_binding.textureView = cache.texture.createView();
+
+		wgpu::BindGroupDescriptor texture_bind_group_desc{};
+		texture_bind_group_desc.layout = compute_texture_bind_group_layout;
+		texture_bind_group_desc.entryCount = 1;
+		texture_bind_group_desc.entries = &texture_binding;
+		cache.bind_group = device.createBindGroup(texture_bind_group_desc);
+	}
 
 	uint32_t* buffer = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(texture.buffer));
 
@@ -1094,7 +1105,7 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 		unswizzled_texture.resize(cache.size);
 
 		// Shamelessly stolen from ppsspp
-		int bxc = data_layout.bytesPerRow / 16;
+		int bxc = pitch / 16;
 		int byc = (texture.height + 7) / 8;
 
 		uint32_t* ydest = unswizzled_texture.data();
@@ -1104,27 +1115,24 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 				uint32_t* dest = xdest;
 				for (int n = 0; n < 8; n++) {
 					memcpy(dest, buffer, 16);
-					dest += (data_layout.bytesPerRow >> 2);
+					dest += (pitch >> 2);
 					buffer += 4;
 				}
 				xdest += 4;
 			}
-			ydest += (data_layout.bytesPerRow >> 2) * 8;
+			ydest += (pitch >> 2) * 8;
 		}
 		buffer = unswizzled_texture.data();
 	}
 
-	queue.writeTexture(destination, buffer, cache.size, data_layout, { std::min(data_layout.bytesPerRow, clamped_width), clamped_height, 1 });
+	wgpu::TexelCopyTextureInfo destination{};
+	destination.texture = cache.texture;
 
-	wgpu::BindGroupEntry texture_binding{};
-	texture_binding.binding = 0;
-	texture_binding.textureView = cache.texture.createView();
+	wgpu::TexelCopyBufferLayout data_layout{};
+	data_layout.bytesPerRow = pitch;
+	data_layout.rowsPerImage = texture.height;
 
-	wgpu::BindGroupDescriptor texture_bind_group_desc{};
-	texture_bind_group_desc.layout = compute_texture_bind_group_layout;
-	texture_bind_group_desc.entryCount = 1;
-	texture_bind_group_desc.entries = &texture_binding;
-	cache.bind_group = device.createBindGroup(texture_bind_group_desc);
+	queue.writeTexture(destination, buffer, cache.size, data_layout, { std::min(pitch, clamped_width), clamped_height, 1 });
 
 	texture_cache[texture.buffer] = cache;
 

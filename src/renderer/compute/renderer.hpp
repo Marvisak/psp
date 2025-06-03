@@ -46,6 +46,7 @@ private:
 
 	struct TextureCacheEntry {
 		int unused_frames;
+		bool dirty;
 		uint32_t size;
 		wgpu::Texture texture;
 		wgpu::BindGroup bind_group;

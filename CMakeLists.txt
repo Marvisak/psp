@@ -69,3 +69,4 @@ target_link_libraries(psp PRIVATE Sockpp::sockpp elfio::elfio spdlog::spdlog CLI
 target_include_directories(psp PRIVATE include)
 
 add_custom_command(TARGET psp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:psp> $<TARGET_FILE_DIR:psp> COMMAND_EXPAND_LISTS)
+SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/PROFILE")
