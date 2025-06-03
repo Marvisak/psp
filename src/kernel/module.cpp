@@ -83,8 +83,9 @@ bool Module::LoadELF(std::istringstream ss) {
 	}
 
 	if (!module_info) {
-		spdlog::error("Module: cannot find sceModuleInfo");
-		return false;
+		uint32_t offset = elfio.segments[0]->get_physical_address() - elfio.segments[0]->get_offset();
+		module_info_addr = elfio.segments[0]->get_virtual_address() + offset;
+		module_info = reinterpret_cast<const PSPModuleInfo*>(elfio.segments[0]->get_data() + offset);
 	}
 
 	std::string mod_name = "ELF/";
