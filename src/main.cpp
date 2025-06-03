@@ -40,11 +40,14 @@ int main(int argc, char* argv[]) {
     int gdb_port = 5678;
     app.add_option("-p,--port", gdb_port, "Port used by GDB Stub");
 
+    bool nearest_filtering = false;
+    app.add_flag("-n,--nearest", nearest_filtering, "Enables nearest screen filtering instead of linear");
+
     CLI11_PARSE(app, argc, argv);
 
     spdlog::set_level(level);
     
-    PSP psp(renderer_type);
+    PSP psp(renderer_type, nearest_filtering);
     if (!psp.LoadExec(elf_path)) {
         return 1;
     }

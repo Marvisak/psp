@@ -33,7 +33,7 @@ struct ScheduledEvent {
 
 class PSP {
 public:
-	PSP(RendererType renderer_type);
+	PSP(RendererType renderer_type, bool nearest_filtering);
 	~PSP();
 
 	void Run();

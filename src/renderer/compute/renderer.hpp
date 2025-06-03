@@ -9,7 +9,7 @@ constexpr auto MAX_BUFFER_VERTEX_COUNT = 16384;
 
 class ComputeRenderer : public Renderer {
 public:
-	ComputeRenderer();
+	ComputeRenderer(bool nearest_filtering);
 	~ComputeRenderer();
 
 	void Frame();
@@ -86,7 +86,7 @@ private:
 	wgpu::Buffer CreateBuffer(uint64_t size, wgpu::BufferUsage usage);
 
 	void SetupRenderPipeline(wgpu::ShaderModule shader_module);
-	void SetupRenderBindGroup();
+	void SetupRenderBindGroup(bool nearest_filtering);
 	void SetupFramebufferConversion(wgpu::ShaderModule shader_module);
 
 	wgpu::ComputePipeline GetShader(uint8_t primitive_type, uint8_t filter);
@@ -144,7 +144,7 @@ private:
 	uint64_t current_clut = 0;
 
 	wgpu::Buffer frame_width_buffer;
-	wgpu::Sampler nearest_sampler;
+	wgpu::Sampler screen_sampler;
 	wgpu::Texture framebuffer_texture;
 	uint32_t frame_buffer = 0;
 	int pixel_format = 0;

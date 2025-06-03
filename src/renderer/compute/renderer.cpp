@@ -21,7 +21,7 @@ uint16_t QUAD_INDICES[]{
 	2, 1, 3
 };
 
-ComputeRenderer::ComputeRenderer() : Renderer() {
+ComputeRenderer::ComputeRenderer(bool nearest_filtering) : Renderer() {
 	instance = wgpu::createInstance();
 
 	surface = SDL_GetWGPUSurface(instance, window);
@@ -64,7 +64,7 @@ ComputeRenderer::ComputeRenderer() : Renderer() {
 
 	auto framebuffer_shader_module = CreateShaderModule(wgpu::StringView(framebuffer_shader));
 	SetupRenderPipeline(framebuffer_shader_module);
-	SetupRenderBindGroup();
+	SetupRenderBindGroup(nearest_filtering);
 	SetupFramebufferConversion(framebuffer_shader_module);
 	framebuffer_shader_module.release();
 
@@ -210,6 +210,7 @@ ComputeRenderer::~ComputeRenderer() {
 	framebuffer_conversion_bind_group_layout.release();
 	frame_width_buffer.release();
 	framebuffer_texture.release();
+	screen_sampler.release();
 	render_bind_group.release();
 	render_pipeline.release();
 	render_layout.release();
@@ -640,7 +641,7 @@ void ComputeRenderer::SetupRenderPipeline(wgpu::ShaderModule shader_module) {
 	render_pipeline = device.createRenderPipeline(pipeline_desc);
 }
 
-void ComputeRenderer::SetupRenderBindGroup() {
+void ComputeRenderer::SetupRenderBindGroup(bool nearest_filtering) {
 	wgpu::TextureDescriptor texture_desc{};
 	texture_desc.dimension = wgpu::TextureDimension::_2D;
 	texture_desc.format = wgpu::TextureFormat::RGBA8Unorm;
@@ -653,10 +654,10 @@ void ComputeRenderer::SetupRenderBindGroup() {
 	wgpu::SamplerDescriptor sampler_desc{};
 	sampler_desc.addressModeU = wgpu::AddressMode::Repeat;
 	sampler_desc.addressModeV = wgpu::AddressMode::Repeat;
-	sampler_desc.magFilter = wgpu::FilterMode::Nearest;
-	sampler_desc.minFilter = wgpu::FilterMode::Nearest;
+	sampler_desc.magFilter = nearest_filtering ? wgpu::FilterMode::Nearest : wgpu::FilterMode::Linear;
+	sampler_desc.minFilter = nearest_filtering ? wgpu::FilterMode::Nearest : wgpu::FilterMode::Linear;
 	sampler_desc.maxAnisotropy = 1;
-	nearest_sampler = device.createSampler(sampler_desc);
+	screen_sampler = device.createSampler(sampler_desc);
 
 	frame_width_buffer = CreateBuffer(sizeof(float), wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform);
 
@@ -665,7 +666,7 @@ void ComputeRenderer::SetupRenderBindGroup() {
 	render_bindings[0].textureView = framebuffer_texture.createView();
 
 	render_bindings[1].binding = 1;
-	render_bindings[1].sampler = nearest_sampler;
+	render_bindings[1].sampler = screen_sampler;
 
 	render_bindings[2].binding = 2;
 	render_bindings[2].buffer = frame_width_buffer;

@@ -15,7 +15,7 @@ std::vector<std::string> MEMORY_STICK_REQUIRED_FOLDERS = {
 	"PSP/SAVEDATA",
 };
 
-PSP::PSP(RendererType renderer_type) {
+PSP::PSP(RendererType renderer_type, bool nearest_filtering) {
 	instance = this;
 	ram = std::make_unique<uint8_t[]>(USER_MEMORY_END - KERNEL_MEMORY_START);
 	vram = std::make_unique<uint8_t[]>(VRAM_END - VRAM_START);
@@ -58,7 +58,7 @@ PSP::PSP(RendererType renderer_type) {
 		renderer = std::make_unique<SoftwareRenderer>();
 		break;
 	case RendererType::COMPUTE:
-		renderer = std::make_unique<ComputeRenderer>();
+		renderer = std::make_unique<ComputeRenderer>(nearest_filtering);
 		break;
 	}
 	RegisterHLE();
