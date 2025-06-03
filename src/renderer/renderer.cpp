@@ -186,9 +186,9 @@ void Renderer::Run() {
 		case CMD_ZMSK: depth_write = !(command & 1); break;
 		case CMD_PMSK2: spdlog::warn("Renderer: unimplemented GE command CMD_PMSK2"); break;
 		case CMD_XSTART: XStart(command); break;
-		case CMD_XPOS1: transfer_source.x = command & 0x3FF; transfer_source.y = (command >> 10) & 0x3FF; break;
-		case CMD_XPOS2: transfer_dest.x = command & 0x3FF; transfer_dest.y = (command >> 10) & 0x3FF; break;
-		case CMD_XSIZE: transfer_width = command & 0x3FF; transfer_height = (command >> 10) & 0x3FF; break;
+		case CMD_XPOS1: transfer_source.pos.x = command & 0x3FF; transfer_source.pos.y = (command >> 10) & 0x3FF; break;
+		case CMD_XPOS2: transfer_dest.pos.x = command & 0x3FF; transfer_dest.pos.y = (command >> 10) & 0x3FF; break;
+		case CMD_XSIZE: transfer_size.x = command & 0x3FF; transfer_size.y = (command >> 10) & 0x3FF; break;
 		default:
 			spdlog::error("Renderer: unknown GE command {:x}", command >> 24);
 			break;
@@ -705,23 +705,21 @@ void Renderer::Blend(uint32_t opcode) {
 
 void Renderer::XStart(uint32_t opcode) {
 	auto psp = PSP::GetInstance();
-	auto src = psp->VirtualToPhysical(transfer_source.buffer);
-	auto dest = psp->VirtualToPhysical(transfer_dest.buffer);
 
 	FlushRender();
-	int bpp = 0;
-	for (int y = 0; y <= transfer_height; y++) {
-		uint32_t src_index = (transfer_source.y + y) * transfer_source.pitch + transfer_source.x;
-		uint32_t dest_index = (transfer_dest.y + y) * transfer_dest.pitch + transfer_dest.x;
-		if (opcode & 1) {
-			bpp = 4;
-			memcpy(reinterpret_cast<uint32_t*>(dest) + dest_index, reinterpret_cast<uint32_t*>(src) + src_index, (transfer_width + 1) * 4);
-		} else {
-			bpp = 2;
-			memcpy(reinterpret_cast<uint16_t*>(dest) + dest_index, reinterpret_cast<uint16_t*>(src) + src_index, (transfer_width + 1) * 2);
-		}
+
+	int bpp = opcode & 1 ? 4 : 2;
+
+	uint32_t src_addr = transfer_source.buffer + (transfer_source.pos.y * transfer_source.pitch + transfer_source.pos.x) * bpp;
+	uint32_t dst_addr = transfer_dest.buffer + (transfer_dest.pos.y * transfer_dest.pitch + transfer_dest.pos.x) * bpp;
+
+	auto src = reinterpret_cast<uint8_t*>(psp->VirtualToPhysical(src_addr));
+	auto dst = reinterpret_cast<uint8_t*>(psp->VirtualToPhysical(dst_addr));
+
+	for (int y = 0; y <= transfer_size.y; y++) {
+		memcpy(dst + y * transfer_dest.pitch * bpp, src + y * transfer_source.pitch * bpp, (transfer_size.x + 1) * bpp);
 	}
 	RenderFramebufferChange();
 
-	executed_cycles = ((transfer_height + 1) * (transfer_width + 1) * bpp * 16) / 10;
+	executed_cycles = ((transfer_size.x + 1) * (transfer_size.y + 1) * bpp * 16) / 10;
 }

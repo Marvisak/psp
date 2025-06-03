@@ -78,8 +78,7 @@ struct Texture {
 struct Transfer {
 	uint32_t buffer;
 	uint32_t pitch;
-	uint16_t x;
-	uint16_t y;
+	glm::uvec2 pos;
 };
 
 class Renderer {
@@ -210,8 +209,7 @@ protected:
 
 	Transfer transfer_source{};
 	Transfer transfer_dest{};
-	uint32_t transfer_width = 0;
-	uint32_t transfer_height = 0;
+	glm::uvec2 transfer_size{};
 
 	uint32_t zbp = 0;
 	uint16_t zbw = 0;
