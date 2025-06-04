@@ -33,8 +33,6 @@ PSP::PSP(RendererType renderer_type, bool nearest_filtering) {
 	kernel = std::make_unique<Kernel>();
 	cpu = std::make_unique<CPU>();
 
-
-
 	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
 		spdlog::error("PSP: SDL init error {}", SDL_GetError());
 		return;

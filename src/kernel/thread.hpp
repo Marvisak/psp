@@ -22,6 +22,7 @@ enum class WaitReason {
 	SEMAPHORE = 3,
 	VBLANK = 6,
 	THREAD_END = 9,
+	UMD = 11,
 	MUTEX = 13,
 	LWMUTEX = 14,
 	CTRL = 15,

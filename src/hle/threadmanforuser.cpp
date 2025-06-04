@@ -548,6 +548,27 @@ static int sceKernelCheckThreadStack() {
 	return 0;
 }
 
+static int sceKernelRotateThreadReadyQueue(int priority) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+	if (priority == 0) {
+		int current_thread = kernel->GetCurrentThread();
+		auto thread = kernel->GetKernelObject<Thread>(current_thread);
+		priority = thread->GetPriority();
+	}
+
+	if (priority < 0x8 || priority > 0x77) {
+		spdlog::warn("sceKernelRotateThreadReadyQueue: invalid priority {:x}", priority);
+		return SCE_KERNEL_ERROR_ILLEGAL_PRIORITY;
+	}
+
+	kernel->RotateThreadReadyQueue(priority);
+	psp->EatCycles(250);
+	kernel->HLEReschedule();
+
+	return SCE_KERNEL_ERROR_OK;
+}
+
 static int sceKernelCreateCallback(const char* name, uint32_t entry, uint32_t common) {
 	if (!name) {
 		spdlog::warn("sceKernelCreateCallback: name is NULL {}");
@@ -1151,6 +1172,7 @@ FuncMap RegisterThreadManForUser() {
 	funcs[0xD59EAD2F] = HLE_I_R(sceKernelWakeupThread);
 	funcs[0x52089CA1] = HLE_I_R(sceKernelGetThreadStackFreeSize);
 	funcs[0xD13BDE95] = HLE_R(sceKernelCheckThreadStack);
+	funcs[0x912354A7] = HLE_I_R(sceKernelRotateThreadReadyQueue);
 	funcs[0xD6DA4BA1] = HLE_CUIIU_R(sceKernelCreateSema);
 	funcs[0x28B6489C] = HLE_I_R(sceKernelDeleteSema);
 	funcs[0x3F53E640] = HLE_II_R(sceKernelSignalSema);

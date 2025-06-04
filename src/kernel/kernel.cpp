@@ -162,6 +162,22 @@ void Kernel::RemoveThreadFromQueue(int thid) {
 	queue.erase(std::remove(queue.begin(), queue.end(), thid), queue.end());
 }
 
+void Kernel::RotateThreadReadyQueue(int priority) {
+	auto& queue = thread_ready_queue[priority];
+	if (queue.empty()) {
+		return;
+	}
+
+	auto current_thread_obj = GetKernelObject<Thread>(GetCurrentThread());
+	if (current_thread_obj->GetPriority() == priority) {
+		RemoveThreadFromQueue(GetCurrentThread());
+		AddThreadToQueue(GetCurrentThread());
+		current_thread_obj->SetState(ThreadState::READY);
+	} else {
+		std::rotate(queue.begin(), queue.end() - 1, queue.end());
+	}
+}
+
 int Kernel::CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr) {
 	auto current_thread_obj = GetKernelObject<Thread>(GetCurrentThread());
 	auto module = GetKernelObject<Module>(current_thread_obj->GetModule());
@@ -414,7 +430,7 @@ bool Kernel::WakeUpThread(int thid) {
 }
 
 std::shared_ptr<WaitObject> Kernel::WaitCurrentThread(WaitReason reason, bool allow_callbacks) {
-	Thread* thread = GetKernelObject<Thread>(GetCurrentThread());
+	auto thread = GetKernelObject<Thread>(GetCurrentThread());
 
 	thread->SetState(ThreadState::WAIT);
 	RemoveThreadFromQueue(GetCurrentThread());
