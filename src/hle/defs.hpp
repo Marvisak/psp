@@ -6,6 +6,9 @@ constexpr auto STDIN = 0;
 constexpr auto STDOUT = 1;
 constexpr auto STDERR = 2;
 
+constexpr auto SCE_TRUE = 1;
+constexpr auto SCE_FALSE = 1;
+
 constexpr auto SCE_FREAD = 0x0001;
 constexpr auto SCE_FWRITE = 0x0002;
 constexpr auto SCE_FAPPEND = 0x0100;
@@ -53,6 +56,14 @@ constexpr auto SCE_CTRL_TRIANGLE = (1 << 12);
 constexpr auto SCE_CTRL_CIRCLE = (1 << 13);
 constexpr auto SCE_CTRL_CROSS = (1 << 14);
 constexpr auto SCE_CTRL_SQUARE = (1 << 15);
+
+constexpr auto SCE_UMD_INIT = 0x00;
+constexpr auto SCE_UMD_MEDIA_OUT = 0x01;
+constexpr auto SCE_UMD_MEDIA_IN = 0x02;
+constexpr auto SCE_UMD_MEDIA_CHG = 0x04;
+constexpr auto SCE_UMD_NOT_READY = 0x08;
+constexpr auto SCE_UMD_READY = 0x10;
+constexpr auto SCE_UMD_READABLE = 0x20;
 
 constexpr auto SCEGU_PRIM_TRIANGLES = 3;
 constexpr auto SCEGU_PRIM_TRIANGLE_STRIP = 4;
@@ -141,6 +152,7 @@ constexpr auto SCE_ERROR_INVALID_VALUE = 0x800001FE;
 
 constexpr auto SCE_ERROR_ERRNO_ENOENT = 0x80010002;
 constexpr auto SCE_ERROR_ERRNO_EEXIST = 0x80010011;
+constexpr auto SCE_ERROR_ERRNO_EINVAL = 0x80010016;
 
 constexpr auto SCE_KERNEL_ERROR_OK = 0x0;
 constexpr auto SCE_KERNEL_ERROR_ERROR = 0x80020001;

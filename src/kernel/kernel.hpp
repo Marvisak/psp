@@ -75,6 +75,7 @@ public:
 	void HLEReschedule() { reschedule = true; }
 	void AddThreadToQueue(int thid);
 	void RemoveThreadFromQueue(int thid);
+	void RotateThreadReadyQueue(int priority);
 
 	int CreateThread(std::string name, uint32_t entry, int init_priority, uint32_t stack_size, uint32_t attr);
 	void StartThread(int thid, int arg_size, void* arg_block);
