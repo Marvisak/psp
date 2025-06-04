@@ -60,6 +60,7 @@ private:
 	void BLEZL(uint32_t opcode);
 	void BGTZ(uint32_t opcode);
 	void BGTZL(uint32_t opcode);
+	void CACHE(uint32_t opcode);
 	void CLO(uint32_t opcode);
 	void CLZ(uint32_t opcode);
 	void DIV(uint32_t opcode);

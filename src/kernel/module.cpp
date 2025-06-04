@@ -187,10 +187,12 @@ bool Module::LoadELF(std::istringstream ss) {
 	uint32_t* current_pos = stub_start;
 	while (current_pos < stub_end) {
 		auto entry = reinterpret_cast<PSPLibStubEntry*>(current_pos);
+		current_pos += entry->size;
+
 		const char* module_name = reinterpret_cast<const char*>(psp->VirtualToPhysical(entry->name));
 		if (!hle_modules.contains(module_name)) {
-			spdlog::error("Module: Missing {} HLE module", module_name);
-			return false;
+			spdlog::info("Module: no {} HLE module found", module_name);
+			continue;
 		}
 
 		uint32_t* nids = static_cast<uint32_t*>(psp->VirtualToPhysical(entry->nid_data));
@@ -208,8 +210,7 @@ bool Module::LoadELF(std::istringstream ss) {
 			uint32_t sym_addr = entry->first_sym_addr + i * 8;
 			psp->WriteMemory32(sym_addr + 4, instr);
 		}
-
-		current_pos += entry->size;
+		spdlog::info("Module: loaded {} HLE module", module_name);
 	}
 
 	return true;

@@ -1095,6 +1095,18 @@ static int sceKernelSetEventFlag(int evfid, uint32_t bit_pattern) {
 	return 0;
 }
 
+static int sceKernelGetSystemTime(uint32_t clock_addr) {
+	auto psp = PSP::GetInstance();
+	uint64_t time = CYCLES_TO_US(psp->GetCycles());
+	if (!psp->VirtualToPhysical(clock_addr)) {
+		psp->WriteMemory64(clock_addr, time);
+	}
+
+	psp->EatCycles(265);
+	psp->GetKernel()->HLEReschedule();
+	return SCE_KERNEL_ERROR_OK;
+}
+
 static uint64_t sceKernelGetSystemTimeWide() {
 	auto psp = PSP::GetInstance();
 	uint64_t time = CYCLES_TO_US(psp->GetCycles());
@@ -1170,6 +1182,7 @@ FuncMap RegisterThreadManForUser() {
 	funcs[0x1FB15A32] = HLE_IU_R(sceKernelSetEventFlag);
 	funcs[0xAA73C935] = HLE_I_R(sceKernelExitThread);
 	funcs[0x809CE29B] = HLE_I_R(sceKernelExitDeleteThread);
+	funcs[0xDB738F35] = HLE_I_R(sceKernelGetSystemTime);
 	funcs[0x82BC5777] = HLE_64R(sceKernelGetSystemTimeWide);
 	funcs[0x369ED59D] = HLE_R(sceKernelGetSystemTimeLow);
 	return funcs;

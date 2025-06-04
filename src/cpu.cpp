@@ -146,6 +146,7 @@ bool CPU::RunInstruction() {
 	case 0x2A: SWL(opcode); break;
 	case 0x2B: SW(opcode); break;
 	case 0x2E: SWR(opcode); break;
+	case 0x2F: CACHE(opcode); break;
 	case 0x31: LWC1(opcode); break;
 	case 0x39: SWC1(opcode); break;
 	default:
@@ -246,6 +247,10 @@ void CPU::BGTZL(uint32_t opcode) {
 		pc += 4;
 		next_pc = pc + 4;
 	}
+}
+
+void CPU::CACHE(uint32_t opcode) {
+	spdlog::warn("CPU: CACHE instruction unimplemented");
 }
 
 void CPU::CLO(uint32_t opcode) {

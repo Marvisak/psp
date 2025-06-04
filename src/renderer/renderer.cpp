@@ -109,7 +109,7 @@ void Renderer::Run() {
 		case CMD_ABE: blend = command & 1; break;
 		case CMD_ATE: alpha_test = command & 1; break;
 		case CMD_ZTE: depth_test = command & 1; break;
-		case CMD_DIVIDE: spdlog::debug("Renderer: unimplemented GE command CMD_DIVIDE"); break;
+		case CMD_DIVIDE: spdlog::warn("Renderer: unimplemented GE command CMD_DIVIDE"); break;
 		case CMD_WORLDN: world_matrix_num = command & 0xF; break;
 		case CMD_WORLDD: WorldD(command); break;
 		case CMD_VIEWN: view_matrix_num = command & 0xF; break;
