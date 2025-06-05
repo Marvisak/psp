@@ -153,5 +153,5 @@ private:
 
 	uint32_t fcr31 = 0xdeadbeef;
 	bool fpu_cond = false;
-	std::array<float, 32> fpu_regs{ std::numeric_limits<float>::quiet_NaN() };
+	std::array<float, 32> fpu_regs{};
 };
