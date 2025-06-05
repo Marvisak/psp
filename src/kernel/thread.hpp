@@ -42,7 +42,7 @@ public:
 	Thread(Module* module, std::string name, uint32_t entry_addr, int priority, uint32_t stack_size, uint32_t attr, uint32_t return_addr);
 	~Thread();
 
-	void Start(int arg_size, void* arg_block);
+	void Start(int arg_size, uint32_t arg_block_addr);
 	
 	void CreateStack();
 	void FillStack();
@@ -80,7 +80,14 @@ public:
 	uint32_t GetAttr() const { return attr; }
 	void SetAttr(uint32_t attr) { this->attr = attr; }
 
-	void SetReturnValue(uint32_t value) { regs[MIPS_REG_V0] = value; }
+	void SetReturnValue(uint32_t value) {
+		auto psp = PSP::GetInstance();
+		auto current_thread = psp->GetKernel()->GetCurrentThread();
+		if (current_thread == GetUID()) {
+			psp->GetCPU()->SetRegister(MIPS_REG_V0, value);
+		}
+		regs[MIPS_REG_V0] = value;
+	}
 
 	uint32_t GetGP() const { return gp; }
 	void SetGP(uint32_t gp) { this->gp = gp; }

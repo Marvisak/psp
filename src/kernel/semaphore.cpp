@@ -18,10 +18,11 @@ Semaphore::~Semaphore() {
 			psp->Unschedule(sema_thread.timeout_event);
 		}
 
-		thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_DELETE);
 		sema_thread.wait->ended = true;
-		kernel->WakeUpThread(sema_thread.thid);
-		kernel->HLEReschedule();
+		if (kernel->WakeUpThread(sema_thread.thid)) {
+			thread->SetReturnValue(SCE_KERNEL_ERROR_WAIT_DELETE);
+			kernel->HLEReschedule();
+		}
 	}
 }
 

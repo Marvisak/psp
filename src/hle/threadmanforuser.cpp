@@ -193,6 +193,7 @@ static int LockMutex(int mtxid, int lock_count, uint32_t timeout_addr, bool allo
 	}
 
 	mutex->Lock(lock_count, allow_callbacks, timeout_addr);
+	kernel->HLEReschedule();
 
 	return SCE_KERNEL_ERROR_OK;
 }
@@ -304,21 +305,12 @@ static int sceKernelStartThread(int thid, int arg_size, uint32_t arg_block_addr)
 		return SCE_KERNEL_ERROR_NOT_DORMANT;
 	}
 
-	if (arg_size < 0) {
+	if (arg_size < 0 || arg_block_addr & 0x80000000) {
 		spdlog::warn("sceKernelStartThread: negative arg_size {}", arg_size);
 		return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
 	}
 
-	void* arg_block = nullptr;
-	if (arg_block_addr != 0) {
-		arg_block = psp->VirtualToPhysical(arg_block_addr);
-		if (!arg_block) {
-			spdlog::warn("sceKernelStartThread: invalid arg_block {:x}", arg_block_addr);
-			return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
-		}
-	}
-
-	kernel->StartThread(thid, arg_size, arg_block);
+	kernel->StartThread(thid, arg_size, arg_block_addr);
 	kernel->HLEReschedule();
 	return SCE_KERNEL_ERROR_OK;
 }

@@ -120,7 +120,6 @@ bool PSP::LoadExec(std::string path) {
 		return false;
 	}
 	kernel->ExecModule(uid);
-	kernel->Reschedule();
 
 	return true;
 }

@@ -37,10 +37,14 @@ Thread::~Thread() {
 	user_memory->Free(initial_stack);
 }
 
-void Thread::Start(int arg_size, void* arg_block) {
+void Thread::Start(int arg_size, uint32_t arg_block_addr) {
+	auto psp = PSP::GetInstance();
+
 	regs.fill(0xDEADBEEF);
-	fpu_regs.fill(std::numeric_limits<float>::quiet_NaN());
+	fpu_regs.fill(std::bit_cast<float>(0x7F800001));
 	regs[MIPS_REG_ZERO] = 0;
+	hi = 0xDEADBEEF;
+	lo = 0xDEADBEEF;
 
 	exit_status = SCE_KERNEL_ERROR_NOT_DORMANT;
 	pc = entry;
@@ -50,7 +54,7 @@ void Thread::Start(int arg_size, void* arg_block) {
 
 	priority = init_priority;
 
-	if (!arg_block || arg_size == 0) {
+	if (!arg_block_addr || arg_size == 0) {
 		regs[MIPS_REG_A0] = 0;
 		regs[MIPS_REG_A1] = 0;
 	}
@@ -59,9 +63,12 @@ void Thread::Start(int arg_size, void* arg_block) {
 		regs[MIPS_REG_SP] -= (arg_size + 0xF) & ~0xF;
 		regs[MIPS_REG_A1] = regs[MIPS_REG_SP];
 
-		auto psp = PSP::GetInstance();
 		void* dest = psp->VirtualToPhysical(regs[MIPS_REG_A1]);
-		memcpy(dest, arg_block, arg_size);
+
+		void* arg_block = psp->VirtualToPhysical(arg_block_addr);
+		if (arg_block) {
+			memcpy(dest, arg_block, arg_size);
+		}
 	}
 }
 

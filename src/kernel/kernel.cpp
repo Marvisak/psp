@@ -67,14 +67,24 @@ int Kernel::LoadModule(std::string path) {
 }
 
 bool Kernel::ExecModule(int uid) {
+	auto psp = PSP::GetInstance();
+
 	auto module = GetKernelObject<Module>(uid);
-	if (!module) return false;
+	if (!module) {
+		return false;
+	}
 	
 	std::string file_path = module->GetFilePath();
 	auto thread = std::make_unique<Thread>(module, module->GetName(), module->GetEntrypoint(), 0x20, 0x40000, 0, KERNEL_MEMORY_START);
 
 	int thid = AddKernelObject(std::move(thread));
-	StartThread(thid, file_path.size() + 1, file_path.data());
+	StartThread(thid, file_path.size() + 1, 0);
+	Reschedule();
+
+	auto stack_addr = psp->GetCPU()->GetRegister(MIPS_REG_SP);
+	auto stack = psp->VirtualToPhysical(stack_addr);
+	memcpy(stack, file_path.data(), file_path.size() + 1);
+
 	exec_module = uid;
 
 	return true;
@@ -185,10 +195,10 @@ int Kernel::CreateThread(std::string name, uint32_t entry, int init_priority, ui
 	return AddKernelObject(std::move(thread));
 }
 
-void Kernel::StartThread(int thid, int arg_size, void* arg_block) {
+void Kernel::StartThread(int thid, int arg_size, uint32_t arg_block_addr) {
 	auto thread = GetKernelObject<Thread>(thid);
 
-	thread->Start(arg_size, arg_block);
+	thread->Start(arg_size, arg_block_addr);
 	thread->SetState(ThreadState::READY);
 	AddThreadToQueue(thid);
 }
@@ -449,10 +459,21 @@ void Kernel::ExecHLEFunction(int import_index) {
 	}
 	auto& func = hle_modules[import_data.module][import_data.nid];
 
-	auto cpu = PSP::GetInstance()->GetCPU();
+	auto psp = PSP::GetInstance();
+	auto cpu = psp->GetCPU();
 	func(cpu);
 
+	for (int i = MIPS_REG_A0; i <= MIPS_REG_T7; i++) {
+		cpu->SetRegister(i, 0xDEADBEEF);
+	}
+	cpu->SetRegister(MIPS_REG_AT, 0xDEADBEEF);
+	cpu->SetRegister(MIPS_REG_T8, 0xDEADBEEF);
+	cpu->SetRegister(MIPS_REG_T9, 0xDEADBEEF);
+	cpu->SetHI(0xDEADBEEF);
+	cpu->SetLO(0xDEADBEEF);
+
 	if (reschedule) {
+		psp->ExecuteEvents();
 		Reschedule();
 	}
 }
