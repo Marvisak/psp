@@ -17,6 +17,7 @@ public:
 	uint32_t GetNotifyArg() const { return notify_arg; }
 
 	void Notify(int arg);
+	void Cancel();
 
 	std::string GetName() const { return name; }
 	KernelObjectType GetType() override { return KernelObjectType::CALLBACK; }

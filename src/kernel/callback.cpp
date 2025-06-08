@@ -45,3 +45,8 @@ void Callback::Notify(int arg) {
 	notify_count++;
 	notify_arg = arg;
 }
+
+void Callback::Cancel() {
+	notify_count = 0;
+	notify_arg = 0;
+}

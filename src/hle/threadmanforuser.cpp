@@ -200,6 +200,7 @@ static int LockMutex(int mtxid, int lock_count, uint32_t timeout_addr, bool allo
 
 void ReturnFromThread(CPU* cpu) {
 	auto kernel = PSP::GetInstance()->GetKernel();
+	kernel->SkipDeadbeef();
 
 	int thid = kernel->GetCurrentThread();
 	kernel->RemoveThreadFromQueue(thid);
@@ -602,6 +603,19 @@ static int sceKernelNotifyCallback(int cbid, int arg) {
 	return SCE_KERNEL_ERROR_OK;
 }
 
+static int sceKernelCancelCallback(int cbid) {
+	auto psp = PSP::GetInstance();
+
+	auto callback = psp->GetKernel()->GetKernelObject<Callback>(cbid);
+	if (!callback) {
+		spdlog::warn("sceKernelCancelCallback: invalid callback {}", cbid);
+		return SCE_KERNEL_ERROR_UNKNOWN_CBID;
+	}
+	callback->Cancel();
+
+	return SCE_KERNEL_ERROR_OK;
+}
+
 static int sceKernelReferCallbackStatus(int cbid, uint32_t info_addr) {
 	auto psp = PSP::GetInstance();
 	auto info = reinterpret_cast<SceKernelCallbackInfo*>(psp->VirtualToPhysical(info_addr));
@@ -629,6 +643,18 @@ static int sceKernelReferCallbackStatus(int cbid, uint32_t info_addr) {
 	memcpy(info, &new_info, wanted_size);
 
 	return SCE_KERNEL_ERROR_OK;
+}
+
+static int sceKernelGetCallbackCount(int cbid) {
+	auto psp = PSP::GetInstance();
+
+	auto callback = psp->GetKernel()->GetKernelObject<Callback>(cbid);
+	if (!callback) {
+		spdlog::warn("sceKernelGetCallbackCount: invalid callback {}", cbid);
+		return SCE_KERNEL_ERROR_UNKNOWN_CBID;
+	}
+
+	return callback->GetNotifyCount();
 }
 
 static int sceKernelCheckCallback() {
@@ -1151,7 +1177,9 @@ FuncMap RegisterThreadManForUser() {
 	funcs[0xE81CAF8F] = HLE_CUU_R(sceKernelCreateCallback);
 	funcs[0xEDBA5844] = HLE_I_R(sceKernelDeleteCallback);
 	funcs[0xC11BA8C4] = HLE_II_R(sceKernelNotifyCallback);
+	funcs[0xBA4051D6] = HLE_I_R(sceKernelCancelCallback);
 	funcs[0x730ED8BC] = HLE_IU_R(sceKernelReferCallbackStatus);
+	funcs[0x2A3D44FF] = HLE_I_R(sceKernelGetCallbackCount);
 	funcs[0x349D6D6C] = HLE_R(sceKernelCheckCallback);
 	funcs[0x9ACE131E] = HLE_R(sceKernelSleepThread);
 	funcs[0x82826F70] = HLE_R(sceKernelSleepThreadCB);

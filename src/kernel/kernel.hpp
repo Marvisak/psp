@@ -102,6 +102,7 @@ public:
 	std::shared_ptr<WaitObject> WaitCurrentThread(WaitReason reason, bool allow_callbacks);
 
 	void ExecHLEFunction(int import_index);
+	void SkipDeadbeef() { skip_deadbeef = true; }
 
 	int GetExecModule() const { return exec_module; }
 	int GetCurrentThread() const { return current_thread; }
@@ -113,6 +114,7 @@ private:
 	int next_uid = 1;
 	bool reschedule = false;
 	bool force_reschedule = false;
+	bool skip_deadbeef = false;
 	int sdk_version = 0;
 
 	std::unordered_map<std::string, std::shared_ptr<FileSystem>> drives;

@@ -46,6 +46,7 @@ public:
 
 	void Exit();
 	void ForceExit();
+	int GetExitCallback() const { return exit_callback; }
 	void SetExitCallback(int cbid) { exit_callback = cbid; }
 	bool IsClosed() const { return close; }
 

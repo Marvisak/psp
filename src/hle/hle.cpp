@@ -66,6 +66,8 @@ void ReturnFromModule(CPU* _) {
 
 void ReturnFromCallback(CPU* cpu) {
 	auto kernel = PSP::GetInstance()->GetKernel();
+	kernel->SkipDeadbeef();
+
 	int thid = kernel->GetCurrentThread();
 	auto thread = kernel->GetKernelObject<Thread>(thid);
 

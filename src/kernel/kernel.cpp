@@ -463,14 +463,17 @@ void Kernel::ExecHLEFunction(int import_index) {
 	auto cpu = psp->GetCPU();
 	func(cpu);
 
-	for (int i = MIPS_REG_A0; i <= MIPS_REG_T7; i++) {
-		cpu->SetRegister(i, 0xDEADBEEF);
+	if (!skip_deadbeef) {
+		for (int i = MIPS_REG_A0; i <= MIPS_REG_T7; i++) {
+			cpu->SetRegister(i, 0xDEADBEEF);
+		}
+		cpu->SetRegister(MIPS_REG_AT, 0xDEADBEEF);
+		cpu->SetRegister(MIPS_REG_T8, 0xDEADBEEF);
+		cpu->SetRegister(MIPS_REG_T9, 0xDEADBEEF);
+		cpu->SetHI(0xDEADBEEF);
+		cpu->SetLO(0xDEADBEEF);
 	}
-	cpu->SetRegister(MIPS_REG_AT, 0xDEADBEEF);
-	cpu->SetRegister(MIPS_REG_T8, 0xDEADBEEF);
-	cpu->SetRegister(MIPS_REG_T9, 0xDEADBEEF);
-	cpu->SetHI(0xDEADBEEF);
-	cpu->SetLO(0xDEADBEEF);
+	skip_deadbeef = false;
 
 	if (reschedule) {
 		psp->ExecuteEvents();
