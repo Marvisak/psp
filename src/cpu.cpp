@@ -64,6 +64,7 @@ bool CPU::RunInstruction() {
 	case 0x05: BNE(opcode); break;
 	case 0x06: BLEZ(opcode); break;
 	case 0x07: BGTZ(opcode); break;
+	case 0x08: ADDI(opcode); break;
 	case 0x09: ADDIU(opcode); break;
 	case 0x0A: SLTI(opcode); break;
 	case 0x0B: SLTIU(opcode); break;
@@ -154,6 +155,11 @@ bool CPU::RunInstruction() {
 		return false;
 	}
 	return true;
+}
+
+void CPU::ADDI(uint32_t opcode) {
+	uint32_t value = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode));
+	SetRegister(RT(opcode), value);
 }
 
 void CPU::ADDIU(uint32_t opcode) {

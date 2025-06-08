@@ -47,6 +47,7 @@ public:
 
 	void SetFPURegister(int index, float value) { fpu_regs[index] = value; }
 private:
+	void ADDI(uint32_t opcode);
 	void ADDIU(uint32_t opcode);
 	void ADDU(uint32_t opcode);
 	void AND(uint32_t opcode);
