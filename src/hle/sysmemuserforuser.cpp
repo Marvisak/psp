@@ -105,63 +105,16 @@ static int FreeMemoryBlock(int uid) {
 }
 
 static int sceKernelSetCompilerVersion(int version) {
-	spdlog::error("sceKernelSetCompilerVersion({})", version);
-	return 0;
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelGetCompiledSdkVersion() {
-	spdlog::error("sceKernelGetCompiledSdkVersion()");
-	return 0;
+	return PSP::GetInstance()->GetKernel()->GetSDKVersion();
 }
 
 static int sceKernelSetCompiledSdkVersion(int version) {
 	PSP::GetInstance()->GetKernel()->SetSDKVersion(version);
-	return 0;
-}
-
-static int sceKernelSetCompiledSdkVersion370(int version) {
-	spdlog::error("sceKernelSetCompiledSdkVersion370({})", version);
-	return 0;
-}
-
-static int sceKernelSetCompiledSdkVersion380_90(int version) {
-	spdlog::error("sceKernelSetCompiledSdkVersion380_90({})", version);
-	return 0;
-}
-
-static int sceKernelSetCompiledSdkVersion395(int version) {
-	spdlog::error("sceKernelSetCompiledSdkVersion395({})", version);
-	return 0;
-}
-
-static int sceKernelSetCompiledSdkVersion401_402(int version) {
-	spdlog::error("sceKernelSetCompiledSdkVersion401_402({})", version);
-	return 0;
-}
-
-static int sceKernelSetCompiledSdkVersion500_505(int version) {
-	spdlog::error("sceKernelSetCompiledSdkVersion500_505({})", version);
-	return 0;
-}
-
-static int sceKernelSetCompiledSdkVersion507(int version) {
-	spdlog::error("sceKernelSetCompiledSdkVersion507({})", version);
-	return 0;
-}
-
-static int sceKernelSetCompiledSdkVersion600_602(int version) {
-	spdlog::error("sceKernelSetCompiledSdkVersion600_602({})", version);
-	return 0;
-}
-
-static int sceKernelSetCompiledSdkVersion603_605(int version) {
-	spdlog::error("sceKernelSetCompiledSdkVersion603_605({})", version);
-	return 0;
-}
-
-static int sceKernelSetCompiledSdkVersion606(int version) {
-	spdlog::error("sceKernelSetCompiledSdkVersion606({})", version);
-	return 0;
+	return SCE_KERNEL_ERROR_OK;
 }
 
 FuncMap RegisterSysMemUserForUser() {
@@ -174,15 +127,15 @@ FuncMap RegisterSysMemUserForUser() {
 	funcs[0x9D9A5BA1] = HLE_I_R(sceKernelGetBlockHeadAddr);
 	funcs[0xFC114573] = HLE_R(sceKernelGetCompiledSdkVersion);
 	funcs[0x7591C7DB] = HLE_I_R(sceKernelSetCompiledSdkVersion);
-	funcs[0x342061E5] = HLE_I_R(sceKernelSetCompiledSdkVersion370);
-	funcs[0x315AD3A0] = HLE_I_R(sceKernelSetCompiledSdkVersion380_90);
-	funcs[0xEBD5C3E6] = HLE_I_R(sceKernelSetCompiledSdkVersion395);
-	funcs[0x057E7380] = HLE_I_R(sceKernelSetCompiledSdkVersion401_402);
-	funcs[0x91DE343C] = HLE_I_R(sceKernelSetCompiledSdkVersion500_505);
-	funcs[0x7893F79A] = HLE_I_R(sceKernelSetCompiledSdkVersion507);
-	funcs[0x35669D4C] = HLE_I_R(sceKernelSetCompiledSdkVersion600_602);
-	funcs[0x1B4217BC] = HLE_I_R(sceKernelSetCompiledSdkVersion603_605);
-	funcs[0x358CA1BB] = HLE_I_R(sceKernelSetCompiledSdkVersion606);
+	funcs[0x342061E5] = HLE_I_R(sceKernelSetCompiledSdkVersion);
+	funcs[0x315AD3A0] = HLE_I_R(sceKernelSetCompiledSdkVersion);
+	funcs[0xEBD5C3E6] = HLE_I_R(sceKernelSetCompiledSdkVersion);
+	funcs[0x057E7380] = HLE_I_R(sceKernelSetCompiledSdkVersion);
+	funcs[0x91DE343C] = HLE_I_R(sceKernelSetCompiledSdkVersion);
+	funcs[0x7893F79A] = HLE_I_R(sceKernelSetCompiledSdkVersion);
+	funcs[0x35669D4C] = HLE_I_R(sceKernelSetCompiledSdkVersion);
+	funcs[0x1B4217BC] = HLE_I_R(sceKernelSetCompiledSdkVersion);
+	funcs[0x358CA1BB] = HLE_I_R(sceKernelSetCompiledSdkVersion);
 	funcs[0xF77D77CB] = HLE_I_R(sceKernelSetCompilerVersion);
 	funcs[0x2A3E5280] = HLE_V(sceKernelQueryMemoryInfo);
 	funcs[0xACBD88CA] = HLE_R(SysMemUserForUser_ACBD88CA);
