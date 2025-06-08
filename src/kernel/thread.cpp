@@ -70,6 +70,7 @@ void Thread::Start(int arg_size, uint32_t arg_block_addr) {
 			memcpy(dest, arg_block, arg_size);
 		}
 	}
+	regs[MIPS_REG_SP] -= 64;
 }
 
 void Thread::CreateStack() {

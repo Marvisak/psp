@@ -15,15 +15,15 @@
 constexpr auto UID_COUNT = 4096;
 
 enum class KernelObjectType {
-	INVALID,
-	MODULE,
-	THREAD,
-	CALLBACK,
-	MEMORY_BLOCK,
-	FILE,
-	DIRECTORY,
-	SEMAPHORE,
-	MUTEX
+	INVALID = 0,
+	THREAD = 1,
+	SEMAPHORE = 2,
+	CALLBACK = 8,
+	MUTEX = 12,
+	MODULE = 0x1000,
+	MEMORY_BLOCK = 0x1001,
+	FILE = 0x1002,
+	DIRECTORY = 0x1003,
 };
 
 class KernelObject {
@@ -62,6 +62,13 @@ public:
 		if (!object) return nullptr;
 		if (T::GetStaticType() != object->GetType()) return nullptr;
 		return reinterpret_cast<T*>(object.get());
+	}
+
+	KernelObject* GetKernelObject(int uid) {
+		if (uid < 0 || uid >= objects.size()) return nullptr;
+		auto& object = objects[uid];
+		if (!object) return nullptr;
+		return object.get();
 	}
 	
 	int LoadModule(std::string path);

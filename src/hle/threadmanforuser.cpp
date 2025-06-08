@@ -532,13 +532,37 @@ static int sceKernelGetThreadExitStatus(int thid) {
 }
 
 static int sceKernelGetThreadStackFreeSize(int thid) {
-	spdlog::error("sceKernelGetThreadStackFreeSize({})", thid);
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	if (thid == 0) {
+		thid = kernel->GetCurrentThread();
+	}
+
+	auto thread = kernel->GetKernelObject<Thread>(thid);
+	if (!thread) {
+		spdlog::warn("sceKernelGetThreadStackFreeSize: invalid thread {}", thid);
+		return SCE_KERNEL_ERROR_UNKNOWN_THID;
+	}
+
+	int sz = 0;
+	for (uint32_t offset = 0x10; offset < thread->GetStackSize(); offset++) {
+		if (psp->ReadMemory8(thread->GetStack() + offset) != 0xFF) {
+			break;
+		}
+		sz++;
+	}
+
+	return sz & ~3;
 }
 
 static int sceKernelCheckThreadStack() {
-	spdlog::error("sceKernelCheckThreadStack()");
-	return 0;
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	auto thread = kernel->GetKernelObject<Thread>(kernel->GetCurrentThread());
+
+	return labs(psp->GetCPU()->GetRegister(MIPS_REG_SP) - thread->GetStack());
 }
 
 static int sceKernelRotateThreadReadyQueue(int priority) {
@@ -742,6 +766,38 @@ static int sceKernelResumeThread(int thid) {
 		return SCE_KERNEL_ERROR_NOT_SUSPEND;
 	}
 	
+	return SCE_KERNEL_ERROR_OK;
+}
+
+static int sceKernelReleaseWaitThread(int thid) {
+	auto kernel = PSP::GetInstance()->GetKernel();
+	if (thid == 0 || thid == kernel->GetCurrentThread()) {
+		spdlog::warn("sceKernelReleaseWaitThread: trying to wakeup current thread");
+		return SCE_KERNEL_ERROR_ILLEGAL_THID;
+	}
+
+	auto thread = kernel->GetKernelObject<Thread>(thid);
+	if (!thread) {
+		spdlog::warn("sceKernelReleaseWaitThread: invalid thread {}", thid);
+		return SCE_KERNEL_ERROR_UNKNOWN_THID;
+	}
+
+	if (thread->GetWaitReason() == WaitReason::NONE) {
+		spdlog::warn("sceKernelReleaseWaitThread: thread is not waiting");
+		return SCE_KERNEL_ERROR_NOT_WAIT;
+	}
+
+	if (thread->GetWaitReason() == WaitReason::HLE_DELAY) {
+		spdlog::warn("sceKernelReleaseWaitThread: thread is in HLE delay");
+		return SCE_KERNEL_ERROR_NOT_WAIT;
+	}
+
+	thread->ClearWait();
+	thread->SetReturnValue(SCE_KERNEL_ERROR_RELEASE_WAIT);
+
+	kernel->WakeUpThread(thid);
+	kernel->HLEReschedule();
+
 	return SCE_KERNEL_ERROR_OK;
 }
 
@@ -1162,6 +1218,21 @@ static uint32_t sceKernelGetSystemTimeLow() {
 	return time;
 }
 
+static int sceKernelGetThreadmanIdType(int uid) {
+	auto object = PSP::GetInstance()->GetKernel()->GetKernelObject(uid);
+	if (!object) {
+		spdlog::warn("sceKernelGetThreadmanIdType: unknown object {}", uid);
+		return SCE_KERNEL_ERROR_ILLEGAL_ARGUMENT;
+	}
+
+	auto type = static_cast<int>(object->GetType());
+	if (type >= 0x1000) {
+		return SCE_KERNEL_ERROR_ILLEGAL_ARGUMENT;
+	}
+
+	return type;
+}
+
 FuncMap RegisterThreadManForUser() {
 	FuncMap funcs;
 	funcs[0x446D8DE6] = HLE_CUIUUU_R(sceKernelCreateThread);
@@ -1187,6 +1258,7 @@ FuncMap RegisterThreadManForUser() {
 	funcs[0x68DA9E36] = HLE_U_R(sceKernelDelayThreadCB);
 	funcs[0x9944F31F] = HLE_I_R(sceKernelSuspendThread);
 	funcs[0x75156E8F] = HLE_I_R(sceKernelResumeThread);
+	funcs[0x2C34E053] = HLE_I_R(sceKernelReleaseWaitThread);
 	funcs[0x278C0DF5] = HLE_IU_R(sceKernelWaitThreadEnd);
 	funcs[0x840E8133] = HLE_IU_R(sceKernelWaitThreadEndCB);
 	funcs[0xD59EAD2F] = HLE_I_R(sceKernelWakeupThread);
@@ -1227,5 +1299,6 @@ FuncMap RegisterThreadManForUser() {
 	funcs[0xDB738F35] = HLE_I_R(sceKernelGetSystemTime);
 	funcs[0x82BC5777] = HLE_64R(sceKernelGetSystemTimeWide);
 	funcs[0x369ED59D] = HLE_R(sceKernelGetSystemTimeLow);
+	funcs[0x57CF62DD] = HLE_I_R(sceKernelGetThreadmanIdType);
 	return funcs;
 }
