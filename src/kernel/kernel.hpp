@@ -111,6 +111,9 @@ public:
 	void ExecHLEFunction(int import_index);
 	void SkipDeadbeef() { skip_deadbeef = true; }
 
+	void SetInterruptsEnabled(bool interrupts_enabled) { this->interrupts_enabled = interrupts_enabled; }
+	bool InterruptsEnabled() const { return interrupts_enabled; }
+
 	int GetExecModule() const { return exec_module; }
 	int GetCurrentThread() const { return current_thread; }
 	MemoryAllocator* GetUserMemory() { return user_memory.get(); }
@@ -123,6 +126,7 @@ private:
 	bool force_reschedule = false;
 	bool skip_deadbeef = false;
 	int sdk_version = 0;
+	bool interrupts_enabled = true;
 
 	std::unordered_map<std::string, std::shared_ptr<FileSystem>> drives;
 	std::unique_ptr<MemoryAllocator> user_memory;

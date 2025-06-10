@@ -57,8 +57,7 @@ void Thread::Start(int arg_size, uint32_t arg_block_addr) {
 	if (!arg_block_addr || arg_size == 0) {
 		regs[MIPS_REG_A0] = 0;
 		regs[MIPS_REG_A1] = 0;
-	}
-	else {
+	} else {
 		regs[MIPS_REG_A0] = arg_size;
 		regs[MIPS_REG_SP] -= (arg_size + 0xF) & ~0xF;
 		regs[MIPS_REG_A1] = regs[MIPS_REG_SP];

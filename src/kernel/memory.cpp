@@ -17,45 +17,51 @@ MemoryAllocator::~MemoryAllocator() {
 	for (;;) {
 		auto new_curr = curr->next;
 		delete curr;
-		if (new_curr == nullptr)
+		if (new_curr == nullptr) {
 			break;
+		}
 		curr = new_curr;
 	}
 }
 
-uint32_t MemoryAllocator::Alloc(uint32_t size, std::string name, uint32_t alignment) {
+uint32_t MemoryAllocator::Alloc(uint32_t size, std::string name, uint32_t alignment, uint32_t size_alignment) {
 	if (alignment == -1) {
 		alignment = default_alignment;
 	}
-	size = ALIGN(size, alignment);
-	
+
+	if (size_alignment == -1) {
+		size_alignment = default_alignment;
+	}
+
 	if (size > this->size) {
 		spdlog::error("MemoryAllocator: bogus size {} bytes", size);
 		return 0;
 	}
 
+	size = ALIGN(size, size_alignment);
+
 	for (auto curr = first; curr; curr = curr->next) {
 		if (curr->free) {
-			if (curr->size == size) {
+			uint32_t offset = curr->start % alignment;
+			if (offset != 0) {
+				offset = alignment - offset;
+			}
+
+			uint32_t needed = offset + size;
+			if (curr->size == needed) {
+				if (offset >= default_alignment) {
+					InsertFreeBefore(curr, offset);
+				}
 				curr->name = name;
 				curr->free = false;
 				return curr->start;
-			} else if (curr->size > size) {
-				auto block = new Block;
-				block->size = curr->size - size;
-				block->start = curr->start + size;
-				block->free = true;
-
-				curr->size = size;
-				curr->free = false;
+			} else if (curr->size > needed) {
+				InsertFreeAfter(curr, curr->size - needed);
+				if (offset >= default_alignment) {
+					InsertFreeBefore(curr, offset);
+				}
 				curr->name = name;
-
-				if (curr->next)
-					curr->next->prev = block;
-				block->next = curr->next;
-				curr->next = block;
-				block->prev = curr;
-
+				curr->free = false;
 				return curr->start;
 			}
 		}
@@ -66,9 +72,13 @@ uint32_t MemoryAllocator::Alloc(uint32_t size, std::string name, uint32_t alignm
 	return 0;
 }
 
-uint32_t MemoryAllocator::AllocTop(uint32_t size, std::string name, uint32_t alignment) {
+uint32_t MemoryAllocator::AllocTop(uint32_t size, std::string name, uint32_t alignment, uint32_t size_alignment) {
 	if (alignment == -1) {
 		alignment = default_alignment;
+	}
+
+	if (size_alignment == -1) {
+		size_alignment = default_alignment;
 	}
 
 	if (size > this->size) {
@@ -84,24 +94,20 @@ uint32_t MemoryAllocator::AllocTop(uint32_t size, std::string name, uint32_t ali
 			uint32_t offset = (curr->start + curr->size - size) % alignment;
 			uint32_t needed = offset + size;
 			if (curr->size == needed) {
+				if (offset >= default_alignment) {
+					InsertFreeAfter(curr, offset);
+				}
 				curr->name = name;
 				curr->free = false;
 				return curr->start;
 			} else if (curr->size > needed) {
-				auto block = new Block;
-				block->size = needed;
-				block->start = curr->start + curr->size - needed;
-				block->free = false;
-				block->name = name;
-				curr->size -= needed;
-
-				if (curr->next)
-					curr->next->prev = block;
-				block->next = curr->next;
-				curr->next = block;
-				block->prev = curr;
-
-				return block->start;
+				InsertFreeBefore(curr, curr->size - needed);
+				if (offset >= default_alignment) {
+					InsertFreeAfter(curr, offset);
+				}
+				curr->name = name;
+				curr->free = false;
+				return curr->start;
 			}
 		}
 	}
@@ -116,6 +122,11 @@ uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, std::string name
 		alignment = default_alignment;
 	}
 
+	if (size > this->size) {
+		spdlog::error("MemoryAllocator: bogus size {} bytes", size);
+		return 0;
+	}
+
 	if (addr & (alignment - 1)) {
 		uint32_t aligned_addr = addr & ~(alignment - 1);
 		size += addr - aligned_addr;
@@ -123,11 +134,6 @@ uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, std::string name
 	}
 
 	size = ALIGN(size, alignment);
-
-	if (size > this->size) {
-		spdlog::error("MemoryAllocator: bogus size {} bytes", size);
-		return 0;
-	}
 
 	for (auto curr = first; curr; curr = curr->next) {
 		uint32_t end = curr->start + curr->size - 1;
@@ -144,43 +150,18 @@ uint32_t MemoryAllocator::AllocAt(uint32_t addr, uint32_t size, std::string name
 			}
 			
 			if (curr->start == addr) {
-				auto block = new Block;
-				block->size = remaining_size - size;
-				block->start = addr + size;
-				block->free = true;
-				block->prev = curr;
-				block->next = curr->next;
-				if (curr->next)
-					curr->next->prev = block;
-
-				curr->size = size;
-				curr->next = block;
-				curr->free = false;
+				if (curr->size != size) {
+					InsertFreeAfter(curr, curr->size - size);
+				}
 				curr->name = name;
-			}
-			else {
-				auto block = new Block;
-				block->size = size;
-				block->start = addr;
-				block->free = false;
-				block->prev = curr;
-				block->name = name;
-
-				if (remaining_size == size) {
-					block->next = curr->next;
+				curr->free = false;
+			} else {
+				InsertFreeBefore(curr, addr - curr->start);
+				if (curr->size != size) {
+					InsertFreeAfter(curr, curr->size - size);
 				}
-				else {
-					auto free_block = new Block;
-					free_block->size = remaining_size - size;
-					free_block->start = addr + size;
-					free_block->free = true;
-					free_block->next = curr->next;
-					free_block->prev = block;
-					block->next = free_block;
-				}
-
-				curr->size = addr - curr->start;
-				curr->next = block;
+				curr->name = name;
+				curr->free = false;
 			}
 
 			return addr;

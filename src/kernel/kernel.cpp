@@ -78,7 +78,8 @@ bool Kernel::ExecModule(int uid) {
 	auto thread = std::make_unique<Thread>(module, module->GetName(), module->GetEntrypoint(), 0x20, 0x40000, 0, KERNEL_MEMORY_START);
 
 	int thid = AddKernelObject(std::move(thread));
-	StartThread(thid, file_path.size() + 1, 0);
+	// The second address is garbage, just so that something is copied there
+	StartThread(thid, file_path.size() + 1, module->GetEntrypoint());
 	Reschedule();
 
 	auto stack_addr = psp->GetCPU()->GetRegister(MIPS_REG_SP);

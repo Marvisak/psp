@@ -6,7 +6,7 @@
 
 class MemoryBlock : public KernelObject {
 public:
-	MemoryBlock(MemoryAllocator* allocator, std::string name, uint32_t size, int type, uint32_t addr);
+	MemoryBlock(MemoryAllocator* allocator, std::string name, uint32_t size, int type, uint32_t alignment);
 	~MemoryBlock();
 
 	uint32_t GetAddress() const { return address; }

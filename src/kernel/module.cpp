@@ -191,7 +191,7 @@ bool Module::LoadELF(std::istringstream ss) {
 
 		const char* module_name = reinterpret_cast<const char*>(psp->VirtualToPhysical(entry->name));
 		if (!hle_modules.contains(module_name)) {
-			spdlog::info("Module: no {} HLE module found", module_name);
+			spdlog::warn("Module: no {} HLE module found", module_name);
 			continue;
 		}
 

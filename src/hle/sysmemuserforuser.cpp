@@ -20,14 +20,39 @@ static int sceKernelMaxFreeMemSize() {
 
 static int sceKernelAllocPartitionMemory(int partition, const char* name, int type, uint32_t size, uint32_t addr) {
 	if (type < PSP_SMEM_Low || type > PSP_SMEM_HighAligned) {
+		spdlog::warn("sceKernelAllocPartitionMemory: invalid type");
 		return SCE_KERNEL_ERROR_ILLEGAL_MEMBLOCKTYPE;
+	}
+
+	if (type == PSP_SMEM_LowAligned || type == PSP_SMEM_HighAligned) {
+		if ((addr & (addr - 1)) != 0 || addr == 0) {
+			return SCE_KERNEL_ERROR_ILLEGAL_ALIGNMENTSIZE;
+		}
+	}
+
+	if (partition < 1 || partition > 9 || partition == 7) {
+		spdlog::warn("sceKernelAllocPartitionMemory: invalid partition");
+		return SCE_KERNEL_ERROR_ILLEGAL_ARGUMENT;
+	}
+
+	if (!name) {
+		spdlog::warn("sceKernelAllocPartitionMemory: invalid name");
+		return SCE_KERNEL_ERROR_ERROR;
+	}
+
+	if (size == 0) {
+		spdlog::warn("sceKernelAllocPartitionMemory: invalid size");
+		return SCE_KERNEL_ERROR_MEMBLOCK_ALLOC_FAILED;
 	}
 
 	auto kernel = PSP::GetInstance()->GetKernel();
 
 	std::unique_ptr<MemoryBlock> block;
 	switch (partition) {
-	case 2: block = std::make_unique<MemoryBlock>(kernel->GetUserMemory(), name, size, type, addr);
+	case 2:
+	case 6:
+		block = std::make_unique<MemoryBlock>(kernel->GetUserMemory(), name, size, type, addr);
+		break;
 	}
 
 	if (!block) {
@@ -35,12 +60,25 @@ static int sceKernelAllocPartitionMemory(int partition, const char* name, int ty
 		return SCE_KERNEL_ERROR_ILLEGAL_PARTITION;
 	}
 
+	if (block->GetAddress() == 0) {
+		spdlog::warn("sceKernelAllocPartitionMemory: failed to allocate");
+		return SCE_KERNEL_ERROR_MEMBLOCK_ALLOC_FAILED;
+	}
+
 	return kernel->AddKernelObject(std::move(block));
 }
 
 static int sceKernelFreePartitionMemory(int mbid) {
-	spdlog::error("sceKernelFreePartitionMemory({})", mbid);
-	return 0;
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	auto block = kernel->GetKernelObject<MemoryBlock>(mbid);
+	if (!block) {
+		spdlog::warn("sceKernelFreePartitionMemory: invalid memory block {}", mbid);
+		return SCE_KERNEL_ERROR_UNKNOWN_UID;
+	}
+	kernel->RemoveKernelObject(mbid);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static uint32_t sceKernelGetBlockHeadAddr(int mbid) {
