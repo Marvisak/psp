@@ -82,7 +82,7 @@ bool Kernel::ExecModule(int uid) {
 	StartThread(thid, file_path.size() + 1, module->GetEntrypoint());
 	Reschedule();
 
-	auto stack_addr = psp->GetCPU()->GetRegister(MIPS_REG_SP);
+	auto stack_addr = psp->GetCPU()->GetRegister(MIPS_REG_A1);
 	auto stack = psp->VirtualToPhysical(stack_addr);
 	memcpy(stack, file_path.data(), file_path.size() + 1);
 
