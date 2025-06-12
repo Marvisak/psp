@@ -132,6 +132,11 @@ bool Module::LoadELF(std::istringstream ss) {
 	for (int i = 0; i < elfio.sections.size(); i++) {
 		auto section = elfio.sections[i];
 		if (section->get_type() == 0x700000A0) {
+			if ((elfio.sections[section->get_info()]->get_flags() & ELFIO::SHF_ALLOC) == 0) {
+				spdlog::warn("Module: trying to relocate not loaded section");
+				continue;
+			}
+
 			int num_relocs = section->get_size() / sizeof(ELFIO::Elf32_Rel);
 
 			auto rels = reinterpret_cast<const ELFIO::Elf32_Rel*>(section->get_data());
