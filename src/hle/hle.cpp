@@ -38,6 +38,8 @@ void RegisterHLE() {
 	hle_modules["sceAtrac3plus"] = RegisterSceAtrac3Plus();
 	hle_modules["sceUmdUser"] = RegisterSceUmdUser();
 	hle_modules["sceRtc"] = RegisterSceRtc();
+	hle_modules["sceSuspendForUser"] = RegisterSceSuspendForUser();
+	hle_modules["InterruptManager"] = RegisterInterruptManager();
 }
 
 int GetHLEIndex(std::string module, uint32_t nid) {

@@ -56,6 +56,8 @@ list(APPEND sources
 	src/hle/sceatrac3plus.cpp
 	src/hle/sceumduser.cpp
 	src/hle/scertc.cpp
+	src/hle/scesuspendforuser.cpp
+	src/hle/interruptmanager.cpp
 
 	vendors/libkirk/kirk_engine.c
 	vendors/libkirk/SHA1.c
@@ -69,4 +71,3 @@ target_link_libraries(psp PRIVATE Sockpp::sockpp elfio::elfio spdlog::spdlog CLI
 target_include_directories(psp PRIVATE include)
 
 add_custom_command(TARGET psp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:psp> $<TARGET_FILE_DIR:psp> COMMAND_EXPAND_LISTS)
-SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/PROFILE")

@@ -138,7 +138,7 @@ std::unique_ptr<DirectoryListing> DirectoryFileSystem::OpenDirectory(std::string
 
 void DirectoryFileSystem::CreateDirectory(std::string path) {
 	std::filesystem::path full_path = root / FixPath(path);
-	std::filesystem::create_directory(full_path);
+	std::filesystem::create_directories(full_path);
 }
 
 bool DirectoryFileSystem::GetStat(std::string path, SceIoStat* data) {
