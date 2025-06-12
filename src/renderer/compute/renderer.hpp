@@ -6,6 +6,7 @@
 #include <webgpu/webgpu.hpp>
 
 constexpr auto MAX_BUFFER_VERTEX_COUNT = 16384;
+constexpr auto MAX_BUFFER_RENDER_DATA_COUNT = 1024;
 
 class ComputeRenderer : public Renderer {
 public:
@@ -92,7 +93,7 @@ private:
 
 	wgpu::ComputePipeline GetShader(uint8_t primitive_type, uint8_t filter);
 	void UpdateRenderTexture();
-	void UpdateRenderData();
+	uint32_t PushRenderData();
 	uint32_t PushVertices(std::vector<Vertex> vertices);
 	wgpu::BindGroup GetTexture();
 
@@ -133,6 +134,8 @@ private:
 	void* compute_vertices;
 	uint32_t compute_vertex_buffer_offset = 0;
 	wgpu::Buffer compute_vertex_buffer;
+	void* compute_render_data;
+	uint32_t compute_render_data_offset = 0;
 	wgpu::Buffer compute_render_data_buffer;
 	wgpu::Buffer compute_transitional_buffer;
 	wgpu::Buffer compute_depth_transitional_buffer;

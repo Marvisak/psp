@@ -112,6 +112,7 @@ ComputeRenderer::ComputeRenderer(bool nearest_filtering) : Renderer() {
 	compute_render_data_binding_layouts[0].binding = 0;
 	compute_render_data_binding_layouts[0].visibility = wgpu::ShaderStage::Compute;
 	compute_render_data_binding_layouts[0].buffer.type = wgpu::BufferBindingType::Uniform;
+	compute_render_data_binding_layouts[1].buffer.hasDynamicOffset = true;
 	compute_render_data_binding_layouts[0].buffer.minBindingSize = sizeof(RenderData);
 
 	compute_render_data_binding_layouts[1].binding = 1;
@@ -142,7 +143,8 @@ ComputeRenderer::ComputeRenderer(bool nearest_filtering) : Renderer() {
 	compute_layout_desc.bindGroupLayouts = compute_bind_group_layouts;
 	compute_layout = device.createPipelineLayout(compute_layout_desc);
 
-	compute_render_data_buffer = CreateBuffer(sizeof(RenderData), wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform);
+	compute_render_data_buffer = CreateBuffer(sizeof(RenderData) * MAX_BUFFER_RENDER_DATA_COUNT, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform);
+	compute_render_data = operator new(sizeof(RenderData) * MAX_BUFFER_RENDER_DATA_COUNT);
 	compute_vertex_buffer = CreateBuffer(sizeof(ComputeVertex) * MAX_BUFFER_VERTEX_COUNT, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform);
 	compute_vertices = operator new(sizeof(ComputeVertex) * MAX_BUFFER_VERTEX_COUNT);
 
@@ -186,6 +188,7 @@ ComputeRenderer::~ComputeRenderer() {
 	}
 
 	delete[] compute_vertices;
+	delete[] compute_render_data;
 	compute_encoder.release();
 	compute_clut_bind_group_layout.release();
 	compute_texture_bind_group_layout.release();
@@ -391,11 +394,12 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 	auto filter = GetFilter((end.uv.x - start.uv.x) / width, (end.uv.y - start.uv.y) / height);
 	auto pipeline = GetShader(SCEGU_PRIM_RECTANGLES, filter);
 
-	auto offset = PushVertices({ start, end });
+	auto vertex_offset = PushVertices({ start, end });
+	auto render_data_offset = PushRenderData();
 
 	compute_pass_encoder.setPipeline(pipeline);
-	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
-	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 1, &offset);
+	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, &render_data_offset);
+	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 1, &vertex_offset);
 
 	if (!clear_mode && textures_enabled) {
 		auto texture_bind_group = GetTexture();
@@ -455,11 +459,12 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	auto filter = GetFilter(v1.uv.x - v0.uv.x, v2.uv.y - v0.uv.y);
 	auto pipeline = GetShader(SCEGU_PRIM_TRIANGLES, filter);
 
-	auto offset = PushVertices({ v0, v1, v2, bounding });
+	auto vertex_offset = PushVertices({ v0, v1, v2, bounding });
+	auto render_data_offset = PushRenderData();
 
 	compute_pass_encoder.setPipeline(pipeline);
-	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
-	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 1, &offset);
+	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, &render_data_offset);
+	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 1, &vertex_offset);
 
 	if (!clear_mode && textures_enabled) {
 		auto texture_bind_group = GetTexture();
@@ -919,21 +924,24 @@ void ComputeRenderer::UpdateRenderTexture() {
 	compute_texture_valid = true;
 }
 
-void ComputeRenderer::UpdateRenderData() {
-	RenderData data{};
-	data.scissor_start = scissor_start;
-	data.scissor_end = scissor_end;
-	data.clut_shift = clut_shift;
-	data.clut_mask = clut_mask;
-	data.clut_offset = clut_offset;
-	data.blend_afix = blend_afix;
-	data.blend_bfix = blend_bfix;
-	data.alphaMask = alpha_test_mask;
-	data.alphaRef = alpha_test_ref & alpha_test_mask;
-	data.environment_texture = environment_texture;
+uint32_t ComputeRenderer::PushRenderData() {
+	uint32_t offset = compute_render_data_offset;
 
-	queue.writeBuffer(compute_render_data_buffer, 0, &data, sizeof(RenderData));
-	queue.writeBuffer(compute_vertex_buffer, 0, compute_vertices, compute_vertex_buffer_offset);
+	auto data = reinterpret_cast<RenderData*>(reinterpret_cast<uintptr_t>(compute_render_data) + compute_render_data_offset);
+	data->scissor_start = scissor_start;
+	data->scissor_end = scissor_end;
+	data->clut_shift = clut_shift;
+	data->clut_mask = clut_mask;
+	data->clut_offset = clut_offset;
+	data->blend_afix = blend_afix;
+	data->blend_bfix = blend_bfix;
+	data->alphaMask = alpha_test_mask;
+	data->alphaRef = alpha_test_ref & alpha_test_mask;
+	data->environment_texture = environment_texture;
+	compute_render_data_offset += sizeof(RenderData);
+
+	compute_render_data_offset = ALIGN(compute_render_data_offset, buffer_alignment);
+	return offset;
 }
 
 void ComputeRenderer::FlushRender() {
@@ -974,7 +982,9 @@ void ComputeRenderer::FlushRender() {
 	auto command = compute_encoder.finish();
 	compute_encoder.release();
 
-	UpdateRenderData();
+
+	queue.writeBuffer(compute_render_data_buffer, 0, compute_render_data, compute_render_data_offset);
+	queue.writeBuffer(compute_vertex_buffer, 0, compute_vertices, compute_vertex_buffer_offset);
 	queue.submit(command);
 
 	compute_encoder = device.createCommandEncoder();
@@ -1011,6 +1021,7 @@ void ComputeRenderer::FlushRender() {
 
 	queue_empty = true;
 	compute_vertex_buffer_offset = 0;
+	compute_render_data_offset = 0;
 
 	for (auto& entry : deleted_textures) {
 		entry.bind_group.release();
