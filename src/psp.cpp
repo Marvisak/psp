@@ -9,6 +9,10 @@
 #include "kernel/module.hpp"
 #include "hle/hle.hpp"
 
+#ifdef WIN32
+#include <windows.h>
+#endif
+
 std::vector<std::string> MEMORY_STICK_REQUIRED_FOLDERS = {
 	"PSP",
 	"PSP/GAME",
@@ -17,18 +21,29 @@ std::vector<std::string> MEMORY_STICK_REQUIRED_FOLDERS = {
 
 PSP::PSP(RendererType renderer_type, bool nearest_filtering) {
 	instance = this;
-	ram = std::make_unique<uint8_t[]>(USER_MEMORY_END - KERNEL_MEMORY_START);
-	vram = std::make_unique<uint8_t[]>(VRAM_END - VRAM_START);
-	page_table = std::make_unique<uintptr_t[]>(0x100000000 / PAGE_SIZE);
-	int vram_page_table_count = (VRAM_END - VRAM_START) / PAGE_SIZE;
-	for (int i = 0; i < vram_page_table_count; i++) {
-		page_table[i + 64] = reinterpret_cast<uintptr_t>(&vram[i * PAGE_SIZE]);
+
+	if (!FASTMEM) {
+		ram = std::make_unique<uint8_t[]>(USER_MEMORY_END - KERNEL_MEMORY_START);
+		vram = std::make_unique<uint8_t[]>(VRAM_END - VRAM_START);
+		page_table = std::make_unique<uintptr_t[]>(0x100000000 / PAGE_SIZE);
+		int vram_page_table_count = (VRAM_END - VRAM_START) / PAGE_SIZE;
+		for (int i = 0; i < vram_page_table_count; i++) {
+			page_table[i + 64] = reinterpret_cast<uintptr_t>(&vram[i * PAGE_SIZE]);
+		}
+
+		int ram_page_table_count = (USER_MEMORY_END - KERNEL_MEMORY_START) / PAGE_SIZE;
+		for (int i = 0; i < ram_page_table_count; i++) {
+			page_table[i + 128] = reinterpret_cast<uintptr_t>(&ram[i * PAGE_SIZE]);
+		}
+	} else {
+#ifdef WIN32
+		VirtualAlloc(reinterpret_cast<void*>(KERNEL_MEMORY_START), USER_MEMORY_END - KERNEL_MEMORY_START, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+		VirtualAlloc(reinterpret_cast<void*>(VRAM_START), VRAM_END - VRAM_START, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+#else
+#error "TODO: Implement fastmem on POSIX"
+#endif
 	}
 
-	int ram_page_table_count = (USER_MEMORY_END - KERNEL_MEMORY_START) / PAGE_SIZE;
-	for (int i = 0; i < ram_page_table_count; i++) {
-		page_table[i + 128] = reinterpret_cast<uintptr_t>(&ram[i * PAGE_SIZE]);
-	}
 
 	kernel = std::make_unique<Kernel>();
 	cpu = std::make_unique<CPU>();
@@ -65,6 +80,10 @@ PSP::PSP(RendererType renderer_type, bool nearest_filtering) {
 PSP::~PSP() {
 	if (controller) {
 		SDL_CloseGamepad(controller);
+	}
+	if (FASTMEM) {
+		VirtualFree(reinterpret_cast<void*>(KERNEL_MEMORY_START), 0, MEM_RELEASE);
+		VirtualFree(reinterpret_cast<void*>(VRAM_START), 0, MEM_RELEASE);
 	}
 }
 
@@ -149,6 +168,9 @@ bool PSP::LoadMemStick(std::string path) {
 
 void* PSP::VirtualToPhysical(uint32_t addr) {
 	addr &= 0x0FFFFFFF;
+	if (FASTMEM) {
+		return reinterpret_cast<void*>(addr);
+	}
 
 	auto page = page_table[addr >> 20];
 	if (!page) {

@@ -8,6 +8,8 @@
 #include "renderer/renderer.hpp"
 #include "kernel/kernel.hpp"
 
+constexpr auto FASTMEM = true;
+
 constexpr auto PAGE_SIZE = 0x100000;
 constexpr auto RAM_SIZE = 0x4000000;
 constexpr auto KERNEL_MEMORY_START = 0x08000000;
