@@ -58,6 +58,13 @@ fn fetchTexel(pos: vec2f, dims: vec2f) -> vec4u {
             let index = textureLoad(texture, u_tex_pos, 0).r;
             return fetchClut(index);
         }
+        case 7u: {
+            let b1 = textureLoad(texture, u_tex_pos, 0).r;
+            let b2 = textureLoad(texture, vec2u(u_tex_pos.x + 1, u_tex_pos.y), 0).r;
+            let b3 = textureLoad(texture, vec2u(u_tex_pos.x + 2, u_tex_pos.y), 0).r;
+            let b4 = textureLoad(texture, vec2u(u_tex_pos.x + 3, u_tex_pos.y), 0).r;
+            return fetchClut((b4 << 24) | (b3 << 16) | (b2 << 8) | b1);
+        }
         default: { return vec4u(255, 0, 0, 255); }
     }
 }
@@ -114,6 +121,7 @@ fn filterTexture(uv: vec2f, color: vec4u) -> vec4u {
         case 2u: { dims.x /= 2; break; }
         case 3u: { dims.x /= 4; break; }
         case 4u: { dims.x *= 2; break; }
+        case 7u: { dims.x /= 4; break; }
         default: { break; }
     }
 

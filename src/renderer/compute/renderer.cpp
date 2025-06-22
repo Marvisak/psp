@@ -112,7 +112,7 @@ ComputeRenderer::ComputeRenderer(bool nearest_filtering) : Renderer() {
 	compute_render_data_binding_layouts[0].binding = 0;
 	compute_render_data_binding_layouts[0].visibility = wgpu::ShaderStage::Compute;
 	compute_render_data_binding_layouts[0].buffer.type = wgpu::BufferBindingType::Uniform;
-	compute_render_data_binding_layouts[1].buffer.hasDynamicOffset = true;
+	compute_render_data_binding_layouts[0].buffer.hasDynamicOffset = true;
 	compute_render_data_binding_layouts[0].buffer.minBindingSize = sizeof(RenderData);
 
 	compute_render_data_binding_layouts[1].binding = 1;
@@ -396,10 +396,11 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 
 	auto vertex_offset = PushVertices({ start, end });
 	auto render_data_offset = PushRenderData();
+	uint32_t offsets[] = { vertex_offset, render_data_offset };
 
 	compute_pass_encoder.setPipeline(pipeline);
-	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, &render_data_offset);
-	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 1, &vertex_offset);
+	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
+	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 2, offsets);
 
 	if (!clear_mode && textures_enabled) {
 		auto texture_bind_group = GetTexture();
@@ -461,10 +462,11 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 
 	auto vertex_offset = PushVertices({ v0, v1, v2, bounding });
 	auto render_data_offset = PushRenderData();
+	uint32_t offsets[] = { vertex_offset, render_data_offset };
 
 	compute_pass_encoder.setPipeline(pipeline);
-	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, &render_data_offset);
-	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 1, &vertex_offset);
+	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
+	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 2, offsets);
 
 	if (!clear_mode && textures_enabled) {
 		auto texture_bind_group = GetTexture();
@@ -935,8 +937,8 @@ uint32_t ComputeRenderer::PushRenderData() {
 	data->clut_offset = clut_offset;
 	data->blend_afix = blend_afix;
 	data->blend_bfix = blend_bfix;
-	data->alphaMask = alpha_test_mask;
-	data->alphaRef = alpha_test_ref & alpha_test_mask;
+	data->alpha_mask = alpha_test_mask;
+	data->alpha_ref = alpha_test_ref & alpha_test_mask;
 	data->environment_texture = environment_texture;
 	compute_render_data_offset += sizeof(RenderData);
 
@@ -1060,6 +1062,7 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 	case SCEGU_PF4444:
 		bpp = 2.0;
 		break;
+	case SCEGU_PFIDX32:
 	case SCEGU_PF8888:
 		bpp = 4.0;
 		break;

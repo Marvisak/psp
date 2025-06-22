@@ -40,8 +40,8 @@ private:
 		alignas(4) uint32_t clut_offset;
 		alignas(16) glm::ivec4 blend_afix;
 		alignas(16) glm::ivec4 blend_bfix;
-		alignas(4) uint32_t alphaMask;
-		alignas(4) uint32_t alphaRef;
+		alignas(4) uint32_t alpha_mask;
+		alignas(4) uint32_t alpha_ref;
 		alignas(16) glm::ivec4 environment_texture;
 	};
 
