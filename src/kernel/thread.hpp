@@ -86,7 +86,7 @@ public:
 		if (current_thread == GetUID()) {
 			psp->GetCPU()->SetRegister(MIPS_REG_V0, value);
 		}
-		regs[MIPS_REG_V0] = value;
+		cpu_state.regs[MIPS_REG_V0] = value;
 	}
 
 	uint32_t GetGP() const { return gp; }
@@ -143,10 +143,5 @@ private:
 	uint32_t stack_size;
 	uint32_t exit_status = SCE_KERNEL_ERROR_DORMANT;
 
-	std::array<uint32_t, 32> regs;
-	std::array<float, 32> fpu_regs;
-	uint32_t pc = 0x0;
-	uint32_t hi = 0x0;
-	uint32_t lo = 0x0;
-	uint32_t fcr31 = 0x00000E00;
+	CPUState cpu_state{};
 };

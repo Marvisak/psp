@@ -40,36 +40,36 @@ Thread::~Thread() {
 void Thread::Start(int arg_size, uint32_t arg_block_addr) {
 	auto psp = PSP::GetInstance();
 
-	regs.fill(0xDEADBEEF);
-	fpu_regs.fill(std::bit_cast<float>(0x7F800001));
-	regs[MIPS_REG_ZERO] = 0;
-	hi = 0xDEADBEEF;
-	lo = 0xDEADBEEF;
+	cpu_state.regs.fill(0xDEADBEEF);
+	cpu_state.fpu_regs.fill(std::bit_cast<float>(0x7F800001));
+	cpu_state.regs[MIPS_REG_ZERO] = 0;
+	cpu_state.hi = 0xDEADBEEF;
+	cpu_state.lo = 0xDEADBEEF;
 
 	exit_status = SCE_KERNEL_ERROR_NOT_DORMANT;
-	pc = entry;
-	regs[MIPS_REG_GP] = gp;
-	regs[MIPS_REG_RA] = return_addr;
+	cpu_state.pc = entry;
+	cpu_state.regs[MIPS_REG_GP] = gp;
+	cpu_state.regs[MIPS_REG_RA] = return_addr;
 	FillStack();
 
 	priority = init_priority;
 
 	if (!arg_block_addr || arg_size == 0) {
-		regs[MIPS_REG_A0] = 0;
-		regs[MIPS_REG_A1] = 0;
+		cpu_state.regs[MIPS_REG_A0] = 0;
+		cpu_state.regs[MIPS_REG_A1] = 0;
 	} else {
-		regs[MIPS_REG_A0] = arg_size;
-		regs[MIPS_REG_SP] -= (arg_size + 0xF) & ~0xF;
-		regs[MIPS_REG_A1] = regs[MIPS_REG_SP];
+		cpu_state.regs[MIPS_REG_A0] = arg_size;
+		cpu_state.regs[MIPS_REG_SP] -= (arg_size + 0xF) & ~0xF;
+		cpu_state.regs[MIPS_REG_A1] = cpu_state.regs[MIPS_REG_SP];
 
-		void* dest = psp->VirtualToPhysical(regs[MIPS_REG_A1]);
+		void* dest = psp->VirtualToPhysical(cpu_state.regs[MIPS_REG_A1]);
 
 		void* arg_block = psp->VirtualToPhysical(arg_block_addr);
 		if (arg_block) {
 			memcpy(dest, arg_block, arg_size);
 		}
 	}
-	regs[MIPS_REG_SP] -= 64;
+	cpu_state.regs[MIPS_REG_SP] -= 64;
 }
 
 void Thread::CreateStack() {
@@ -91,27 +91,20 @@ void Thread::FillStack() {
 	}
 	psp->WriteMemory32(initial_stack, GetUID());
 
-	regs[MIPS_REG_SP] = initial_stack + stack_size - 0x100;
+	cpu_state.regs[MIPS_REG_SP] = initial_stack + stack_size - 0x100;
 
-	uint32_t k0 = regs[MIPS_REG_SP];
+	uint32_t k0 = cpu_state.regs[MIPS_REG_SP];
 	memset(psp->VirtualToPhysical(k0), 0, 0x100);
 	psp->WriteMemory32(k0 + 0xC0, GetUID());
 	psp->WriteMemory32(k0 + 0xC8, initial_stack);
 	psp->WriteMemory32(k0 + 0xF8, 0xFFFFFFFF);
 	psp->WriteMemory32(k0 + 0xFC, 0xFFFFFFFF);
-	regs[MIPS_REG_K0] = k0;
+	cpu_state.regs[MIPS_REG_K0] = k0;
 }
 
 void Thread::SwitchState() {
 	auto psp = PSP::GetInstance();
-	auto cpu = psp->GetCPU();
-
-	cpu->SetPC(pc);
-	cpu->SetRegs(regs);
-	cpu->SetFPURegs(fpu_regs);
-	cpu->SetHI(hi);
-	cpu->SetLO(lo);
-	cpu->SetFCR31(fcr31);
+	psp->GetCPU()->SetState(cpu_state);
 
 	if (!pending_callbacks.empty() && (current_callbacks.empty() || allow_callbacks)) {
 		int cbid = pending_callbacks.front();
@@ -124,14 +117,7 @@ void Thread::SwitchState() {
 }
 
 void Thread::SaveState() {
-	auto cpu = PSP::GetInstance()->GetCPU();
-
-	pc = cpu->GetPC();
-	regs = cpu->GetRegs();
-	fpu_regs = cpu->GetFPURegs();
-	hi = cpu->GetHI();
-	lo = cpu->GetLO();
-	fcr31 = cpu->GetFCR31();
+	cpu_state = PSP::GetInstance()->GetCPU()->GetState();
 }
 
 void Thread::WakeUpForCallback() {

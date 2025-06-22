@@ -8,10 +8,10 @@
 
 bool CPU::RunInstruction() {
 	auto psp = PSP::GetInstance();
-	auto opcode = psp->ReadMemory32(pc);
+	auto opcode = psp->ReadMemory32(state.pc);
 
-	uint32_t current_pc = pc;
-	pc = next_pc;
+	uint32_t current_pc = state.pc;
+	state.pc = next_pc;
 	next_pc += 4;
 
 	switch (opcode >> 26) {
@@ -185,17 +185,17 @@ void CPU::ANDI(uint32_t opcode) {
 void CPU::BEQ(uint32_t opcode) {
 	if (GetRegister(RS(opcode)) == GetRegister(RT(opcode))) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
-		next_pc = pc + offset;
+		next_pc = state.pc + offset;
 	}
 }
 
 void CPU::BEQL(uint32_t opcode) {
 	if (GetRegister(RS(opcode)) == GetRegister(RT(opcode))) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
-		next_pc = pc + offset;
+		next_pc = state.pc + offset;
 	} else {
-		pc += 4;
-		next_pc = pc + 4;
+		state.pc += 4;
+		next_pc = state.pc + 4;
 	}
 }
 
@@ -207,51 +207,51 @@ void CPU::BITREV(uint32_t opcode) {
 void CPU::BNE(uint32_t opcode) {
 	if (GetRegister(RS(opcode)) != GetRegister(RT(opcode))) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
-		next_pc = pc + offset;
+		next_pc = state.pc + offset;
 	}
 }
 
 void CPU::BNEL(uint32_t opcode) {
 	if (GetRegister(RS(opcode)) != GetRegister(RT(opcode))) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
-		next_pc = pc + offset;
+		next_pc = state.pc + offset;
 	} else {
-		pc += 4;
-		next_pc = pc + 4;
+		state.pc += 4;
+		next_pc = state.pc + 4;
 	}
 }
 
 void CPU::BLEZ(uint32_t opcode) {
 	if (static_cast<int32_t>(GetRegister(RS(opcode))) <= 0) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
-		next_pc = pc + offset;
+		next_pc = state.pc + offset;
 	}
 }
 
 void CPU::BLEZL(uint32_t opcode) {
 	if (static_cast<int32_t>(GetRegister(RS(opcode))) <= 0) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
-		next_pc = pc + offset;
+		next_pc = state.pc + offset;
 	} else {
-		pc += 4;
-		next_pc = pc + 4;
+		state.pc += 4;
+		next_pc = state.pc + 4;
 	}
 }
 
 void CPU::BGTZ(uint32_t opcode) {
 	if (static_cast<int32_t>(GetRegister(RS(opcode))) > 0) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
-		next_pc = pc + offset;
+		next_pc = state.pc + offset;
 	}
 }
 
 void CPU::BGTZL(uint32_t opcode) {
 	if (static_cast<int32_t>(GetRegister(RS(opcode))) > 0) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
-		next_pc = pc + offset;
+		next_pc = state.pc + offset;
 	} else {
-		pc += 4;
-		next_pc = pc + 4;
+		state.pc += 4;
+		next_pc = state.pc + 4;
 	}
 }
 
@@ -271,18 +271,18 @@ void CPU::DIV(uint32_t opcode) {
 	auto n = static_cast<int32_t>(GetRegister(RS(opcode)));
 	auto d = static_cast<int32_t>(GetRegister(RT(opcode)));
 	if (d == 0) {
-		hi = n;
+		state.hi = n;
 		if (n >= 0) {
-			lo = 0xFFFFFFFF;
+			state.lo = 0xFFFFFFFF;
 		} else {
-			lo = 1;
+			state.lo = 1;
 		}
 	} else if (n == 0x80000000 && d == -1) {
-		hi = 0;
-		lo = 0x80000000;
+		state.hi = 0;
+		state.lo = 0x80000000;
 	} else {
-		hi = n % d;
-		lo = n / d;
+		state.hi = n % d;
+		state.lo = n / d;
 	}
 }
 
@@ -291,12 +291,11 @@ void CPU::DIVU(uint32_t opcode) {
 	uint32_t d = GetRegister(RT(opcode));
 
 	if (d == 0) {
-		hi = n;
-		lo = 0xFFFFFFFF;
-	}
-	else {
-		hi = n % d;
-		lo = n / d;
+		state.hi = n;
+		state.lo = 0xFFFFFFFF;
+	} else {
+		state.hi = n % d;
+		state.lo = n / d;
 	}
 }
 
@@ -325,7 +324,7 @@ void CPU::JAL(uint32_t opcode) {
 
 void CPU::JALR(uint32_t opcode) {
 	next_pc = GetRegister(RS(opcode));
-	SetRegister(RD(opcode), pc + 4);
+	SetRegister(RD(opcode), state.pc + 4);
 }
 
 void CPU::JR(uint32_t opcode) {
@@ -335,19 +334,19 @@ void CPU::JR(uint32_t opcode) {
 void CPU::MADD(uint32_t opcode) {
 	int32_t rs = GetRegister(RS(opcode));
 	int32_t rt = GetRegister(RT(opcode));
-	uint64_t milo = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
+	uint64_t milo = (static_cast<uint64_t>(state.hi) << 32) | static_cast<uint64_t>(state.lo);
 	int64_t result = static_cast<int64_t>(milo) + static_cast<int64_t>(rs) * static_cast<int64_t>(rt);
-	hi = result >> 32;
-	lo = result;
+	state.hi = result >> 32;
+	state.lo = result;
 }
 
 void CPU::MADDU(uint32_t opcode) {
 	uint32_t rs = GetRegister(RS(opcode));
 	uint32_t rt = GetRegister(RT(opcode));
-	uint64_t milo = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
+	uint64_t milo = (static_cast<uint64_t>(state.hi) << 32) | static_cast<uint64_t>(state.lo);
 	uint64_t result = milo + static_cast<uint64_t>(rs) * static_cast<uint64_t>(rt);
-	hi = result >> 32;
-	lo = result;
+	state.hi = result >> 32;
+	state.lo = result;
 }
 
 void CPU::MAX(uint32_t opcode) {
@@ -355,16 +354,14 @@ void CPU::MAX(uint32_t opcode) {
 	SetRegister(RD(opcode), value);
 }
 
-void CPU::MFIC(uint32_t opcode) {
-	SetRegister(RT(opcode), interrupts_enabled);
-}
+void CPU::MFIC(uint32_t opcode) {}
 
 void CPU::MFHI(uint32_t opcode) {
-	SetRegister(RD(opcode), hi);
+	SetRegister(RD(opcode), state.hi);
 }
 
 void CPU::MFLO(uint32_t opcode) {
-	SetRegister(RD(opcode), lo);
+	SetRegister(RD(opcode), state.lo);
 }
 
 void CPU::MIN(uint32_t opcode) {
@@ -385,46 +382,44 @@ void CPU::MOVZ(uint32_t opcode) {
 void CPU::MSUB(uint32_t opcode) {
 	int32_t rs = GetRegister(RS(opcode));
 	int32_t rt = GetRegister(RT(opcode));
-	uint64_t milo = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
+	uint64_t milo = (static_cast<uint64_t>(state.hi) << 32) | static_cast<uint64_t>(state.lo);
 	int64_t result = static_cast<int64_t>(milo) - static_cast<int64_t>(rs) * static_cast<int64_t>(rt);
-	hi = result >> 32;
-	lo = result;
+	state.hi = result >> 32;
+	state.lo = result;
 }
 
 void CPU::MSUBU(uint32_t opcode) {
 	uint32_t rs = GetRegister(RS(opcode));
 	uint32_t rt = GetRegister(RT(opcode));
-	uint64_t milo = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
+	uint64_t milo = (static_cast<uint64_t>(state.hi) << 32) | static_cast<uint64_t>(state.lo);
 	uint64_t result = milo - static_cast<uint64_t>(rs) * static_cast<uint64_t>(rt);
-	hi = result >> 32;
-	lo = result;
+	state.hi = result >> 32;
+	state.lo = result;
 }
 
-void CPU::MTIC(uint32_t opcode) {
-	interrupts_enabled = GetRegister(RT(opcode)) != 0;
-}
+void CPU::MTIC(uint32_t opcode) {}
 
 void CPU::MTHI(uint32_t opcode) {
-	hi = GetRegister(RS(opcode));
+	state.hi = GetRegister(RS(opcode));
 }
 
 void CPU::MTLO(uint32_t opcode) {
-	lo = GetRegister(RS(opcode));
+	state.lo = GetRegister(RS(opcode));
 }
 void CPU::MULT(uint32_t opcode) {
 	int32_t rs = GetRegister(RS(opcode));
 	int32_t rt = GetRegister(RT(opcode));
 	uint64_t result = static_cast<int64_t>(rs) * static_cast<int64_t>(rt);
-	hi = result >> 32;
-	lo = result;
+	state.hi = result >> 32;
+	state.lo = result;
 }
 
 void CPU::MULTU(uint32_t opcode) {
 	uint32_t rs = GetRegister(RS(opcode));
 	uint32_t rt = GetRegister(RT(opcode));
 	uint64_t result = static_cast<uint64_t>(rs) * static_cast<uint64_t>(rt);
-	hi = result >> 32;
-	lo = result;
+	state.hi = result >> 32;
+	state.lo = result;
 }
 
 void CPU::NOR(uint32_t opcode) {
@@ -500,7 +495,7 @@ void CPU::LWC1(uint32_t opcode) {
 #endif
 
 	uint32_t value = PSP::GetInstance()->ReadMemory32(addr);
-	fpu_regs[RT(opcode)] = std::bit_cast<float>(value);
+	state.fpu_regs[RT(opcode)] = std::bit_cast<float>(value);
 }
 
 void CPU::LWL(uint32_t opcode) {
@@ -650,7 +645,7 @@ void CPU::SWC1(uint32_t opcode) {
 	}
 #endif
 
-	auto value = std::bit_cast<uint32_t>(fpu_regs[RT(opcode)]);
+	auto value = std::bit_cast<uint32_t>(state.fpu_regs[RT(opcode)]);
 	PSP::GetInstance()->WriteMemory32(addr, value);
 }
 
@@ -711,45 +706,44 @@ void CPU::BranchCond(uint32_t opcode) {
 
 	if (branch) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
-		next_pc = pc + offset;
+		next_pc = state.pc + offset;
 	} else if (likely) {
-		pc += 4;
-		next_pc = pc + 4;
+		state.pc += 4;
+		next_pc = state.pc + 4;
 	}
 }
 
 void CPU::ABSS(uint32_t opcode) {
-	fpu_regs[FD(opcode)] = fabsf(fpu_regs[FS(opcode)]);
+	state.fpu_regs[FD(opcode)] = fabsf(state.fpu_regs[FS(opcode)]);
 }
 
 void CPU::ADDS(uint32_t opcode) {
-	fpu_regs[FD(opcode)] = fpu_regs[FS(opcode)] + fpu_regs[FT(opcode)];
+	state.fpu_regs[FD(opcode)] = state.fpu_regs[FS(opcode)] + state.fpu_regs[FT(opcode)];
 }
 
 void CPU::CCONDS(uint32_t opcode) {
 	uint32_t cond = opcode & 0xF;
-	float fs = fpu_regs[FS(opcode)];
-	float ft = fpu_regs[FT(opcode)];
+	float fs = state.fpu_regs[FS(opcode)];
+	float ft = state.fpu_regs[FT(opcode)];
 
 	if (std::isnan(fs) || std::isnan(ft)) {
-		fpu_cond = (cond & 1) != 0;
+		state.fpu_cond = (cond & 1) != 0;
 	} else {
 		bool equal = ((cond & 2) != 0) && (fs == ft);
 		bool less = ((cond & 4) != 0) && (fs < ft);
-		fpu_cond = less || equal;
+		state.fpu_cond = less || equal;
 	}
 }
 
 void CPU::CEILWS(uint32_t opcode) {
-	float fs = fpu_regs[FS(opcode)];
+	float fs = state.fpu_regs[FS(opcode)];
 	int value = 0;
 	if (std::isinf(fs) || std::isnan(fs)) {
 		value = std::isinf(fs) && fs < 0.0f ? -0x80000000 : 0x7FFFFFFF;
-	}
-	else {
+	} else {
 		value = ceilf(fs);
 	}
-	fpu_regs[FD(opcode)] = std::bit_cast<float>(value);
+	state.fpu_regs[FD(opcode)] = std::bit_cast<float>(value);
 }
 
 void CPU::CFC1(uint32_t opcode) {
@@ -770,94 +764,92 @@ void CPU::CTC1(uint32_t opcode) {
 }
 
 void CPU::CVTSW(uint32_t opcode) {
-	float fs = fpu_regs[FS(opcode)];
-	fpu_regs[FD(opcode)] = std::bit_cast<int>(fs);
+	float fs = state.fpu_regs[FS(opcode)];
+	state.fpu_regs[FD(opcode)] = std::bit_cast<int>(fs);
 }
 
 void CPU::CVTWS(uint32_t opcode) {
-	float fs = fpu_regs[FS(opcode)];
+	float fs = state.fpu_regs[FS(opcode)];
 	int value = 0;
 	if (std::isinf(fs) || std::isnan(fs)) {
 		value = std::isinf(fs) && fs < 0.0f ? -0x80000000 : 0x7FFFFFFF;
 	}
 	else {
-		switch (fcr31 & 3) {
+		switch (state.fcr31 & 3) {
 		case 0: value = static_cast<int>(rintf(fs)); break;
 		case 1: value = static_cast<int>(fs); break;
 		case 2: value = static_cast<int>(ceilf(fs)); break;
 		case 3: value = static_cast<int>(floorf(fs)); break;
 		}
 	}
-	fpu_regs[FD(opcode)] = std::bit_cast<float>(value);
+	state.fpu_regs[FD(opcode)] = std::bit_cast<float>(value);
 }
 
 void CPU::DIVS(uint32_t opcode) {
-	fpu_regs[FD(opcode)] = fpu_regs[FS(opcode)] / fpu_regs[FT(opcode)];
+	state.fpu_regs[FD(opcode)] = state.fpu_regs[FS(opcode)] / state.fpu_regs[FT(opcode)];
 }
 
 void CPU::FLOORWS(uint32_t opcode) {
-	float fs = fpu_regs[FS(opcode)];
+	float fs = state.fpu_regs[FS(opcode)];
 	int value = 0;
 	if (std::isinf(fs) || std::isnan(fs)) {
 		value = std::isinf(fs) && fs < 0.0f ? -0x80000000 : 0x7FFFFFFF;
 	} else {
 		value = floorf(fs);
 	}
-	fpu_regs[FD(opcode)] = std::bit_cast<float>(value);
+	state.fpu_regs[FD(opcode)] = std::bit_cast<float>(value);
 }
 
 void CPU::MFC1(uint32_t opcode) {
-	auto value = std::bit_cast<uint32_t>(fpu_regs[FS(opcode)]);
+	auto value = std::bit_cast<uint32_t>(state.fpu_regs[FS(opcode)]);
 	SetRegister(RT(opcode), value);
 }
 
 void CPU::MOVS(uint32_t opcode) {
-	fpu_regs[FD(opcode)] = fpu_regs[FS(opcode)];
+	state.fpu_regs[FD(opcode)] = state.fpu_regs[FS(opcode)];
 }
 
 void CPU::MTC1(uint32_t opcode) {
-	fpu_regs[FS(opcode)] = std::bit_cast<float>(GetRegister(RT(opcode)));
+	state.fpu_regs[FS(opcode)] = std::bit_cast<float>(GetRegister(RT(opcode)));
 }
 
 void CPU::MULS(uint32_t opcode) {
-	fpu_regs[FD(opcode)] = fpu_regs[FS(opcode)] * fpu_regs[FT(opcode)];
+	state.fpu_regs[FD(opcode)] = state.fpu_regs[FS(opcode)] * state.fpu_regs[FT(opcode)];
 }
 
 void CPU::NEGS(uint32_t opcode) {
-	fpu_regs[FD(opcode)] = -fpu_regs[FS(opcode)];
+	state.fpu_regs[FD(opcode)] = -state.fpu_regs[FS(opcode)];
 }
 
 void CPU::SQRTS(uint32_t opcode) {
-	fpu_regs[FD(opcode)] = sqrtf(fpu_regs[FS(opcode)]);
+	state.fpu_regs[FD(opcode)] = sqrtf(state.fpu_regs[FS(opcode)]);
 }
 
 void CPU::SUBS(uint32_t opcode) {
-	fpu_regs[FD(opcode)] = fpu_regs[FS(opcode)] - fpu_regs[FT(opcode)];
+	state.fpu_regs[FD(opcode)] = state.fpu_regs[FS(opcode)] - state.fpu_regs[FT(opcode)];
 }
 
 void CPU::TRUNCWS(uint32_t opcode) {
-	float fs = fpu_regs[FS(opcode)];
+	float fs = state.fpu_regs[FS(opcode)];
 	int value = 0;
 	if (std::isinf(fs) || std::isnan(fs)) {
 		value = std::isinf(fs) && fs < 0.0f ? -0x80000000 : 0x7FFFFFFF;
-	}
-	else {
+	} else {
 		value = truncf(fs);
 	}
-	fpu_regs[FD(opcode)] = std::bit_cast<float>(value);
+	state.fpu_regs[FD(opcode)] = std::bit_cast<float>(value);
 }
 
 void CPU::BranchFPU(uint32_t opcode) {
-	bool branch = (opcode >> 16 & 1) == fpu_cond;
+	bool branch = (opcode >> 16 & 1) == state.fpu_cond;
 	bool likely = (opcode >> 17 & 1) != 0;
 
 	if (branch) {
 		int16_t offset = static_cast<int16_t>(IMM16(opcode)) << 2;
-		next_pc = pc + offset;
-	}
-	else if (likely) {
-		pc += 4;
-		next_pc = pc + 4;
+		next_pc = state.pc + offset;
+	} else if (likely) {
+		state.pc += 4;
+		next_pc = state.pc + 4;
 	}
 }
 	

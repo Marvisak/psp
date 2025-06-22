@@ -130,19 +130,19 @@ uint8_t Debugger::CalculateChecksum(std::string packet) {
 std::string Debugger::ReadRegisters() {
 	std::string registers;
 	auto cpu = PSP::GetInstance()->GetCPU();
+	auto state = cpu->GetState();
 	for (int i = 0; i < 32; i++) {
-		registers += ToLittleEndian(cpu->GetRegister(i));
+		registers += ToLittleEndian(state.regs[i]);
 	}
 
 	registers += "xxxxxxxx";
-	registers += ToLittleEndian(cpu->GetLO());
-	registers += ToLittleEndian(cpu->GetHI());
+	registers += ToLittleEndian(state.lo);
+	registers += ToLittleEndian(state.hi);
 	registers += "xxxxxxxx";
 	registers += "xxxxxxxx";
-	registers += ToLittleEndian(cpu->GetPC());
+	registers += ToLittleEndian(state.pc);
 
-	auto fpu_regs = cpu->GetFPURegs();
-	for (auto reg : fpu_regs) {
+	for (auto reg : state.fpu_regs) {
 		auto value = std::bit_cast<uint32_t>(reg);
 		registers += ToLittleEndian(value);
 	}
@@ -155,18 +155,18 @@ std::string Debugger::ReadRegisters() {
 std::string Debugger::ReadRegister(std::string packet) {
 	int reg = stoi(packet.substr(1), nullptr, 16);
 
-	auto cpu = PSP::GetInstance()->GetCPU();
+	auto state = PSP::GetInstance()->GetCPU()->GetState();
 	if (reg < 32) {
-		return ToLittleEndian(cpu->GetRegister(reg));
+		return ToLittleEndian(state.regs[reg]);
 	} else if (reg > 37 && reg < 70) {
-		auto value = std::bit_cast<uint32_t>(cpu->GetFPURegs()[reg - 38]);
+		auto value = std::bit_cast<uint32_t>(state.fpu_regs[reg - 38]);
 		return ToLittleEndian(value);
 	} else if (reg == 33) {
-		return ToLittleEndian(cpu->GetLO());
+		return ToLittleEndian(state.lo);
 	} else if (reg == 34) {
-		return ToLittleEndian(cpu->GetHI());
+		return ToLittleEndian(state.hi);
 	} else if (reg == 37) {
-		return ToLittleEndian(cpu->GetPC());
+		return ToLittleEndian(state.pc);
 	} else {
 		return "xxxxxxxx";
 	}

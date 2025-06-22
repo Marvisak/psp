@@ -465,14 +465,16 @@ void Kernel::ExecHLEFunction(int import_index) {
 	func(cpu);
 
 	if (!skip_deadbeef) {
+		auto state = cpu->GetState();
 		for (int i = MIPS_REG_A0; i <= MIPS_REG_T7; i++) {
-			cpu->SetRegister(i, 0xDEADBEEF);
+			state.regs[i] = 0xDEADBEEF;
 		}
-		cpu->SetRegister(MIPS_REG_AT, 0xDEADBEEF);
-		cpu->SetRegister(MIPS_REG_T8, 0xDEADBEEF);
-		cpu->SetRegister(MIPS_REG_T9, 0xDEADBEEF);
-		cpu->SetHI(0xDEADBEEF);
-		cpu->SetLO(0xDEADBEEF);
+		state.regs[MIPS_REG_AT] = 0xDEADBEEF;
+		state.regs[MIPS_REG_T8] = 0xDEADBEEF;
+		state.regs[MIPS_REG_T9] = 0xDEADBEEF;
+		state.hi = 0xDEADBEEF;
+		state.lo = 0xDEADBEEF;
+		cpu->SetState(state);
 	}
 	skip_deadbeef = false;
 

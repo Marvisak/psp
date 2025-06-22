@@ -17,35 +17,41 @@
 #define FS(opcode) (opcode >> 11 & 0x1F)
 #define FD(opcode) (opcode >> 6 & 0x1F)
 
+struct CPUState {
+	std::array<uint32_t, 32> regs{ 0xDEADBEEF };
+	std::array<float, 32> fpu_regs{};
+
+	uint32_t pc = 0xdeadbeef;
+	uint32_t hi = 0xdeadbeef;
+	uint32_t lo = 0xdeadbeef;
+
+	uint32_t fcr31 = 0xdeadbeef;
+	bool fpu_cond = false;
+};
+
 class CPU {
 public:
 	bool RunInstruction();
 
-	uint32_t GetPC() const { return pc; }
-	void SetPC(uint32_t addr) { pc = addr; next_pc = addr + 4; }
+	uint32_t GetPC() const { return state.pc; }
+	void SetPC(uint32_t pc) { state.pc = pc; next_pc = pc + 4; }
 
-	std::array<uint32_t, 32> GetRegs() const { return regs; };
-	void SetRegs(std::array<uint32_t, 32> regs) { this->regs = regs; }
-	std::array<float, 32> GetFPURegs() const { return fpu_regs; }
-	void SetFPURegs(std::array<float, 32> fpu_regs) { this->fpu_regs = fpu_regs; }
-	uint32_t GetFCR31() const { return fcr31 & ~(1 << 23) | (fpu_cond << 23); }
-	void SetFCR31(uint32_t val) { fcr31 = val & 0x181FFFF; fpu_cond = (val >> 23 & 1) != 0; }
+	CPUState GetState() const { return state; }
+	void SetState(CPUState& state) { this->state = state; next_pc = state.pc + 4; }
 
-	uint32_t GetHI() const { return hi; }
-	uint32_t GetLO() const { return lo; }
-	void SetHI(uint32_t value) { hi = value; }
-	void SetLO(uint32_t value) { lo = value; }
+	uint32_t GetFCR31() const { return state.fcr31 & ~(1 << 23) | (state.fpu_cond << 23); }
+	void SetFCR31(uint32_t val) { state.fcr31 = val & 0x181FFFF; state.fpu_cond = (val >> 23 & 1) != 0; }
 
 	void SetRegister(int index, uint32_t value) {
-		regs[index] = value;
-		regs[MIPS_REG_ZERO] = 0;
+		state.regs[index] = value;
+		state.regs[MIPS_REG_ZERO] = 0;
 	}
 
 	uint32_t GetRegister(int index) {
-		return regs[index];
+		return state.regs[index];
 	}
 
-	void SetFPURegister(int index, float value) { fpu_regs[index] = value; }
+	void SetFPURegister(int index, float value) { state.fpu_regs[index] = value; }
 private:
 	void ADDI(uint32_t opcode);
 	void ADDIU(uint32_t opcode);
@@ -146,14 +152,6 @@ private:
 	void TRUNCWS(uint32_t opcode);
 	void BranchFPU(uint32_t opcode);
 
-	bool interrupts_enabled = false;
-	uint32_t pc = 0xdeadbeef;
 	uint32_t next_pc = 0xdeadbeef;
-	uint32_t hi = 0xdeadbeef;
-	uint32_t lo = 0xdeadbeef;
-	std::array<uint32_t, 32> regs{0xDEADBEEF};
-
-	uint32_t fcr31 = 0xdeadbeef;
-	bool fpu_cond = false;
-	std::array<float, 32> fpu_regs{};
+	CPUState state{};
 };
