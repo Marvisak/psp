@@ -76,7 +76,7 @@ fn drawPixel(pos: vec4i, uv: vec2f, c: vec4u) {
         return;
     }
 
-    let dstDepth = textureLoad(depth_buffer, pos.xy).r;
+    let dstDepth = textureLoad(depthBuffer, pos.xy).r;
     if DEPTH_FUNC != 100 {
         if !test(DEPTH_FUNC, u32(pos.z), dstDepth) {
             return;
@@ -94,15 +94,61 @@ fn drawPixel(pos: vec4i, uv: vec2f, c: vec4u) {
         }
     }
 
-    let dst = textureLoad(framebuffer, pos.xy);
-    if BLEND_OPERATION != 100 {
-        color = blend(vec4i(color), vec4i(dst));
-    }
-    color.a = dst.a;
+    var dst = textureLoad(framebuffer, pos.xy);
+    var dstColor = dst;
+    switch (FRAMEBUFFER_FORMAT) {
+    case 0u: {
+        var value = (dstColor.a << 8) | dstColor.b;
+        if pos.x % 2 != 0 {
+            value = (dstColor.g << 8) | dstColor.r;
+        }
+        let r = extractBits(value, 0u, 5u);
+        let g = extractBits(value, 5u, 6u);
+        let b = extractBits(value, 11u, 5u);
 
-    textureStore(framebuffer, pos.xy, color); 
+        dstColor = vec4u(
+            (r << 3) | (r >> 2),
+            (g << 2) | (g >> 4),
+            (b << 3) | (b >> 2),
+            0x00
+        );
+    }
+    default: { break; }
+    }
+
+    if BLEND_OPERATION != 100 {
+        color = blend(vec4i(color), vec4i(dstColor));
+    }
+    color.a = dstColor.a;
+
+    switch (FRAMEBUFFER_FORMAT) {
+    case 0u: {
+        let r = color.r >> 3;
+        let g = color.g >> 2;
+        let b = color.b >> 3;
+
+        let value = (b << 11) | (g << 5) | r;
+
+        let lower = extractBits(value, 0u, 8u);
+        let higher = extractBits(value, 8u, 16u);
+        if pos.x % 2 == 0 {
+            dst.g = higher;
+            dst.r = lower;
+        } else {
+            dst.a = higher;
+            dst.b = lower;
+        }
+        textureStore(framebuffer, pos.xy, dst);
+    }
+    case 3u: {
+        textureStore(framebuffer, pos.xy, color);
+        break;
+    }
+    default: { break; }
+    }
+
     if DEPTH_WRITE == 1 {
-        textureStore(depth_buffer, pos.xy, vec4u(pos.z));
+        textureStore(depthBuffer, pos.xy, vec4u(pos.z));
     }
 }
 )"

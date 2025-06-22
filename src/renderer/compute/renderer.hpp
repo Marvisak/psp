@@ -62,6 +62,7 @@ private:
 		uint64_t full;
 		struct {
 			uint8_t primitive_type : 3;
+			uint8_t framebuffer_format : 2;
 			bool textures_enabled : 1;
 			uint8_t texture_format : 4;
 			bool bilinear : 1;

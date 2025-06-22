@@ -750,6 +750,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 	ShaderID id{};
 
 	id.primitive_type = primitive_type;
+	id.framebuffer_format = fpf;
 	if (!clear_mode) {
 		id.textures_enabled = textures_enabled;
 		if (textures_enabled) {
@@ -793,6 +794,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 	}
 
 	WGPUConstantEntry constants[] {
+		{ .key = wgpu::StringView("FRAMEBUFFER_FORMAT"), .value = static_cast<double>(fpf) },
 		{ .key = wgpu::StringView("TEXTURE_FORMAT"), .value = id.textures_enabled ? texture_format : 100.0f },
 		{ .key = wgpu::StringView("BILINEAR"), .value = id.bilinear ? 1.0f : 0.0f },
 		{ .key = wgpu::StringView("U_CLAMP"), .value = id.u_clamp ? 1.0f : 0.0f },
@@ -846,13 +848,13 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 }
 
 void ComputeRenderer::UpdateRenderTexture() {
-	auto format = fpf == SCE_DISPLAY_PIXEL_RGBA8888 ? wgpu::TextureFormat::RGBA8Uint : wgpu::TextureFormat::R16Uint;
+	uint32_t width = fpf == SCE_DISPLAY_PIXEL_RGBA8888 ? fbw : fbw / 2;
 
 	bool create_texture = true;
 	if (compute_texture && compute_depth_texture) {
 		FlushRender();
 
-		if (compute_texture.getFormat() == format && compute_texture.getWidth() == fbw
+		if (compute_texture.getWidth() == width
 			&& compute_depth_texture.getWidth() == zbw) {
 			create_texture = false;
 		} else {
@@ -866,8 +868,8 @@ void ComputeRenderer::UpdateRenderTexture() {
 	if (create_texture) {
 		wgpu::TextureDescriptor texture_desc{};
 		texture_desc.dimension = wgpu::TextureDimension::_2D;
-		texture_desc.format = format;
-		texture_desc.size = { fbw, 512, 1 };
+		texture_desc.format = wgpu::TextureFormat::RGBA8Uint;
+		texture_desc.size = { width, 512, 1 };
 		texture_desc.sampleCount = 1;
 		texture_desc.mipLevelCount = 1;
 		texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::StorageBinding;
@@ -911,7 +913,7 @@ void ComputeRenderer::UpdateRenderTexture() {
 
 	auto framebuffer = PSP::GetInstance()->VirtualToPhysical(GetFrameBufferAddress());
 
-	queue.writeTexture(destination, framebuffer, fbw * 512 * bpp, data_layout, { fbw, 512, 1 });
+	queue.writeTexture(destination, framebuffer, fbw * 512 * bpp, data_layout, { width, 512, 1 });
 
 	wgpu::TexelCopyTextureInfo depth_destination{};
 	depth_destination.texture = compute_depth_texture;
@@ -983,7 +985,6 @@ void ComputeRenderer::FlushRender() {
 
 	auto command = compute_encoder.finish();
 	compute_encoder.release();
-
 
 	queue.writeBuffer(compute_render_data_buffer, 0, compute_render_data, compute_render_data_offset);
 	queue.writeBuffer(compute_vertex_buffer, 0, compute_vertices, compute_vertex_buffer_offset);

@@ -18,6 +18,7 @@ struct RenderData {
     environmentTexture: vec4i
 }
 
+override FRAMEBUFFER_FORMAT: u32 = 0;
 override TEXTURE_FORMAT: u32 = 100;
 override BILINEAR: u32 = 0;
 override U_CLAMP: u32 = 0;
@@ -35,6 +36,6 @@ override DEPTH_WRITE: u32 = 0;
 override GOURAUD_SHADING: u32 = 0;
 
 @group(0) @binding(0) var framebuffer: texture_storage_2d<rgba8uint, read_write>;
-@group(0) @binding(1) var depth_buffer: texture_storage_2d<r16uint, read_write>;
+@group(0) @binding(1) var depthBuffer: texture_storage_2d<r16uint, read_write>;
 @group(1) @binding(0) var<uniform> renderData: RenderData; 
 )"
