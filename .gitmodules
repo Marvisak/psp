@@ -22,3 +22,6 @@
 [submodule "vendors/sdl3webgpu"]
 	path = vendors/sdl3webgpu
 	url = https://github.com/eliemichel/sdl3webgpu.git
+[submodule "vendors/lib9660"]
+	path = vendors/lib9660
+	url = https://github.com/erincandescent/lib9660.git

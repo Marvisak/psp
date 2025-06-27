@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 
 #include "kernel/filesystem/directory/directoryfs.hpp"
+#include "kernel/filesystem/iso/isofs.hpp"
 #include "renderer/software/renderer.hpp"
 #include "renderer/compute/renderer.hpp"
 #include "kernel/callback.hpp"
@@ -43,7 +44,6 @@ PSP::PSP(RendererType renderer_type, bool nearest_filtering) {
 #error "TODO: Implement fastmem on POSIX"
 #endif
 	}
-
 
 	kernel = std::make_unique<Kernel>();
 	cpu = std::make_unique<CPU>();
@@ -120,19 +120,29 @@ bool PSP::LoadExec(std::string path) {
 		return false;
 	}
 
+	std::shared_ptr<FileSystem> file_system = nullptr;
 	if (std::filesystem::is_regular_file(fs_path)) {
-		executable_path = "umd0:/" + fs_path.filename().string();
+		if (fs_path.extension().string() == ".iso") {
+			executable_path = "disc0:/PSP_GAME/SYSDIR/EBOOT.BIN";
+			file_system = std::make_shared<ISOFileSystem>(fs_path);
+		} else {
+			executable_path = "umd0:/" + fs_path.filename().string();
+		}
 		fs_path = fs_path.parent_path();
 	} else if (std::filesystem::is_directory(fs_path)) {
 		executable_path = "disc0:/PSP_GAME/SYSDIR/EBOOT.BIN";
 		fs_path = path;
 	}
 
-	auto file_system = std::make_shared<DirectoryFileSystem>(fs_path);
+	auto directory_file_system = std::make_shared<DirectoryFileSystem>(fs_path);
+
+	if (!file_system) {
+		file_system = directory_file_system;
+	}
 
 	kernel->Mount("umd0:", file_system);
 	kernel->Mount("disc0:", file_system);
-	kernel->Mount("host0:", file_system);
+	kernel->Mount("host0:", directory_file_system);
 
 	int uid = kernel->LoadModule(executable_path);
 	if (uid == -1) {

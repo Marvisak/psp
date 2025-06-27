@@ -35,6 +35,8 @@ list(APPEND sources
 
 	src/kernel/filesystem/directory/directoryfs.cpp
 	src/kernel/filesystem/directory/directoryfile.cpp
+	src/kernel/filesystem/iso/isofs.cpp
+	src/kernel/filesystem/iso/isofile.cpp
 
 	src/hle/hle.cpp
 	src/hle/modulemgrforuser.cpp
@@ -64,6 +66,8 @@ list(APPEND sources
 	vendors/libkirk/AES.c
 	vendors/libkirk/ec.c
 	vendors/libkirk/bn.c
+
+	vendors/lib9660/lib9660.c
 )
 
 add_executable(psp ${sources})
