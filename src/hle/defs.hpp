@@ -65,6 +65,9 @@ constexpr auto SCE_UMD_NOT_READY = 0x08;
 constexpr auto SCE_UMD_READY = 0x10;
 constexpr auto SCE_UMD_READABLE = 0x20;
 
+constexpr auto SCE_POWER_CALLBACKARG_POWERONLINE = 0x1000;
+constexpr auto SCE_POWER_CALLBACKARG_BATTERYEXIST = 0x80;
+
 constexpr auto SCEGU_PRIM_TRIANGLES = 3;
 constexpr auto SCEGU_PRIM_TRIANGLE_STRIP = 4;
 constexpr auto SCEGU_PRIM_TRIANGLE_FAN = 5;
@@ -141,9 +144,13 @@ constexpr auto SCE_KERNEL_TH_LOW_STACK = 0x400000;
 constexpr auto SCE_KERNEL_TH_USER = 0x80000000;
 
 constexpr auto SCE_OK = 0;
+constexpr auto SCE_ERROR_ALREADY = 0x80000020;
 constexpr auto SCE_ERROR_BUSY = 0x80000021;
 constexpr auto SCE_ERROR_OUT_OF_MEMORY = 0x80000022;
+constexpr auto SCE_ERROR_PRIV_REQUIRED = 0x80000023;
+constexpr auto SCE_ERROR_NOT_FOUND = 0x80000025;
 constexpr auto SCE_ERROR_INVALID_ID = 0x80000100;
+constexpr auto SCE_ERROR_INVALID_INDEX = 0x80000102;
 constexpr auto SCE_ERROR_INVALID_POINTER = 0x80000103;
 constexpr auto SCE_ERROR_INVALID_SIZE = 0x80000104;
 constexpr auto SCE_ERROR_INVALID_MODE = 0x80000107;

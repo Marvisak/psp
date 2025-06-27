@@ -18,7 +18,7 @@ constexpr auto USER_MEMORY_END = KERNEL_MEMORY_START + RAM_SIZE;
 constexpr auto VRAM_START = 0x04000000;
 constexpr auto VRAM_END = 0x04800000;
 
-constexpr auto CPU_HZ = 222000000;
+extern int CPU_HZ;
 
 #define US_TO_CYCLES(usec) (CPU_HZ / 1000000 * (usec))
 #define MS_TO_CYCLES(msec) (CPU_HZ / 1000 * (msec))
