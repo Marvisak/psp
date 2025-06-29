@@ -6,7 +6,7 @@
 #include <webgpu/webgpu.hpp>
 
 constexpr auto MAX_BUFFER_VERTEX_COUNT = 16384;
-constexpr auto MAX_BUFFER_RENDER_DATA_COUNT = 1024;
+constexpr auto MAX_BUFFER_RENDER_DATA_COUNT = 4096;
 
 class ComputeRenderer : public Renderer {
 public:

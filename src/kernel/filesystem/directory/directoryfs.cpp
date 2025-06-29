@@ -17,12 +17,10 @@ void DirectoryFileSystem::GetStatInternal(std::filesystem::path path, SceIoStat*
 	if (std::filesystem::is_directory(path)) {
 		data->attr = 0x10;
 		data->mode = SCE_STM_FDIR;
-	}
-	else if (std::filesystem::is_regular_file(path)) {
+	} else if (std::filesystem::is_regular_file(path)) {
 		data->attr = 0x20;
 		data->mode = SCE_STM_FREG;
-	}
-	else if (std::filesystem::is_symlink(path)) {
+	} else if (std::filesystem::is_symlink(path)) {
 		data->attr = 0x20;
 		data->mode = SCE_STM_FLNK;
 	}

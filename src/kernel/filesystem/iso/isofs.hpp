@@ -28,5 +28,7 @@ public:
 	bool RemoveDirectory(std::string path);
 	std::string FixPath(std::string path) const;
 private:
+	void GetStatInternal(l9660_dirent* dirent, SceIoStat* data) const;
+
 	ISOFS iso_fs;
 };

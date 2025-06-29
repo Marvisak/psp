@@ -26,6 +26,19 @@ ISOFileSystem::ISOFileSystem(std::filesystem::path file_path) {
 	}
 }
 
+void ISOFileSystem::GetStatInternal(l9660_dirent* dirent, SceIoStat* data) const {
+	if (dirent->flags & 2) {
+		data->attr = 0x10;
+		data->mode = SCE_STM_FDIR;
+	} else {
+		data->attr = 0x20;
+		data->mode = SCE_STM_FREG;
+	}
+
+	data->mode |= 0555;
+	data->size = dirent->length;
+}
+
 std::string ISOFileSystem::FixPath(std::string path) const {
 	if (!path.empty() && path.front() == '/') {
 		path = path.substr(1);
@@ -60,8 +73,36 @@ std::unique_ptr<File> ISOFileSystem::OpenFile(std::string path, int flags) {
 }
 
 std::unique_ptr<DirectoryListing> ISOFileSystem::OpenDirectory(std::string path) {
-	spdlog::error("ISOFileSystem: unimplemented OpenDirectory");
-	return nullptr;
+	auto fs_path = std::filesystem::path(FixPath(path));
+
+	l9660_dir dir;
+	l9660_fs_open_root(&dir, &iso_fs.fs);
+	for (const auto& part : fs_path.parent_path()) {
+		auto status = l9660_opendirat(&dir, &dir, part.string().c_str());
+
+		if (status != L9660_OK) {
+			spdlog::error("ISOFileSystem: couldn't open {}", path);
+			return nullptr;
+		}
+	}
+
+	auto directory = std::make_unique<DirectoryListing>();
+	while (true) {
+		SceIoDirent entry{};
+
+		l9660_dirent* dirent{};
+		l9660_readdir(&dir, &dirent);
+
+		if (!dirent) {
+			break;
+		}
+
+		GetStatInternal(dirent, &entry.stat);
+		SDL_strlcpy(entry.name, dirent->name, dirent->name_len + 1);
+		directory->AddEntry(entry);
+	}
+
+	return directory;
 }
 
 void ISOFileSystem::CreateDirectory(std::string path) {
