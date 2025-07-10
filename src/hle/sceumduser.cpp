@@ -70,7 +70,7 @@ static void WakeUpUmdThreads() {
 			if (it->second.timeout) {
 				psp->Unschedule(it->second.timeout);
 			}
-			WAITING_THREADS.erase(it);
+			it = WAITING_THREADS.erase(it);
 		} else {
 			it++;
 		}

@@ -45,6 +45,7 @@ public:
 	bool LoadMemStick(std::string path);
 
 	SDL_Gamepad* GetController() { return controller; }
+	SDL_AudioStream* GetAudioStream() { return audio_stream; }
 
 	void Exit();
 	void ForceExit();
@@ -105,6 +106,7 @@ private:
 	std::unique_ptr<CPU> cpu;
 
 	SDL_Gamepad* controller{};
+	SDL_AudioStream* audio_stream{};
 
 	int exit_callback = -1;
 	bool vblank = false;

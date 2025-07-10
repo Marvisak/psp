@@ -20,6 +20,7 @@
 struct CPUState {
 	std::array<uint32_t, 32> regs{ 0xDEADBEEF };
 	std::array<float, 32> fpu_regs{};
+	std::array<glm::mat4x4, 8> vfpu_regs{};
 
 	uint32_t pc = 0xdeadbeef;
 	uint32_t hi = 0xdeadbeef;

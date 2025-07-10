@@ -49,6 +49,7 @@ FuncMap RegisterSceUmdUser();
 FuncMap RegisterSceRtc();
 FuncMap RegisterSceSuspendForUser();
 FuncMap RegisterInterruptManager();
+FuncMap RegisterSceVAudio();
 
 #define HLE_V(func) [](CPU* cpu) { \
 		func(); \

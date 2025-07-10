@@ -48,7 +48,7 @@ PSP::PSP(RendererType renderer_type, bool nearest_filtering) {
 	kernel = std::make_unique<Kernel>();
 	cpu = std::make_unique<CPU>();
 
-	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_AUDIO)) {
 		spdlog::error("PSP: SDL init error {}", SDL_GetError());
 		return;
 	}
@@ -66,6 +66,14 @@ PSP::PSP(RendererType renderer_type, bool nearest_filtering) {
 	}
 	SDL_free(joysticks);
 
+	SDL_AudioSpec spec{};
+	spec.format = SDL_AUDIO_S16;
+	spec.channels = 2;
+	spec.freq = 44100;
+
+	audio_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
+	SDL_ResumeAudioStreamDevice(audio_stream);
+
 	switch (renderer_type) {
 	case RendererType::SOFTWARE:
 		renderer = std::make_unique<SoftwareRenderer>();
@@ -81,6 +89,11 @@ PSP::~PSP() {
 	if (controller) {
 		SDL_CloseGamepad(controller);
 	}
+
+	if (audio_stream) {
+		SDL_DestroyAudioStream(audio_stream);
+	}
+
 	if (FASTMEM) {
 		VirtualFree(reinterpret_cast<void*>(KERNEL_MEMORY_START), 0, MEM_RELEASE);
 		VirtualFree(reinterpret_cast<void*>(VRAM_START), 0, MEM_RELEASE);

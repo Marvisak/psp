@@ -315,9 +315,8 @@ void ComputeRenderer::Frame() {
 		it->second.unused_frames++;
 		if (it->second.unused_frames >= TEXTURE_CACHE_CLEAR_FRAMES) {
 			deleted_textures.push_back(it->second);
-			texture_cache.erase(it++);
-		}
-		else {
+			it = texture_cache.erase(it);
+		} else {
 			it++;
 		}
 	}

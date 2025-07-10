@@ -40,6 +40,7 @@ void RegisterHLE() {
 	hle_modules["sceRtc"] = RegisterSceRtc();
 	hle_modules["sceSuspendForUser"] = RegisterSceSuspendForUser();
 	hle_modules["InterruptManager"] = RegisterInterruptManager();
+	hle_modules["sceVaudio"] = RegisterSceVAudio();
 }
 
 int GetHLEIndex(std::string module, uint32_t nid) {

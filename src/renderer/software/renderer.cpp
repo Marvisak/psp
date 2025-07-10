@@ -28,7 +28,7 @@ void SoftwareRenderer::Frame() {
 	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
 		it->second.unused_frames++;
 		if (it->second.unused_frames >= TEXTURE_CACHE_CLEAR_FRAMES) {
-			texture_cache.erase(it++);
+			it = texture_cache.erase(it);
 		} else {
 			it++;
 		}
@@ -324,7 +324,7 @@ void SoftwareRenderer::ClearTextureCache(uint32_t addr, uint32_t size) {
 	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
 		uint32_t texture_end = it->first + it->second.size / 2;
 		if (addr <= texture_end && addr_end >= it->first) {
-			texture_cache.erase(it++);
+			it = texture_cache.erase(it);
 		} else {
 			it++;
 		}

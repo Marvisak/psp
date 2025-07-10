@@ -23,11 +23,12 @@ Renderer::~Renderer() {
 }
 
 void Renderer::Frame() {
+	auto psp = PSP::GetInstance();
 	SDL_Event event;
 	while (SDL_PollEvent(&event)) {
 		switch (event.type) {
 		case SDL_EVENT_QUIT:
-			PSP::GetInstance()->Exit();
+			psp->Exit();
 			break;
 		case SDL_EVENT_WINDOW_RESIZED:
 			Resize(event.window.data1, event.window.data2);
@@ -35,11 +36,14 @@ void Renderer::Frame() {
 		case SDL_EVENT_KEY_DOWN:
 			if (event.key.key == SDLK_TAB) {
 				frame_limiter = false;
+				SDL_PauseAudioStreamDevice(psp->GetAudioStream());
 			}
 			break;
 		case SDL_EVENT_KEY_UP:
 			if (event.key.key == SDLK_TAB) {
 				frame_limiter = true;
+				SDL_ClearAudioStream(psp->GetAudioStream());
+				SDL_ResumeAudioStreamDevice(psp->GetAudioStream());
 			}
 			break;
 		}
