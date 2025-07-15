@@ -111,13 +111,13 @@ FuncMap RegisterUtilsForUser() {
 	time(&TIME_START);
 
 	FuncMap funcs;
-	funcs[0x3EE30821] = HLE_UU_R(sceKernelDcacheWritebackRange);
-	funcs[0xB435DEC5] = HLE_R(sceKernelDcacheWritebackInvalidateAll);
-	funcs[0x79D1C3FA] = HLE_R(sceKernelDcacheWritebackAll);
-	funcs[0x34B9FA9E] = HLE_UU_R(sceKernelDcacheWritebackInvalidateRange);
-	funcs[0xBFA98062] = HLE_UU_R(sceKernelDcacheInvalidateRange);
-	funcs[0x71EC4271] = HLE_UU_R(sceKernelLibcGettimeofday);
-	funcs[0x27CC57F0] = HLE_U_R(sceKernelLibcTime);
-	funcs[0x91E4F6A7] = HLE_R(sceKernelLibcClock);
+	funcs[0x3EE30821] = HLEWrap(sceKernelDcacheWritebackRange);
+	funcs[0xB435DEC5] = HLEWrap(sceKernelDcacheWritebackInvalidateAll);
+	funcs[0x79D1C3FA] = HLEWrap(sceKernelDcacheWritebackAll);
+	funcs[0x34B9FA9E] = HLEWrap(sceKernelDcacheWritebackInvalidateRange);
+	funcs[0xBFA98062] = HLEWrap(sceKernelDcacheInvalidateRange);
+	funcs[0x71EC4271] = HLEWrap(sceKernelLibcGettimeofday);
+	funcs[0x27CC57F0] = HLEWrap(sceKernelLibcTime);
+	funcs[0x91E4F6A7] = HLEWrap(sceKernelLibcClock);
 	return funcs;
 }

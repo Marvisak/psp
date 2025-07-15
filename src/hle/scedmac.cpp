@@ -62,7 +62,7 @@ static int sceDmacTryMemcpy(uint32_t dst_addr, uint32_t src_addr, uint32_t size)
 
 FuncMap RegisterSceDmac() {
 	FuncMap funcs;
-	funcs[0x617F3FE6] = HLE_UUU_R(sceDmacMemcpy);
-	funcs[0xD97F94D8] = HLE_UUU_R(sceDmacTryMemcpy);
+	funcs[0x617F3FE6] = HLEWrap(sceDmacMemcpy);
+	funcs[0xD97F94D8] = HLEWrap(sceDmacTryMemcpy);
 	return funcs;
 }

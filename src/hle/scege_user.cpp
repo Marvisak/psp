@@ -97,15 +97,15 @@ static int sceGeUnsetCallback(int id) {
 
 FuncMap RegisterSceGeUser() {
 	FuncMap funcs;
-	funcs[0xE47E40E4] = HLE_R(sceGeEdramGetAddr);
-	funcs[0x1F6752AD] = HLE_R(sceGeEdramGetSize);
-	funcs[0xAB49E76A] = HLE_UUIU_R(sceGeListEnQueue);
-	funcs[0x5FB86AB0] = HLE_I_R(sceGeListDeQueue);
-	funcs[0xE0D68148] = HLE_IU_R(sceGeListUpdateStallAddr);
-	funcs[0x03444EB4] = HLE_II_R(sceGeListSync);
-	funcs[0xB287BD61] = HLE_I_R(sceGeDrawSync);
-	funcs[0xDC93CFEF] = HLE_I_R(sceGeGetCmd);
-	funcs[0xA4FC06A4] = HLE_U_R(sceGeSetCallback);
-	funcs[0x05DB22CE] = HLE_I_R(sceGeUnsetCallback);
+	funcs[0xE47E40E4] = HLEWrap(sceGeEdramGetAddr);
+	funcs[0x1F6752AD] = HLEWrap(sceGeEdramGetSize);
+	funcs[0xAB49E76A] = HLEWrap(sceGeListEnQueue);
+	funcs[0x5FB86AB0] = HLEWrap(sceGeListDeQueue);
+	funcs[0xE0D68148] = HLEWrap(sceGeListUpdateStallAddr);
+	funcs[0x03444EB4] = HLEWrap(sceGeListSync);
+	funcs[0xB287BD61] = HLEWrap(sceGeDrawSync);
+	funcs[0xDC93CFEF] = HLEWrap(sceGeGetCmd);
+	funcs[0xA4FC06A4] = HLEWrap(sceGeSetCallback);
+	funcs[0x05DB22CE] = HLEWrap(sceGeUnsetCallback);
 	return funcs;
 }

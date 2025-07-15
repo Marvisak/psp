@@ -204,15 +204,15 @@ FuncMap RegisterSceDisplay() {
 	VBlankHandler(0);
 
 	FuncMap funcs;
-	funcs[0x0E20F177] = HLE_III_R(sceDisplaySetMode);
-	funcs[0xDEA197D4] = HLE_UUU_R(sceDisplayGetMode);
-	funcs[0xEEDA2E54] = HLE_UUUI_R(sceDisplayGetFrameBuf);
-	funcs[0x289D82FE] = HLE_UIII_R(sceDisplaySetFrameBuf);
-	funcs[0x36CDFADE] = HLE_R(sceDisplayWaitVblank);
-	funcs[0x8EB9EC49] = HLE_R(sceDisplayWaitVblankCB);
-	funcs[0x984C27E7] = HLE_R(sceDisplayWaitVblankStart);
-	funcs[0x4D4E10EC] = HLE_R(sceDisplayIsVblank);
-	funcs[0xDBA6C4C4] = HLE_RF(sceDisplayGetFramePerSec);
-	funcs[0x9C6EAAD7] = HLE_R(sceDisplayGetVcount);
+	funcs[0x0E20F177] = HLEWrap(sceDisplaySetMode);
+	funcs[0xDEA197D4] = HLEWrap(sceDisplayGetMode);
+	funcs[0xEEDA2E54] = HLEWrap(sceDisplayGetFrameBuf);
+	funcs[0x289D82FE] = HLEWrap(sceDisplaySetFrameBuf);
+	funcs[0x36CDFADE] = HLEWrap(sceDisplayWaitVblank);
+	funcs[0x8EB9EC49] = HLEWrap(sceDisplayWaitVblankCB);
+	funcs[0x984C27E7] = HLEWrap(sceDisplayWaitVblankStart);
+	funcs[0x4D4E10EC] = HLEWrap(sceDisplayIsVblank);
+	funcs[0xDBA6C4C4] = HLEWrap(sceDisplayGetFramePerSec);
+	funcs[0x9C6EAAD7] = HLEWrap(sceDisplayGetVcount);
 	return funcs;
 }

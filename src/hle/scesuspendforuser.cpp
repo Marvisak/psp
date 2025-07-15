@@ -27,8 +27,8 @@ static int sceKernelPowerUnlock(int lock_type) {
 
 FuncMap RegisterSceSuspendForUser() {
 	FuncMap funcs;
-	funcs[0x090CCB3F] = HLE_I_R(sceKernelPowerTick);
-	funcs[0xEADB1BD7] = HLE_I_R(sceKernelPowerLock);
-	funcs[0x3AEE7261] = HLE_I_R(sceKernelPowerUnlock);
+	funcs[0x090CCB3F] = HLEWrap(sceKernelPowerTick);
+	funcs[0xEADB1BD7] = HLEWrap(sceKernelPowerLock);
+	funcs[0x3AEE7261] = HLEWrap(sceKernelPowerUnlock);
 	return funcs;
 }

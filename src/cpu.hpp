@@ -3,6 +3,7 @@
 #include <array>
 #include <limits>
 #include <cstdint>
+#include <glm/glm.hpp>
 
 #include "hle/defs.hpp"
 

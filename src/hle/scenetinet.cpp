@@ -34,11 +34,11 @@ static int sceNetInetSetsockopt(int s, int level, int optname, uint32_t optval_a
 
 FuncMap RegisterSceNetInet() {
 	FuncMap funcs;
-	funcs[0x8D7284EA] = HLE_I_R(sceNetInetClose);
-	funcs[0xCDA85C99] = HLE_IUUI_R(sceNetInetRecv);
-	funcs[0x7AA671BC] = HLE_IUUI_R(sceNetInetSend);
-	funcs[0x4A114C7C] = HLE_IIIUU_R(sceNetInetGetsockopt);
-	funcs[0x2FE71FE7] = HLE_IIIUU_R(sceNetInetSetsockopt);
-	funcs[0xFBABE411] = HLE_R(sceNetInetGetErrno);
+	funcs[0x8D7284EA] = HLEWrap(sceNetInetClose);
+	funcs[0xCDA85C99] = HLEWrap(sceNetInetRecv);
+	funcs[0x7AA671BC] = HLEWrap(sceNetInetSend);
+	funcs[0x4A114C7C] = HLEWrap(sceNetInetGetsockopt);
+	funcs[0x2FE71FE7] = HLEWrap(sceNetInetSetsockopt);
+	funcs[0xFBABE411] = HLEWrap(sceNetInetGetErrno);
 	return funcs;
 }

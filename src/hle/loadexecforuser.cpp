@@ -63,8 +63,8 @@ static int LoadExecForUser_362A956B() {
 
 FuncMap RegisterLoadExecForUser() {
 	FuncMap funcs;
-	funcs[0x5572A5F] = HLE_V(sceKernelExitGame);
-	funcs[0x4AC57943] = HLE_I_R(sceKernelRegisterExitCallback);
-	funcs[0x362A956B] = HLE_R(LoadExecForUser_362A956B);
+	funcs[0x5572A5F] = HLEWrap(sceKernelExitGame);
+	funcs[0x4AC57943] = HLEWrap(sceKernelRegisterExitCallback);
+	funcs[0x362A956B] = HLEWrap(LoadExecForUser_362A956B);
 	return funcs;
 }

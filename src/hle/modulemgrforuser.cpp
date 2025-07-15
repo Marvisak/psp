@@ -19,8 +19,8 @@ static int sceKernelStartModule(int modid, uint32_t args, uint32_t arg_addr, uin
 
 FuncMap RegisterModuleMgrForUser() {
 	FuncMap funcs;
-	funcs[0xD675EBB8] = HLE_UUU_R(sceKernelSelfStopUnloadModule);
-	funcs[0x977DE386] = HLE_CIU_R(sceKernelLoadModule);
-	funcs[0x50F0C1EC] = HLE_IUUUU_R(sceKernelStartModule);
+	funcs[0xD675EBB8] = HLEWrap(sceKernelSelfStopUnloadModule);
+	funcs[0x977DE386] = HLEWrap(sceKernelLoadModule);
+	funcs[0x50F0C1EC] = HLEWrap(sceKernelStartModule);
 	return funcs;
 }

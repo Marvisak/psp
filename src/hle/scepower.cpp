@@ -241,24 +241,24 @@ static int scePowerIsLowBattery() {
 
 FuncMap RegisterScePower() {
 	FuncMap funcs;
-	funcs[0x737486F2] = HLE_III_R(scePowerSetClockFrequency);
-	funcs[0x843FBF43] = HLE_I_R(scePowerSetCpuClockFrequency);
-	funcs[0xFEE03A2F] = HLE_R(scePowerGetCpuClockFrequencyInt);
-	funcs[0xFDB5BFE9] = HLE_R(scePowerGetCpuClockFrequencyInt);
-	funcs[0xB1A52C83] = HLE_RF(scePowerGetCpuClockFrequencyFloat);
-	funcs[0xB8D7B3FB] = HLE_I_R(scePowerSetBusClockFrequency);
-	funcs[0x478FE6F5] = HLE_R(scePowerGetBusClockFrequencyInt);
-	funcs[0xBD681969] = HLE_R(scePowerGetBusClockFrequencyInt);
-	funcs[0x9BADB3EB] = HLE_RF(scePowerGetBusClockFrequencyFloat);
-	funcs[0x34F9C463] = HLE_R(scePowerGetPllClockFrequencyInt);
-	funcs[0xEA382A27] = HLE_RF(scePowerGetPllClockFrequencyFloat);
-	funcs[0x04B7766E] = HLE_II_R(scePowerRegisterCallback);
-	funcs[0xDFA8BAF8] = HLE_I_R(scePowerUnregisterCallback);
-	funcs[0x1E490401] = HLE_R(scePowerIsBatteryCharging);
-	funcs[0x0AFD0D8B] = HLE_R(scePowerIsBatteryExist);
-	funcs[0x87440F5E] = HLE_R(scePowerIsPowerOnline);
-	funcs[0x2085D15D] = HLE_R(scePowerGetBatteryLifePercent);
-	funcs[0xB4432BC8] = HLE_R(scePowerGetBatteryChargingStatus);
-	funcs[0xD3075926] = HLE_R(scePowerIsLowBattery);
+	funcs[0x737486F2] = HLEWrap(scePowerSetClockFrequency);
+	funcs[0x843FBF43] = HLEWrap(scePowerSetCpuClockFrequency);
+	funcs[0xFEE03A2F] = HLEWrap(scePowerGetCpuClockFrequencyInt);
+	funcs[0xFDB5BFE9] = HLEWrap(scePowerGetCpuClockFrequencyInt);
+	funcs[0xB1A52C83] = HLEWrap(scePowerGetCpuClockFrequencyFloat);
+	funcs[0xB8D7B3FB] = HLEWrap(scePowerSetBusClockFrequency);
+	funcs[0x478FE6F5] = HLEWrap(scePowerGetBusClockFrequencyInt);
+	funcs[0xBD681969] = HLEWrap(scePowerGetBusClockFrequencyInt);
+	funcs[0x9BADB3EB] = HLEWrap(scePowerGetBusClockFrequencyFloat);
+	funcs[0x34F9C463] = HLEWrap(scePowerGetPllClockFrequencyInt);
+	funcs[0xEA382A27] = HLEWrap(scePowerGetPllClockFrequencyFloat);
+	funcs[0x04B7766E] = HLEWrap(scePowerRegisterCallback);
+	funcs[0xDFA8BAF8] = HLEWrap(scePowerUnregisterCallback);
+	funcs[0x1E490401] = HLEWrap(scePowerIsBatteryCharging);
+	funcs[0x0AFD0D8B] = HLEWrap(scePowerIsBatteryExist);
+	funcs[0x87440F5E] = HLEWrap(scePowerIsPowerOnline);
+	funcs[0x2085D15D] = HLEWrap(scePowerGetBatteryLifePercent);
+	funcs[0xB4432BC8] = HLEWrap(scePowerGetBatteryChargingStatus);
+	funcs[0xD3075926] = HLEWrap(scePowerIsLowBattery);
 	return funcs;
 }

@@ -409,23 +409,23 @@ FuncMap RegisterSceAudio() {
 	PSP::GetInstance()->Schedule(US_TO_CYCLES(1000000ULL) * 64 / 44100, AudioUpdate);
 
 	FuncMap funcs;
-	funcs[0x8C1009B2] = HLE_IIU_R(sceAudioOutput);
-	funcs[0x136CAF51] = HLE_IIU_R(sceAudioOutputBlocking);
-	funcs[0xE2D56B2D] = HLE_IIIU_R(sceAudioOutputPanned);
-	funcs[0x13F592BC] = HLE_IIIU_R(sceAudioOutputPannedBlocking);
-	funcs[0x2D53F36E] = HLE_IU_R(sceAudioOutput2OutputBlocking);
-	funcs[0xE0727056] = HLE_IU_R(sceAudioSRCOutputBlocking);
-	funcs[0x5EC81C55] = HLE_III_R(sceAudioChReserve);
-	funcs[0x6FC46853] = HLE_I_R(sceAudioChRelease);
-	funcs[0xB011922F] = HLE_I_R(sceAudioGetChannelRestLength);
-	funcs[0xCB2E439E] = HLE_II_R(sceAudioSetChannelDataLen);
-	funcs[0xB7E1D8E7] = HLE_III_R(sceAudioChangeChannelVolume);
-	funcs[0x01562BA3] = HLE_I_R(sceAudioOutput2Reserve);
-	funcs[0x43196845] = HLE_R(sceAudioOutput2Release);
-	funcs[0x63F2889C] = HLE_I_R(sceAudioOutput2ChangeLength);
-	funcs[0x647CEF33] = HLE_R(sceAudioOutput2GetRestSample);
-	funcs[0x38553111] = HLE_III_R(sceAudioSRCChReserve);
-	funcs[0x5C37C0AE] = HLE_R(sceAudioSRCChRelease);
+	funcs[0x8C1009B2] = HLEWrap(sceAudioOutput);
+	funcs[0x136CAF51] = HLEWrap(sceAudioOutputBlocking);
+	funcs[0xE2D56B2D] = HLEWrap(sceAudioOutputPanned);
+	funcs[0x13F592BC] = HLEWrap(sceAudioOutputPannedBlocking);
+	funcs[0x2D53F36E] = HLEWrap(sceAudioOutput2OutputBlocking);
+	funcs[0xE0727056] = HLEWrap(sceAudioSRCOutputBlocking);
+	funcs[0x5EC81C55] = HLEWrap(sceAudioChReserve);
+	funcs[0x6FC46853] = HLEWrap(sceAudioChRelease);
+	funcs[0xB011922F] = HLEWrap(sceAudioGetChannelRestLength);
+	funcs[0xCB2E439E] = HLEWrap(sceAudioSetChannelDataLen);
+	funcs[0xB7E1D8E7] = HLEWrap(sceAudioChangeChannelVolume);
+	funcs[0x01562BA3] = HLEWrap(sceAudioOutput2Reserve);
+	funcs[0x43196845] = HLEWrap(sceAudioOutput2Release);
+	funcs[0x63F2889C] = HLEWrap(sceAudioOutput2ChangeLength);
+	funcs[0x647CEF33] = HLEWrap(sceAudioOutput2GetRestSample);
+	funcs[0x38553111] = HLEWrap(sceAudioSRCChReserve);
+	funcs[0x5C37C0AE] = HLEWrap(sceAudioSRCChRelease);
 	return funcs;
 }
 

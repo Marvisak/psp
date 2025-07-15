@@ -98,8 +98,8 @@ FuncMap RegisterSceRtc() {
 	BASE_TICKS = 1000000ULL * BASE_TIME.tv_sec + RTC_OFFSET;
 	
 	FuncMap funcs;
-	funcs[0x3F7AD767] = HLE_U_R(sceRtcGetCurrentTick);
-	funcs[0x4CFA57B0] = HLE_UI_R(sceRtcGetCurrentClock);
-	funcs[0xE7C27D1B] = HLE_U_R(sceRtcGetCurrentClockLocalTime);
+	funcs[0x3F7AD767] = HLEWrap(sceRtcGetCurrentTick);
+	funcs[0x4CFA57B0] = HLEWrap(sceRtcGetCurrentClock);
+	funcs[0xE7C27D1B] = HLEWrap(sceRtcGetCurrentClockLocalTime);
 	return funcs;
 }

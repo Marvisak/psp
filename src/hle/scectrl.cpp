@@ -265,14 +265,14 @@ static int sceCtrlGetSamplingMode(uint32_t mode_addr) {
 
 FuncMap RegisterSceCtrl() {
 	FuncMap funcs;
-	funcs[0x3A622550] = HLE_UI_R(sceCtrlPeekBufferPositive);
-	funcs[0x1F803938] = HLE_UI_R(sceCtrlReadBufferPositive);
-	funcs[0xB1D0E5CD] = HLE_U_R(sceCtrlPeekLatch);
-	funcs[0x0B588501] = HLE_U_R(sceCtrlReadLatch);
-	funcs[0x6A2774F3] = HLE_U_R(sceCtrlSetSamplingCycle);
-	funcs[0x02BAAD91] = HLE_U_R(sceCtrlGetSamplingCycle);
-	funcs[0x6A2774F3] = HLE_U_R(sceCtrlSetSamplingCycle);
-	funcs[0x1F4011E6] = HLE_U_R(sceCtrlSetSamplingMode);
-	funcs[0xDA6B76A1] = HLE_U_R(sceCtrlGetSamplingMode);
+	funcs[0x3A622550] = HLEWrap(sceCtrlPeekBufferPositive);
+	funcs[0x1F803938] = HLEWrap(sceCtrlReadBufferPositive);
+	funcs[0xB1D0E5CD] = HLEWrap(sceCtrlPeekLatch);
+	funcs[0x0B588501] = HLEWrap(sceCtrlReadLatch);
+	funcs[0x6A2774F3] = HLEWrap(sceCtrlSetSamplingCycle);
+	funcs[0x02BAAD91] = HLEWrap(sceCtrlGetSamplingCycle);
+	funcs[0x6A2774F3] = HLEWrap(sceCtrlSetSamplingCycle);
+	funcs[0x1F4011E6] = HLEWrap(sceCtrlSetSamplingMode);
+	funcs[0xDA6B76A1] = HLEWrap(sceCtrlGetSamplingMode);
 	return funcs;
 }

@@ -61,11 +61,11 @@ static int sceKernelCpuResumeIntr() {
 
 FuncMap RegisterKernelLibrary() {
 	FuncMap funcs;
-	funcs[0xBEA46419] = HLE_UIU_R(sceKernelLockLwMutex);
-	funcs[0x15B6446B] = HLE_UI_R(sceKernelUnlockLwMutex);
-	funcs[0xA089ECA4] = HLE_UIU_R(sceKernelMemset);
-	funcs[0x1839852A] = HLE_UUU_R(sceKernelMemcpy);
-	funcs[0x092968F4] = HLE_R(sceKernelCpuSuspendIntr);
-	funcs[0x5F10D406] = HLE_R(sceKernelCpuResumeIntr);
+	funcs[0xBEA46419] = HLEWrap(sceKernelLockLwMutex);
+	funcs[0x15B6446B] = HLEWrap(sceKernelUnlockLwMutex);
+	funcs[0xA089ECA4] = HLEWrap(sceKernelMemset);
+	funcs[0x1839852A] = HLEWrap(sceKernelMemcpy);
+	funcs[0x092968F4] = HLEWrap(sceKernelCpuSuspendIntr);
+	funcs[0x5F10D406] = HLEWrap(sceKernelCpuResumeIntr);
 	return funcs;
 }

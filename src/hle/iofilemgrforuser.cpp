@@ -304,21 +304,21 @@ static int sceIoDevctl(const char* devname, int cmd, uint32_t arg_addr, int arg_
 
 FuncMap RegisterIoFileMgrForUser() {
 	FuncMap funcs;
-	funcs[0x109F50BC] = HLE_CII_R(sceIoOpen);
-	funcs[0x810C4BC3] = HLE_I_R(sceIoClose);
-	funcs[0x6A638D83] = HLE_IUU_R(sceIoRead);
-	funcs[0x42EC03AC] = HLE_IUU_R(sceIoWrite);
-	funcs[0x27EB27B8] = HLE_II64I_64R(sceIoLseek);
-	funcs[0x68963324] = HLE_III_R(sceIoLseek32);
-	funcs[0x779103A0] = HLE_CC_R(sceIoRename);
-	funcs[0xF27A9C51] = HLE_C_R(sceIoRemove);
-	funcs[0x06A70004] = HLE_CI_R(sceIoMkdir);
-	funcs[0x1117C65F] = HLE_C_R(sceIoRmdir);
-	funcs[0xB29DDF9C] = HLE_C_R(sceIoDopen);
-	funcs[0xE3EB004C] = HLE_IU_R(sceIoDread);
-	funcs[0xEB092469] = HLE_I_R(sceIoDclose);
-	funcs[0x55F4717D] = HLE_C_R(sceIoChdir);
-	funcs[0xACE946E8] = HLE_CU_R(sceIoGetstat);
-	funcs[0x54F5FB11] = HLE_CIUIUI(sceIoDevctl);
+	funcs[0x109F50BC] = HLEWrap(sceIoOpen);
+	funcs[0x810C4BC3] = HLEWrap(sceIoClose);
+	funcs[0x6A638D83] = HLEWrap(sceIoRead);
+	funcs[0x42EC03AC] = HLEWrap(sceIoWrite);
+	funcs[0x27EB27B8] = HLEWrap(sceIoLseek);
+	funcs[0x68963324] = HLEWrap(sceIoLseek32);
+	funcs[0x779103A0] = HLEWrap(sceIoRename);
+	funcs[0xF27A9C51] = HLEWrap(sceIoRemove);
+	funcs[0x06A70004] = HLEWrap(sceIoMkdir);
+	funcs[0x1117C65F] = HLEWrap(sceIoRmdir);
+	funcs[0xB29DDF9C] = HLEWrap(sceIoDopen);
+	funcs[0xE3EB004C] = HLEWrap(sceIoDread);
+	funcs[0xEB092469] = HLEWrap(sceIoDclose);
+	funcs[0x55F4717D] = HLEWrap(sceIoChdir);
+	funcs[0xACE946E8] = HLEWrap(sceIoGetstat);
+	funcs[0x54F5FB11] = HLEWrap(sceIoDevctl);
 	return funcs;
 }

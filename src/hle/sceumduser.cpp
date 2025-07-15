@@ -211,15 +211,15 @@ static int sceUmdCheckMedium() {
 
 FuncMap RegisterSceUmdUser() {
 	FuncMap funcs;
-	funcs[0xC6183D47] = HLE_IC_R(sceUmdActivate);
-	funcs[0xE83742BA] = HLE_IC_R(sceUmdDeactivate);
-	funcs[0x6B4A146C] = HLE_R(sceUmdGetDriveStat);
-	funcs[0xAEE7404D] = HLE_I_R(sceUmdRegisterUMDCallBack);
-	funcs[0xBD2BDE07] = HLE_I_R(sceUmdUnRegisterUMDCallBack);
-	funcs[0x8EF08FCE] = HLE_U_R(sceUmdWaitDriveStat);
-	funcs[0x56202973] = HLE_UI_R(sceUmdWaitDriveStatWithTimer);
-	funcs[0x4A9E5E29] = HLE_UI_R(sceUmdWaitDriveStatCB);
-	funcs[0x6AF9B50A] = HLE_R(sceUmdCancelWaitDriveStat);
-	funcs[0x46EBB729] = HLE_R(sceUmdCheckMedium);
+	funcs[0xC6183D47] = HLEWrap(sceUmdActivate);
+	funcs[0xE83742BA] = HLEWrap(sceUmdDeactivate);
+	funcs[0x6B4A146C] = HLEWrap(sceUmdGetDriveStat);
+	funcs[0xAEE7404D] = HLEWrap(sceUmdRegisterUMDCallBack);
+	funcs[0xBD2BDE07] = HLEWrap(sceUmdUnRegisterUMDCallBack);
+	funcs[0x8EF08FCE] = HLEWrap(sceUmdWaitDriveStat);
+	funcs[0x56202973] = HLEWrap(sceUmdWaitDriveStatWithTimer);
+	funcs[0x4A9E5E29] = HLEWrap(sceUmdWaitDriveStatCB);
+	funcs[0x6AF9B50A] = HLEWrap(sceUmdCancelWaitDriveStat);
+	funcs[0x46EBB729] = HLEWrap(sceUmdCheckMedium);
 	return funcs;
 }

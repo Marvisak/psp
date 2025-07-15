@@ -33,8 +33,8 @@ static int sceUtilityLoadModule(int id) {
 
 FuncMap RegisterSceUtility() {
 	FuncMap funcs;
-	funcs[0xA5DA2406] = HLE_IU_R(sceUtilityGetSystemParamInt);
-	funcs[0x8874DBE0] = HLE_R(sceUtilitySavedataGetStatus);
-	funcs[0x2A2B3DE0] = HLE_I_R(sceUtilityLoadModule);
+	funcs[0xA5DA2406] = HLEWrap(sceUtilityGetSystemParamInt);
+	funcs[0x8874DBE0] = HLEWrap(sceUtilitySavedataGetStatus);
+	funcs[0x2A2B3DE0] = HLEWrap(sceUtilityLoadModule);
 	return funcs;
 }
