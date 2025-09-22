@@ -46,6 +46,21 @@ void Thread::Start(int arg_size, uint32_t arg_block_addr) {
 	cpu_state.hi = 0xDEADBEEF;
 	cpu_state.lo = 0xDEADBEEF;
 
+	cpu_state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_CC] = 0x3F;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_INF4] = 0;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_REV] = 0x7772CEAB;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_RCX0] = 0x3F800001;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_RCX1] = 0x3F800002;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_RCX2] = 0x3F800004;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_RCX3] = 0x3F800008;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_RCX4] = 0x3F800000;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_RCX5] = 0x3F800000;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_RCX6] = 0x3F800000;
+	cpu_state.vfpu_ctrl[VFPU_CTRL_RCX7] = 0x3F800000;
+
 	exit_status = SCE_KERNEL_ERROR_NOT_DORMANT;
 	cpu_state.pc = entry;
 	cpu_state.regs[MIPS_REG_GP] = gp;

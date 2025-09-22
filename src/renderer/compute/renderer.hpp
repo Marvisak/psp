@@ -3,10 +3,10 @@
 #include "../renderer.hpp"
 
 #include <unordered_map>
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu_cpp.h>
 
-constexpr auto MAX_BUFFER_VERTEX_COUNT = 16384;
-constexpr auto MAX_BUFFER_RENDER_DATA_COUNT = 4096;
+constexpr auto MAX_BUFFER_VERTEX_COUNT = 65536;
+constexpr auto MAX_BUFFER_RENDER_DATA_COUNT = 16384;
 
 class ComputeRenderer : public Renderer {
 public:
@@ -17,6 +17,9 @@ public:
 	void Resize(int width, int height);
 	void RenderFramebufferChange() { compute_texture_valid = false; }
 	void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format);
+	void DrawPoint(Vertex point);
+	void DrawLine(Vertex start, Vertex end);
+	void DrawLineStrip(std::vector<Vertex> vertices);
 	void DrawRectangle(Vertex start, Vertex end);
 	void DrawTriangle(Vertex v0, Vertex v1, Vertex v2);
 	void DrawTriangleStrip(std::vector<Vertex> vertices);
@@ -86,7 +89,7 @@ private:
 	};
 
 	wgpu::ShaderModule CreateShaderModule(wgpu::StringView code);
-	wgpu::Buffer CreateBuffer(uint64_t size, wgpu::BufferUsage usage);
+	wgpu::Buffer CreateBuffer(wgpu::StringView label, uint64_t size, wgpu::BufferUsage usage);
 
 	void SetupRenderPipeline(wgpu::ShaderModule shader_module);
 	void SetupRenderBindGroup(bool nearest_filtering);
@@ -131,6 +134,7 @@ private:
 	wgpu::PipelineLayout compute_texture_layout;
 	bool compute_texture_valid = false;
 	wgpu::Texture compute_texture;
+	wgpu::Texture compute_16bit_texture;
 	wgpu::Texture compute_depth_texture;
 	void* compute_vertices;
 	uint32_t compute_vertex_buffer_offset = 0;
@@ -140,6 +144,7 @@ private:
 	wgpu::Buffer compute_render_data_buffer;
 	wgpu::Buffer compute_transitional_buffer;
 	wgpu::Buffer compute_depth_transitional_buffer;
+	uint32_t current_fpf = 0;
 	uint32_t current_fbp = 0;
 	uint32_t current_zbp = 0;
 

@@ -1,10 +1,20 @@
 #include "cpu.hpp"
 
 #include <spdlog/spdlog.h>
-#include <glm/integer.hpp>
-
+#include <glm/gtc/constants.hpp>
 
 #include "psp.hpp"
+
+CPU::CPU() {
+	int i = 0;
+	for (int m = 0; m < 8; m++) {
+		for (int y = 0; y < 4; y++) {
+			for (int x = 0; x < 4; x++) {
+				vfpu_lut[m * 4 + x * 32 + y] = i++;
+			}
+		}
+	}
+}
 
 bool CPU::RunInstruction() {
 	auto psp = PSP::GetInstance();
@@ -98,18 +108,63 @@ bool CPU::RunInstruction() {
 				case 0x20: CVTSW(opcode); break;
 				case 0x24: CVTWS(opcode); break;
 				default:
-					spdlog::error("CPU: Unknown COP1 instruction opcode {:x} at {:x}", opcode, current_pc);
+					spdlog::error("CPU: Unknown FPU instruction opcode {:x} at {:x}", opcode, current_pc);
 					return false;
 				}
 			}
 
 		}
 		break;
+	case 0x12:
+		switch ((opcode >> 21) & 0x1F) {
+		case 0x03: MFVC(opcode); break;
+		case 0x07: spdlog::error("mtvc"); break;
+		default:
+			spdlog::error("CPU: Unknown COP2 instruction opcode {:x} at {:x}", opcode, current_pc);
+			return false;
+		}
+		break;
 	case 0x14: BEQL(opcode); break;
 	case 0x15: BNEL(opcode); break;
 	case 0x16: BLEZL(opcode); break;
 	case 0x17: BGTZL(opcode); break;
-	case 0x1C: 
+	case 0x18:
+		switch ((opcode >> 23) & 0x7) {
+		case 0x0: VADD(opcode); break;
+		case 0x1: spdlog::error("vsub"); break;
+		case 0x7: VDIV(opcode); break;
+		default:
+			spdlog::error("CPU: Unknown VFPU instruction opcode {:x} at {:x}", opcode, current_pc);
+			return false;
+		}
+		break;
+	case 0x19:
+		switch ((opcode >> 23) & 0x7) {
+		case 0x0: VMUL(opcode); break;
+		case 0x1: spdlog::error("vdot"); break;
+		case 0x2: VSCL(opcode); break;
+		case 0x4: spdlog::error("vhdp"); break;
+		case 0x5: spdlog::error("vcrs"); break;
+		case 0x6: spdlog::error("vdet"); break;
+		default:
+			spdlog::error("CPU: Unknown VFPU instruction opcode {:x} at {:x}", opcode, current_pc);
+			return false;
+		}
+		break;
+	case 0x1B:
+		switch ((opcode >> 23) & 0x7) {
+		case 0x0: spdlog::error("vcmp"); break;
+		case 0x2: spdlog::error("vmin"); break;
+		case 0x3: spdlog::error("vmax"); break;
+		case 0x5: spdlog::error("vscmp"); break;
+		case 0x6: spdlog::error("vsge"); break;
+		case 0x7: spdlog::error("vslt"); break;
+		default:
+			spdlog::error("CPU: Unknown VFPU instruction opcode {:x} at {:x}", opcode, current_pc);
+			return false;
+		}
+		break;
+	case 0x1C:
 		switch (opcode & 0xFF) {
 		case 0x24: MFIC(opcode); break;
 		case 0x26: MTIC(opcode); break;
@@ -149,7 +204,91 @@ bool CPU::RunInstruction() {
 	case 0x2E: SWR(opcode); break;
 	case 0x2F: CACHE(opcode); break;
 	case 0x31: LWC1(opcode); break;
+	case 0x32: LVS(opcode); break;
+	case 0x34:
+		switch ((opcode >> 21) & 0x1F) {
+		case 0x00:
+			switch ((opcode >> 16) & 0x1F) {
+			case 0x00: VMOV(opcode); break;
+			case 0x01: spdlog::error("vabs"); break;
+			case 0x02: spdlog::error("vneg"); break;
+			case 0x03: spdlog::error("vidt"); break;
+			case 0x04: spdlog::error("vsat0"); break;
+			case 0x05: spdlog::error("vsat1"); break;
+			case 0x06: VZERO(opcode); break;
+			case 0x07: VONE(opcode); break;
+			case 0x10: spdlog::error("vrcp"); break;
+			case 0x11: spdlog::error("vrsq"); break;
+			case 0x12: VSIN(opcode); break;
+			case 0x13: VCOS(opcode); break;
+			case 0x14: spdlog::error("vexp2"); break;
+			case 0x15: spdlog::error("vlog2"); break;
+			case 0x16: spdlog::error("vsqrt"); break;
+			case 0x17: spdlog::error("vasin"); break;
+			case 0x18: spdlog::error("vncrp"); break;
+			case 0x1A: spdlog::error("vnsin"); break;
+			case 0x1C: spdlog::error("vrexp2"); break;
+			default:
+				spdlog::error("CPU: Unknown VFPU instruction opcode {:x} at {:x}", opcode, current_pc);
+				return false;
+			}
+			break;
+		case 0x02:
+			switch ((opcode >> 16) & 0x1F) {
+			case 0x00: spdlog::error("vsrt1"); break;
+			case 0x01: spdlog::error("vsrt2"); break;
+			case 0x02: spdlog::error("vbfy1"); break;
+			case 0x03: spdlog::error("vbfy2"); break;
+			case 0x04: spdlog::error("vocp"); break;
+			case 0x05: spdlog::error("vsocp"); break;
+			case 0x06: spdlog::error("vfad"); break;
+			case 0x07: spdlog::error("vavg"); break;
+			case 0x08: spdlog::error("vsrt3"); break;
+			case 0x09: spdlog::error("vsrt4"); break;
+			case 0x0A: spdlog::error("vsgn"); break;
+			default:
+				spdlog::error("CPU: Unknown VFPU instruction opcode {:x} at {:x}", opcode, current_pc);
+				return false;
+			}
+			break;
+		case 0x03: VCST(opcode); break;
+		case 0x15: spdlog::error("vcmov"); break;
+		default:
+			spdlog::error("CPU: Unknown VFPU instruction opcode {:x} at {:x}", opcode, current_pc);
+			return false;
+		}
+		break;
+	case 0x35: LVL(opcode); break;
+	case 0x37:
+		switch ((opcode >> 23) & 7) {
+		case 0x0: VPFXS(opcode); break;
+		case 0x2: VPFXT(opcode); break;
+		case 0x4: VPFXD(opcode); break;
+		case 0x6: VIIM(opcode); break;
+		case 0x7: VFIM(opcode); break;
+		default:
+			spdlog::error("CPU: Unknown VFPU instruction opcode {:x} at {:x}", opcode, current_pc);
+			return false;
+		}
+		break;
+	case 0x3C:
+		switch ((opcode >> 21) & 0x1F) {
+		case 0x14: spdlog::error("vcrsp"); break;
+		case 0x1C:
+			switch ((opcode >> 16) & 0xF) {
+			case 0x6: spdlog::error("vmzero {:x}", current_pc); break;
+			default:
+				spdlog::error("CPU: Unknown VFPU instruction opcode {:x} at {:x}", opcode, current_pc);
+				return false;
+			}
+			break;
+		}
+		break;
+	case 0x36: LVQ(opcode); break;
 	case 0x39: SWC1(opcode); break;
+	case 0x3A: SVS(opcode); break;
+	case 0x3E: SVQ(opcode); break;
+	case 0x3F: VFLUSH(opcode); break;
 	default:
 		spdlog::error("CPU: Unknown instruction opcode {:x} at {:x}", opcode, current_pc);
 		return false;
@@ -255,9 +394,7 @@ void CPU::BGTZL(uint32_t opcode) {
 	}
 }
 
-void CPU::CACHE(uint32_t opcode) {
-	spdlog::warn("CPU: CACHE instruction unimplemented");
-}
+void CPU::CACHE(uint32_t opcode) {}
 
 void CPU::CLO(uint32_t opcode) {
 	SetRegister(RD(opcode), std::countl_one(GetRegister(RS(opcode))));
@@ -852,4 +989,581 @@ void CPU::BranchFPU(uint32_t opcode) {
 		next_pc = state.pc + 4;
 	}
 }
-	
+
+void CPU::MFVC(uint32_t opcode) {
+	auto imm = (opcode >> 8) & 0x7F;
+	if (imm < 128) {
+		SetRegister(RT(opcode), std::bit_cast<uint32_t>(ReadVectorVFPU<float>(imm)));
+	} else {
+		SetRegister(RT(opcode), state.vfpu_ctrl[imm - 128]);
+	}
+}
+
+void CPU::LVL(uint32_t opcode) {
+	auto psp = PSP::GetInstance();
+
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode) & 0xFFFC);
+
+	int vt = ((opcode >> 16) & 0x1F) | ((opcode & 1) << 5);
+	auto vec = ReadVectorVFPU<glm::vec4>(vt);
+	int offset = (addr >> 2) & 3;
+
+	if (opcode & 2) {
+		for (int i = 0; i < (3 - offset) + 1; i++) {
+			vec[i] = std::bit_cast<float>(psp->ReadMemory32(addr + i * 4));
+		}
+	} else {
+		for (int i = 0; i < offset + 1; i++) {
+			vec[3 - i] = std::bit_cast<float>(psp->ReadMemory32(addr - i * 4));
+		}
+	}
+
+	WriteVectorVFPU(vt, vec);
+}
+
+void CPU::LVS(uint32_t opcode) {
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode) & 0xFFFC);
+	uint32_t value = PSP::GetInstance()->ReadMemory32(addr);
+
+	int vt = ((opcode >> 16) & 0x1F) | ((opcode & 1) << 5);
+	WriteVectorVFPU(vt, std::bit_cast<float>(value));
+}
+
+void CPU::LVQ(uint32_t opcode) {
+	auto psp = PSP::GetInstance();
+
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode) & 0xFFFC);
+#ifndef NDEBUG
+	if (addr % 4 != 0) {
+		spdlog::error("CPU: Exception or smth, LVQ");
+		return;
+	}
+#endif
+
+	int vt = ((opcode >> 16) & 0x1F) | ((opcode & 1) << 5);
+	glm::vec4 vec{};
+	for (int i = 0; i < 4; i++) {
+		vec[i] = std::bit_cast<float>(psp->ReadMemory32(addr + i * 4));
+	}
+	WriteVectorVFPU(vt, vec);
+}
+
+void CPU::SVQ(uint32_t opcode) {
+	auto psp = PSP::GetInstance();
+
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode) & 0xFFFC);
+#ifndef NDEBUG
+	if (addr % 4 != 0) {
+		spdlog::error("CPU: Exception or smth, SVQ");
+		return;
+	}
+#endif
+
+	int vt = ((opcode >> 16) & 0x1F) | ((opcode & 1) << 5);
+	auto vec = ReadVectorVFPU<glm::vec4>(vt);
+	for (int i = 0; i < 4; i++) {
+		psp->WriteMemory32(addr + i * 4, std::bit_cast<uint32_t>(vec[i]));
+	}
+}
+
+void CPU::SVS(uint32_t opcode) {
+	uint32_t addr = GetRegister(RS(opcode)) + static_cast<int16_t>(IMM16(opcode) & 0xFFFC);
+	int vt = ((opcode >> 16) & 0x1F) | ((opcode & 1) << 5);
+	uint32_t value = std::bit_cast<uint32_t>(ReadVectorVFPU<float>(vt));
+	PSP::GetInstance()->WriteMemory32(addr, value);
+}
+
+void CPU::VADD(uint32_t opcode) {
+	int size = ((opcode >> 7) & 1) + ((opcode >> 14) & 2) + 1;
+	switch (size) {
+	case 1: {
+		auto source = ReadVectorVFPU<float>(VS(opcode));
+		auto target = ReadVectorVFPU<float>(VT(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_TPREFIX], target);
+
+		auto dest = source + target;
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 2: {
+		auto source = ReadVectorVFPU<glm::vec2>(VS(opcode));
+		auto target = ReadVectorVFPU<glm::vec2>(VT(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_TPREFIX], target);
+
+		auto dest = source + target;
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 3: {
+		auto source = ReadVectorVFPU<glm::vec3>(VS(opcode));
+		auto target = ReadVectorVFPU<glm::vec3>(VT(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_TPREFIX], target);
+
+		auto dest = source + target;
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 4: {
+		auto source = ReadVectorVFPU<glm::vec4>(VS(opcode));
+		auto target = ReadVectorVFPU<glm::vec4>(VT(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_TPREFIX], target);
+
+		auto dest = source + target;
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	}
+
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0x00;
+}
+
+void CPU::VCOS(uint32_t opcode) {
+	int size = ((opcode >> 7) & 1) + ((opcode >> 14) & 2) + 1;
+	switch (size) {
+	case 1: {
+		auto source = ReadVectorVFPU<float>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+
+		auto dest = glm::cos(glm::half_pi<float>() * source);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 2: {
+		auto source = ReadVectorVFPU<glm::vec2>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+
+		auto dest = glm::cos(glm::half_pi<float>() * source);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 3: {
+		auto source = ReadVectorVFPU<glm::vec3>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+
+		auto dest = glm::cos(glm::half_pi<float>() * source);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 4: {
+		auto source = ReadVectorVFPU<glm::vec4>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+
+		auto dest = glm::cos(glm::half_pi<float>() * source);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	}
+
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0x00;
+}
+
+void CPU::VCST(uint32_t opcode) {
+	const float cst_constants[32] = {
+		0.f,
+		std::numeric_limits<float>::max(),
+		glm::root_two<float>(),
+		glm::sqrt(0.5f),
+		glm::two_over_root_pi<float>(),
+		glm::two_over_pi<float>(),
+		glm::one_over_pi<float>(),
+		glm::pi<float>() / 4,
+		glm::pi<float>() / 2,
+		glm::pi<float>(),
+		glm::e<float>(),
+		log2f(glm::e<float>()),
+		log10f(glm::e<float>()),
+		glm::ln_two<float>(),
+		glm::ln_ten<float>(),
+		glm::two_pi<float>(),
+		glm::pi<float>() / 6,
+		log10f(2.0f),
+		log10f(10.0f) / log10f(2.0f),
+		glm::sqrt(3.0f) / 2.0f,
+	};
+
+	float constant = cst_constants[(opcode >> 16) & 0x1F];
+	int size = ((opcode >> 7) & 1) + ((opcode >> 14) & 2) + 1;
+	switch (size) {
+	case 1: {
+		auto dest = constant;
+		ApplyPrefixD(constant);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 2: {
+		auto dest = glm::vec2(constant);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 3: {
+		auto dest = glm::vec3(constant);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 4: {
+		auto dest = glm::vec4(constant);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	}
+
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0x00;
+}
+
+void CPU::VDIV(uint32_t opcode) {
+	int size = ((opcode >> 7) & 1) + ((opcode >> 14) & 2) + 1;
+	switch (size) {
+	case 1: {
+		auto source = ReadVectorVFPU<float>(VS(opcode));
+		auto target = ReadVectorVFPU<float>(VT(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_TPREFIX], target);
+
+		auto dest = source / target;
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 2: {
+		auto source = ReadVectorVFPU<glm::vec2>(VS(opcode));
+		auto target = ReadVectorVFPU<glm::vec2>(VT(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_TPREFIX], target);
+
+		auto dest = source / target;
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 3: {
+		auto source = ReadVectorVFPU<glm::vec3>(VS(opcode));
+		auto target = ReadVectorVFPU<glm::vec3>(VT(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_TPREFIX], target);
+
+		auto dest = source / target;
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 4: {
+		auto source = ReadVectorVFPU<glm::vec4>(VS(opcode));
+		auto target = ReadVectorVFPU<glm::vec4>(VT(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_TPREFIX], target);
+
+		auto dest = source / target;
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	}
+
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0x00;
+}
+
+void CPU::VFIM(uint32_t opcode) {
+	float value = Float16ToFloat(IMM16(opcode));
+	ApplyPrefixD(value);
+	WriteVectorVFPU(VT(opcode), value);
+
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0x00;
+}
+
+void CPU::VFLUSH(uint32_t opcode) {}
+
+void CPU::VIIM(uint32_t opcode) {
+	float value = static_cast<int16_t>(IMM16(opcode));
+	ApplyPrefixD(value);
+	WriteVectorVFPU(VT(opcode), value);
+
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0x00;
+}
+
+void CPU::VMOV(uint32_t opcode) {
+	int size = ((opcode >> 7) & 1) + ((opcode >> 14) & 2) + 1;
+
+	switch (size) {
+	case 1: {
+		auto source = ReadVectorVFPU<float>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixD(source);
+		WriteVectorVFPU(VD(opcode), source);
+		break;
+	}
+	case 2: {
+		auto source = ReadVectorVFPU<glm::vec2>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixD(source);
+		WriteVectorVFPU(VD(opcode), source);
+		break;
+	}
+	case 3: {
+		auto source = ReadVectorVFPU<glm::vec3>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixD(source);
+		WriteVectorVFPU(VD(opcode), source);
+		break;
+	}
+	case 4: {
+		auto source = ReadVectorVFPU<glm::vec4>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixD(source);
+		WriteVectorVFPU(VD(opcode), source);
+		break;
+	}
+	}
+
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0x00;
+}
+
+void CPU::VMUL(uint32_t opcode) {
+	int size = ((opcode >> 7) & 1) + ((opcode >> 14) & 2) + 1;
+	switch (size) {
+	case 1: {
+		auto source = ReadVectorVFPU<float>(VS(opcode));
+		auto target = ReadVectorVFPU<float>(VT(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_TPREFIX], target);
+
+		auto dest = source * target;
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 2: {
+		auto source = ReadVectorVFPU<glm::vec2>(VS(opcode));
+		auto target = ReadVectorVFPU<glm::vec2>(VT(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_TPREFIX], target);
+
+		auto dest = source * target;
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 3: {
+		auto source = ReadVectorVFPU<glm::vec3>(VS(opcode));
+		auto target = ReadVectorVFPU<glm::vec3>(VT(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_TPREFIX], target);
+
+		auto dest = source * target;
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 4: {
+		auto source = ReadVectorVFPU<glm::vec4>(VS(opcode));
+		auto target = ReadVectorVFPU<glm::vec4>(VT(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_TPREFIX], target);
+
+		auto dest = source * target;
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	}
+
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0x00;
+}
+
+void CPU::VMZERO(uint32_t opcode) {}
+
+void CPU::VONE(uint32_t opcode) {
+	int size = ((opcode >> 7) & 1) + ((opcode >> 14) & 2) + 1;
+
+	uint32_t prefix = (state.vfpu_ctrl[VFPU_CTRL_SPREFIX] & ~0xFF) | 0xF055;
+	switch (size) {
+	case 1: {
+		float dest;
+		ApplyPrefixST(prefix, dest);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+
+	case 2: {
+		glm::vec2 dest;
+		ApplyPrefixST(prefix, dest);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 3: {
+		glm::vec3 dest;
+		ApplyPrefixST(prefix, dest);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 4: {
+		glm::vec4 dest;
+		ApplyPrefixST(prefix, dest);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	}
+
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0x00;
+}
+
+void CPU::VSCL(uint32_t opcode) {
+	int size = ((opcode >> 7) & 1) + ((opcode >> 14) & 2) + 1;
+
+	int tlane = (VT(opcode) >> 5) & 3;
+	glm::vec4 target{};
+	target[tlane] = ReadVectorVFPU<float>(VT(opcode));
+
+	uint32_t prefix = (state.vfpu_ctrl[VFPU_CTRL_TPREFIX] & ~0xFF) | (tlane << 0) | (tlane << 2) | (tlane << 4) | (tlane << 6);
+	ApplyPrefixST(prefix, target);
+
+	switch (size) {
+	case 4:
+		auto source = ReadVectorVFPU<glm::vec4>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+		glm::vec4 dest = source * target;
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	default:
+		spdlog::error("VSCL: missing size {}", size);
+	}
+
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0x00;
+}
+
+void CPU::VSIN(uint32_t opcode) {
+	int size = ((opcode >> 7) & 1) + ((opcode >> 14) & 2) + 1;
+	switch (size) {
+	case 1: {
+		auto source = ReadVectorVFPU<float>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+
+		auto dest = glm::sin(glm::half_pi<float>() * source);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 2: {
+		auto source = ReadVectorVFPU<glm::vec2>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+
+		auto dest = glm::sin(glm::half_pi<float>() * source);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 3: {
+		auto source = ReadVectorVFPU<glm::vec3>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+
+		auto dest = glm::sin(glm::half_pi<float>() * source);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 4: {
+		auto source = ReadVectorVFPU<glm::vec4>(VS(opcode));
+		ApplyPrefixST(state.vfpu_ctrl[VFPU_CTRL_SPREFIX], source);
+
+		auto dest = glm::sin(glm::half_pi<float>() * source);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	}
+
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0x00;
+}
+
+void CPU::VPFXT(uint32_t opcode) {
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = opcode & 0xFFFFF;
+}
+
+void CPU::VPFXS(uint32_t opcode) {
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = opcode & 0xFFFFF;
+}
+
+void CPU::VPFXD(uint32_t opcode) {
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = opcode & 0xFFF;
+}
+
+void CPU::VZERO(uint32_t opcode) {
+	int size = ((opcode >> 7) & 1) + ((opcode >> 14) & 2) + 1;
+
+	uint32_t prefix = (state.vfpu_ctrl[VFPU_CTRL_SPREFIX] & ~0xFF) | 0xF000;
+	switch (size) {
+	case 1: {
+		float dest;
+		ApplyPrefixST(prefix, dest);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+
+	case 2: {
+		glm::vec2 dest;
+		ApplyPrefixST(prefix, dest);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 3: {
+		glm::vec3 dest;
+		ApplyPrefixST(prefix, dest);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	case 4: {
+		glm::vec4 dest;
+		ApplyPrefixST(prefix, dest);
+		ApplyPrefixD(dest);
+		WriteVectorVFPU(VD(opcode), dest);
+		break;
+	}
+	}
+
+	state.vfpu_ctrl[VFPU_CTRL_TPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_SPREFIX] = 0xE4;
+	state.vfpu_ctrl[VFPU_CTRL_DPREFIX] = 0x00;
+}

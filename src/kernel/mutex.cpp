@@ -40,7 +40,7 @@ void Mutex::Unlock() {
 	}
 
 	if (attr & SCE_KERNEL_MA_THPRI) {
-		std::stable_sort(waiting_threads.begin(), waiting_threads.end(), [kernel](MutexThread value, MutexThread value2) {
+		std::stable_sort(waiting_threads.begin(), waiting_threads.end(), [=](MutexThread value, MutexThread value2) {
 			auto thread = kernel->GetKernelObject<Thread>(value.thid);
 			auto thread2 = kernel->GetKernelObject<Thread>(value2.thid);
 			return thread->GetPriority() < thread2->GetPriority();
@@ -103,10 +103,7 @@ void Mutex::Lock(int lock_count, bool allow_callbacks, uint32_t timeout_addr) {
 			timeout = 250;
 		}
 
-		auto func = [this, wait, timeout_addr, thid](uint64_t _) {
-			auto psp = PSP::GetInstance();
-			auto kernel = psp->GetKernel();
-
+		auto func = [=](uint64_t _) {
 			psp->WriteMemory32(timeout_addr, 0);
 			wait->ended = true;
 			if (kernel->WakeUpThread(thid)) {
@@ -115,9 +112,9 @@ void Mutex::Lock(int lock_count, bool allow_callbacks, uint32_t timeout_addr) {
 			}
 
 			waiting_threads.erase(std::remove_if(waiting_threads.begin(), waiting_threads.end(),
-				[timeout_addr, thid](MutexThread data) {
+			[=](MutexThread data) {
 					return data.thid == thid && data.timeout_addr == timeout_addr;
-				}));
+			}));
 		};
 		mutex_thread.timeout_event = psp->Schedule(US_TO_CYCLES(timeout), func);
 	}

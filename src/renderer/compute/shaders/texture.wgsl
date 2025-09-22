@@ -2,13 +2,52 @@ R"(
 @group(2) @binding(0) var texture: texture_2d<u32>;
 @group(3) @binding(0) var clut : texture_1d<u32>;
 
+fn fetchDXTColor(block_pos: vec2u, local_pos: vec2u, alpha: u32) -> vec4u {
+    let color1 = (textureLoad(texture, vec2u(block_pos.x + 5, block_pos.y), 0).r << 8) | textureLoad(texture, vec2u(block_pos.x + 4, block_pos.y), 0).r;
+    let color2 = (textureLoad(texture, vec2u(block_pos.x + 7, block_pos.y), 0).r << 8) | textureLoad(texture, vec2u(block_pos.x + 6, block_pos.y), 0).r;
+
+    let rgb1 = vec4u((color1 >> 8) & 0xF8, (color1 >> 3) & 0xFC, (color1 << 3) & 0xF8, alpha);
+    let rgb2 = vec4u((color2 >> 8) & 0xF8, (color2 >> 3) & 0xFC, (color2 << 3) & 0xF8, alpha);
+
+    let color_index = (textureLoad(texture, vec2u(block_pos.x + local_pos.y, block_pos.y), 0).r >> (local_pos.x * 2)) & 3;
+
+    if color_index == 0 {
+        return rgb1;
+    } else if color_index == 1 {
+        return rgb2;
+    } else if color1 > color2 {
+        if color_index == 2 {
+            return (rgb1 + rgb1 + rgb2) / 3;
+        }
+        return (rgb1 + rgb2 + rgb2) / 3;
+    } else if (color_index == 3) {
+        return vec4u(0);
+    }
+
+    return (rgb1 + rgb2) / 2;
+}
+
 fn fetchClut(index: u32) -> vec4u {
     let i = ((index >> renderData.clutShift) & renderData.clutMask) | (renderData.clutOffset & select(0x1FFu, 0xFFu, CLUT_FORMAT == 3));
-    switch CLUT_FORMAT {
-        case 3u: {
-            return textureLoad(clut, i, 0);
+    
+    if (CLUT_FORMAT == 3u) {
+        return textureLoad(clut, i, 0);
+    } else {
+        let real_index = i / 2u;
+        let value = textureLoad(clut, real_index, 0);
+        let color = select((value.r << 8) | value.g, (value.a << 8) | value.b, i % 2 == 0);
+    
+        switch CLUT_FORMAT {
+            case 2u: {
+                let a = extractBits(color, 12u, 4u);
+                let b = extractBits(color, 8u, 4u);
+                let g = extractBits(color, 4u, 4u);
+                let r = extractBits(color, 0u, 4u);
+
+                return vec4u((r << 4) | r, (g << 4) | g, (b << 4) | b, (a << 4) | a);
+            }
+            default: { return vec4u(255, 0, 0, 255); }
         }
-        default: { return vec4u(255, 0, 0, 255); }
     }
 }
 
@@ -28,15 +67,47 @@ fn fetchTexel(pos: vec2f, dims: vec2f) -> vec4u {
 
     var u_tex_pos = vec2u(tex_pos);
     switch TEXTURE_FORMAT {
+        case 0u: {
+            u_tex_pos.x *= 2;
+            let lower = textureLoad(texture, u_tex_pos, 0).r;
+            let higher = textureLoad(texture, vec2u(u_tex_pos.x + 1, u_tex_pos.y), 0).r;
+
+            let value = (higher << 8u) | lower;
+
+            let r = extractBits(value, 0u, 5u);
+            let g = extractBits(value, 5u, 6u);
+            let b = extractBits(value, 11u, 5u);
+
+            return vec4u(
+                (r << 3) | (r >> 2),
+                (g << 2) | (g >> 4),
+                (b << 3) | (b >> 2),
+                0xFF
+            );
+        }
+        case 1u: {
+            u_tex_pos.x *= 2;
+            let lower = textureLoad(texture, u_tex_pos, 0).r;
+            let higher = textureLoad(texture, vec2u(u_tex_pos.x + 1, u_tex_pos.y), 0).r;
+
+            let value = (higher << 8u) | lower;
+
+            let a = extractBits(value, 15u, 1u);
+            let b = extractBits(value, 10u, 5u);
+            let g = extractBits(value, 5u, 5u);
+            let r = extractBits(value, 0u, 5u);
+
+            return vec4u((r << 3u) | (r >> 2u), (g << 3u) | (g >> 2u), (b << 3u) | (b >> 2u), a * 255);
+        }
         case 2u: {
             u_tex_pos.x *= 2;
             let lower = textureLoad(texture, u_tex_pos, 0).r;
             let higher = textureLoad(texture, vec2u(u_tex_pos.x + 1, u_tex_pos.y), 0).r;
 
-            let a = extractBits(lower, 0u, 4u);
-            let b = extractBits(lower, 4u, 4u);
-            let g = extractBits(higher, 0u, 4u);
-            let r = extractBits(higher, 4u, 4u);
+            let a = extractBits(higher, 4u, 4u);
+            let b = extractBits(higher, 0u, 4u);
+            let g = extractBits(lower, 4u, 4u);
+            let r = extractBits(lower, 0u, 4u);
 
             return vec4u((r << 4) | r, (g << 4) | g, (b << 4) | b, (a << 4) | a);
         }
@@ -64,6 +135,70 @@ fn fetchTexel(pos: vec2f, dims: vec2f) -> vec4u {
             let b3 = textureLoad(texture, vec2u(u_tex_pos.x + 2, u_tex_pos.y), 0).r;
             let b4 = textureLoad(texture, vec2u(u_tex_pos.x + 3, u_tex_pos.y), 0).r;
             return fetchClut((b4 << 24) | (b3 << 16) | (b2 << 8) | b1);
+        }
+        case 8u: {
+            let local_pos = u_tex_pos % 4;
+            let block_pos = vec2u((u_tex_pos.x - local_pos.x) * 2, u_tex_pos.y / 4);
+            return fetchDXTColor(block_pos, local_pos, 0xFF);
+        }
+        case 9u: {
+            let local_pos = u_tex_pos % 4;
+            let block_pos = vec2u((u_tex_pos.x - local_pos.x) * 4, u_tex_pos.y / 4);
+            let color = fetchDXTColor(block_pos, local_pos, 0);
+
+            let alpha = ((textureLoad(texture, vec2u(block_pos.x + 9 + local_pos.y * 2, block_pos.y), 0).r << 8)
+                       | textureLoad(texture, vec2u(block_pos.x + 8 + local_pos.y * 2, block_pos.y), 0).r);
+            return vec4u(color.r, color.g, color.b, ((alpha >> (local_pos.x * 4)) & 0xF) << 4);
+        }
+        case 10u: {
+            let local_pos = u_tex_pos % 4;
+            let block_pos = vec2u((u_tex_pos.x - local_pos.x) * 4, u_tex_pos.y / 4);
+            let color = fetchDXTColor(block_pos, local_pos, 0);
+
+            let alpha_data2 = ((textureLoad(texture, vec2u(block_pos.x + 11, block_pos.y), 0).r << 24)
+                             | (textureLoad(texture, vec2u(block_pos.x + 10, block_pos.y), 0).r << 16)
+                             | (textureLoad(texture, vec2u(block_pos.x + 9, block_pos.y), 0).r << 8)
+                             | (textureLoad(texture, vec2u(block_pos.x + 8, block_pos.y), 0).r));
+
+            let alpha_data1 = ((textureLoad(texture, vec2u(block_pos.x + 13, block_pos.y), 0).r << 8)
+                             | (textureLoad(texture, vec2u(block_pos.x + 12, block_pos.y), 0).r));
+            
+
+            // WGSL doesn't support 64bit numbers, yikes
+            var alpha_index = 0u;
+            let alpha_index_bit = local_pos.y * 12 + local_pos.x * 3;
+            if ((alpha_index_bit + 3) <= 32) {
+                alpha_index = extractBits(alpha_data2, alpha_index_bit, 3u);
+            } else if (alpha_index_bit >= 32) {
+                alpha_index = extractBits(alpha_data1, alpha_index_bit - 32, 3u);
+            } else {
+                let lo_bits = 32u - alpha_index_bit;
+                let hi_bits = 3u - lo_bits;
+
+                let lo = extractBits(alpha_data2, alpha_index_bit, ((1u << lo_bits) - 1u));
+                let hi = extractBits(alpha_data1, 0u, ((1u << hi_bits) - 1u));
+                alpha_index = (hi << lo_bits) | lo;
+            }
+
+            let alpha1 = textureLoad(texture, vec2u(block_pos.x + 14, block_pos.y), 0).r;
+            let alpha2 = textureLoad(texture, vec2u(block_pos.x + 15, block_pos.y), 0).r;
+            if alpha_index == 0 {
+                return vec4u(color.r, color.g, color.b, alpha1);
+            } else if alpha_index == 1 {
+                return vec4u(color.r, color.g, color.b, alpha2);
+            } else if alpha1 > alpha2 {
+                let lerp_alpha1 = (alpha1 * ((7 - (alpha_index - 1)) << 8)) / 7;
+                let lerp_alpha2 = (alpha2 * ((alpha_index - 1) << 8)) / 7;
+                return vec4u(color.r, color.g, color.b, ((lerp_alpha1 + lerp_alpha2 + 31) >> 8) & 0xFF);
+            } else if alpha_index == 6 {
+                return color;
+            } else if alpha_index == 7 {
+                return vec4u(color.r, color.g, color.b, 0xFF);
+            }
+
+            let lerp_alpha1 = (alpha1 * ((5 - (alpha_index - 1)) << 8)) / 5;
+            let lerp_alpha2 = (alpha2 * ((alpha_index - 1) << 8)) / 5;
+            return vec4u(color.r, color.g, color.b, ((lerp_alpha1 + lerp_alpha2 + 31) >> 8) & 0xFF);
         }
         default: { return vec4u(255, 0, 0, 255); }
     }
@@ -122,6 +257,9 @@ fn filterTexture(uv: vec2f, color: vec4u) -> vec4u {
         case 3u: { dims.x /= 4; break; }
         case 4u: { dims.x *= 2; break; }
         case 7u: { dims.x /= 4; break; }
+        case 8u: { dims.x /= 2; dims.y *= 4; break; }
+        case 9u: { dims.x /= 4; dims.y *= 4; break; }
+        case 10u: { dims.x /= 4; dims.y *= 4; break; }
         default: { break; }
     }
 

@@ -40,6 +40,9 @@ public:
 	void Resize(int width, int height) {}
 	void RenderFramebufferChange() {}
 	void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format);
+	void DrawPoint(Vertex point) {}
+	void DrawLine(Vertex start, Vertex end) {}
+	void DrawLineStrip(std::vector<Vertex> vertices) {}
 	void DrawRectangle(Vertex start, Vertex end);
 	void DrawTriangle(Vertex v0, Vertex v1, Vertex v2);
 	void DrawTriangleStrip(std::vector<Vertex> vertices);

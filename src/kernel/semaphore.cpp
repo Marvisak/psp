@@ -31,7 +31,7 @@ void Semaphore::HandleQueue() {
 	auto kernel = psp->GetKernel();
 
 	if (attr & SCE_KERNEL_SA_THPRI) {
-		std::stable_sort(waiting_threads.begin(), waiting_threads.end(), [kernel](SemaphoreThread value, SemaphoreThread value2) {
+		std::stable_sort(waiting_threads.begin(), waiting_threads.end(), [=](SemaphoreThread value, SemaphoreThread value2) {
 			auto thread = kernel->GetKernelObject<Thread>(value.thid);
 			auto thread2 = kernel->GetKernelObject<Thread>(value2.thid);
 			return thread->GetPriority() < thread2->GetPriority();
@@ -67,8 +67,7 @@ void Semaphore::Signal(int count) {
 void Semaphore::Wait(int need_count, bool allow_callbacks, uint32_t timeout_addr) {
 	auto psp = PSP::GetInstance();
 	auto kernel = psp->GetKernel();
-	if (waiting_threads.empty() && count >= need_count) {
-		count -= need_count;
+	if (Poll(need_count)) {
 		return;
 	}
 
@@ -89,10 +88,7 @@ void Semaphore::Wait(int need_count, bool allow_callbacks, uint32_t timeout_addr
 			timeout = 245;
 		}
 
-		auto func = [this, wait, timeout_addr, thid](uint64_t _) {
-			auto psp = PSP::GetInstance();
-			auto kernel = psp->GetKernel();
-
+		auto func = [=](uint64_t _) {
 			psp->WriteMemory32(timeout_addr, 0);
 			wait->ended = true;
 			if (kernel->WakeUpThread(thid)) {
@@ -101,7 +97,7 @@ void Semaphore::Wait(int need_count, bool allow_callbacks, uint32_t timeout_addr
 			}
 
 			waiting_threads.erase(std::remove_if(waiting_threads.begin(), waiting_threads.end(), 
-			[timeout_addr, thid](SemaphoreThread data) {
+			[=](SemaphoreThread data) {
 				return data.thid == thid && data.timeout_addr == timeout_addr;
 			}));
 			HandleQueue();

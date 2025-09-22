@@ -23,3 +23,11 @@ constexpr const char rectangle_shader[] =
 constexpr const char triangle_shader[] =
 #include "triangle.wgsl"
 ;
+
+constexpr const char point_shader[] =
+#include "point.wgsl"
+;
+
+constexpr const char line_shader[] =
+#include "line.wgsl"
+;

@@ -22,91 +22,142 @@ uint16_t QUAD_INDICES[]{
 };
 
 ComputeRenderer::ComputeRenderer(bool nearest_filtering) : Renderer() {
-	instance = wgpu::createInstance();
+	wgpu::InstanceFeatureName instance_features[]{
+		wgpu::InstanceFeatureName::TimedWaitAny
+	};
 
-	surface = SDL_GetWGPUSurface(instance, window);
+	wgpu::InstanceDescriptor instance_descriptor{};
+	instance_descriptor.requiredFeatures = instance_features;
+	instance_descriptor.requiredFeatureCount = 1;
+
+	instance = wgpu::CreateInstance(&instance_descriptor);
+
+	surface = wgpu::Surface::Acquire(SDL_GetWGPUSurface(instance.Get(), window));
 
 	wgpu::RequestAdapterOptions adapter_options{};
 	adapter_options.compatibleSurface = surface;
 	adapter_options.powerPreference = wgpu::PowerPreference::HighPerformance;
-	adapter = instance.requestAdapter(adapter_options);
+	auto adapter_future = instance.RequestAdapter(&adapter_options, wgpu::CallbackMode::WaitAnyOnly, [&](wgpu::RequestAdapterStatus status, wgpu::Adapter a, wgpu::StringView message) {
+		if (status != wgpu::RequestAdapterStatus::Success) {
+			spdlog::error("ComputeRenderer: {}", std::string(message));
+		}
+		adapter = std::move(a);
+	});
+	instance.WaitAny(adapter_future, UINT64_MAX);
 
 	wgpu::AdapterInfo adapter_info{};
-	if (adapter.getInfo(&adapter_info) != wgpu::Status::Success) {
+	if (adapter.GetInfo(&adapter_info) != wgpu::Status::Success) {
 		spdlog::error("ComputeRenderer: error when accessing adapter info");
-	}
-	else {
-		spdlog::info("ComputeRenderer: Using {}", std::string(adapter_info.device.data, adapter_info.device.length));
+	} else {
+		spdlog::info("ComputeRenderer: Using {}", std::string(adapter_info.device));
 	}
 
-	WGPUFeatureName features[] = {
-		static_cast<WGPUFeatureName>(WGPUNativeFeature_TextureAdapterSpecificFormatFeatures)
+	std::vector<const char*> toggles{ "allow_unsafe_apis" };
+#ifndef NDEBUG
+	toggles.push_back("disable_symbol_renaming");
+	toggles.push_back("use_user_defined_labels_in_backend");
+	toggles.push_back("emit_hlsl_debug_symbols");
+#endif
+
+	wgpu::DawnTogglesDescriptor deviceTogglesDesc;
+	deviceTogglesDesc.enabledToggles = toggles.data();
+	deviceTogglesDesc.enabledToggleCount = toggles.size();
+
+	wgpu::FeatureName features[]{
+		wgpu::FeatureName::TextureFormatsTier2
 	};
 
-	wgpu::DeviceDescriptor device_desc{};
-	device_desc.requiredFeatures = features;
-	device_desc.requiredFeatureCount = 1;
-	device = adapter.requestDevice(device_desc);
+	wgpu::DeviceDescriptor device_descriptor{};
+	device_descriptor.label = "device";
+	device_descriptor.requiredFeatureCount = 1;
+	device_descriptor.requiredFeatures = features;
+	device_descriptor.nextInChain = &deviceTogglesDesc;
+	device_descriptor.SetUncapturedErrorCallback([](const wgpu::Device&, wgpu::ErrorType error_type, wgpu::StringView message) {
+		spdlog::error("ComputeRenderer: {}", std::string(message));
+		PSP::GetInstance()->ForceExit();
+	});
+	device_descriptor.SetDeviceLostCallback(wgpu::CallbackMode::AllowSpontaneous, [](const wgpu::Device&, wgpu::DeviceLostReason reason, wgpu::StringView message) {
+		if (reason != wgpu::DeviceLostReason::Destroyed) {
+			spdlog::error("ComputeRenderer: {}", std::string(message));
+			PSP::GetInstance()->ForceExit();
+		}
+	});
+
+	auto device_future = adapter.RequestDevice(&device_descriptor, wgpu::CallbackMode::WaitAnyOnly, [&](wgpu::RequestDeviceStatus status, wgpu::Device d, wgpu::StringView message) {
+		if (status != wgpu::RequestDeviceStatus::Success) {
+			spdlog::error("ComputeRenderer: {}", std::string(message));
+		}
+		device = std::move(d);
+	});
+	instance.WaitAny(device_future, UINT64_MAX);
 
 	wgpu::Limits limits;
-	if (device.getLimits(&limits) != wgpu::Status::Success) {
+	if (device.GetLimits(&limits) != wgpu::Status::Success) {
 		spdlog::error("ComputeRenderer: error when accessing adapter info");
 	} else {
 		buffer_alignment = limits.minUniformBufferOffsetAlignment;
 	}
 
-	queue = device.getQueue();
+	queue = device.GetQueue();
 
-	vertex_buffer = CreateBuffer(sizeof(QUAD_VERTICES), wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst);
-	index_buffer = CreateBuffer(sizeof(QUAD_INDICES), wgpu::BufferUsage::Index | wgpu::BufferUsage::CopyDst);
-	queue.writeBuffer(vertex_buffer, 0, QUAD_VERTICES, sizeof(QUAD_VERTICES));
-	queue.writeBuffer(index_buffer, 0, QUAD_INDICES, sizeof(QUAD_INDICES));
+	vertex_buffer = CreateBuffer("vertex_buffer", sizeof(QUAD_VERTICES), wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst);
+	index_buffer = CreateBuffer("index_buffer", sizeof(QUAD_INDICES), wgpu::BufferUsage::Index | wgpu::BufferUsage::CopyDst);
+	queue.WriteBuffer(vertex_buffer, 0, QUAD_VERTICES, sizeof(QUAD_VERTICES));
+	queue.WriteBuffer(index_buffer, 0, QUAD_INDICES, sizeof(QUAD_INDICES));
 
 	auto framebuffer_shader_module = CreateShaderModule(wgpu::StringView(framebuffer_shader));
 	SetupRenderPipeline(framebuffer_shader_module);
 	SetupRenderBindGroup(nearest_filtering);
 	SetupFramebufferConversion(framebuffer_shader_module);
-	framebuffer_shader_module.release();
 
 	wgpu::BindGroupLayoutEntry compute_texture_binding_layout{};
 	compute_texture_binding_layout.binding = 0;
 	compute_texture_binding_layout.visibility = wgpu::ShaderStage::Compute;
 	compute_texture_binding_layout.texture.sampleType = wgpu::TextureSampleType::Uint;
-	compute_texture_binding_layout.texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	compute_texture_binding_layout.texture.viewDimension = wgpu::TextureViewDimension::e2D;
 
 	wgpu::BindGroupLayoutDescriptor compute_texture_bind_group_layout_desc{};
 	compute_texture_bind_group_layout_desc.entryCount = 1;
 	compute_texture_bind_group_layout_desc.entries = &compute_texture_binding_layout;
-	compute_texture_bind_group_layout = device.createBindGroupLayout(compute_texture_bind_group_layout_desc);
+	compute_texture_bind_group_layout_desc.label = "compute_texture_bind_group_layout";
+	compute_texture_bind_group_layout = device.CreateBindGroupLayout(&compute_texture_bind_group_layout_desc);
 
 	wgpu::BindGroupLayoutEntry compute_clut_binding_layout{};
 	compute_clut_binding_layout.binding = 0;
 	compute_clut_binding_layout.visibility = wgpu::ShaderStage::Compute;
 	compute_clut_binding_layout.texture.sampleType = wgpu::TextureSampleType::Uint;
-	compute_clut_binding_layout.texture.viewDimension = wgpu::TextureViewDimension::_1D;
+	compute_clut_binding_layout.texture.viewDimension = wgpu::TextureViewDimension::e1D;
 
 	wgpu::BindGroupLayoutDescriptor compute_clut_bind_group_layout_desc{};
 	compute_clut_bind_group_layout_desc.entryCount = 1;
 	compute_clut_bind_group_layout_desc.entries = &compute_clut_binding_layout;
-	compute_clut_bind_group_layout = device.createBindGroupLayout(compute_clut_bind_group_layout_desc);
+	compute_clut_bind_group_layout_desc.label = "compute_clut_bind_group_layout";
+	compute_clut_bind_group_layout = device.CreateBindGroupLayout(&compute_clut_bind_group_layout_desc);
 
-	wgpu::BindGroupLayoutEntry compute_buffer_binding_layouts[2]{};
+	wgpu::BindGroupLayoutEntry compute_buffer_binding_layouts[3]{};
 	compute_buffer_binding_layouts[0].binding = 0;
 	compute_buffer_binding_layouts[0].visibility = wgpu::ShaderStage::Compute;
 	compute_buffer_binding_layouts[0].storageTexture.access = wgpu::StorageTextureAccess::ReadWrite;
 	compute_buffer_binding_layouts[0].storageTexture.format = wgpu::TextureFormat::RGBA8Uint;
-	compute_buffer_binding_layouts[0].storageTexture.viewDimension = wgpu::TextureViewDimension::_2D;
+	compute_buffer_binding_layouts[0].storageTexture.viewDimension = wgpu::TextureViewDimension::e2D;
 
 	compute_buffer_binding_layouts[1].binding = 1;
 	compute_buffer_binding_layouts[1].visibility = wgpu::ShaderStage::Compute;
 	compute_buffer_binding_layouts[1].storageTexture.access = wgpu::StorageTextureAccess::ReadWrite;
 	compute_buffer_binding_layouts[1].storageTexture.format = wgpu::TextureFormat::R16Uint;
-	compute_buffer_binding_layouts[1].storageTexture.viewDimension = wgpu::TextureViewDimension::_2D;
+	compute_buffer_binding_layouts[1].storageTexture.viewDimension = wgpu::TextureViewDimension::e2D;
+
+	compute_buffer_binding_layouts[2].binding = 2;
+	compute_buffer_binding_layouts[2].visibility = wgpu::ShaderStage::Compute;
+	compute_buffer_binding_layouts[2].storageTexture.access = wgpu::StorageTextureAccess::ReadWrite;
+	compute_buffer_binding_layouts[2].storageTexture.format = wgpu::TextureFormat::R16Uint;
+	compute_buffer_binding_layouts[2].storageTexture.viewDimension = wgpu::TextureViewDimension::e2D;
 
 	wgpu::BindGroupLayoutDescriptor compute_buffer_bind_group_layout_desc{};
-	compute_buffer_bind_group_layout_desc.entryCount = 2;
+	compute_buffer_bind_group_layout_desc.entryCount = 3;
 	compute_buffer_bind_group_layout_desc.entries = compute_buffer_binding_layouts;
-	compute_buffer_bind_group_layout = device.createBindGroupLayout(compute_buffer_bind_group_layout_desc);
+	compute_buffer_bind_group_layout_desc.label = "compute_buffer_bind_group_layout";
+	compute_buffer_bind_group_layout = device.CreateBindGroupLayout(&compute_buffer_bind_group_layout_desc);
 
 	wgpu::BindGroupLayoutEntry compute_render_data_binding_layouts[2]{};
 	compute_render_data_binding_layouts[0].binding = 0;
@@ -124,9 +175,10 @@ ComputeRenderer::ComputeRenderer(bool nearest_filtering) : Renderer() {
 	wgpu::BindGroupLayoutDescriptor compute_render_data_bind_group_layout_desc{};
 	compute_render_data_bind_group_layout_desc.entryCount = 2;
 	compute_render_data_bind_group_layout_desc.entries = compute_render_data_binding_layouts;
-	compute_render_data_bind_group_layout = device.createBindGroupLayout(compute_render_data_bind_group_layout_desc);
+	compute_render_data_bind_group_layout_desc.label = "compute_render_data_bind_group_layout";
+	compute_render_data_bind_group_layout = device.CreateBindGroupLayout(&compute_render_data_bind_group_layout_desc);
 
-	WGPUBindGroupLayout compute_bind_group_layouts[] = {
+	wgpu::BindGroupLayout compute_bind_group_layouts[] = {
 		compute_buffer_bind_group_layout,
 		compute_render_data_bind_group_layout,
 		compute_texture_bind_group_layout,
@@ -136,16 +188,18 @@ ComputeRenderer::ComputeRenderer(bool nearest_filtering) : Renderer() {
 	wgpu::PipelineLayoutDescriptor compute_texture_layout_desc{};
 	compute_texture_layout_desc.bindGroupLayoutCount = 4;
 	compute_texture_layout_desc.bindGroupLayouts = compute_bind_group_layouts;
-	compute_texture_layout = device.createPipelineLayout(compute_texture_layout_desc);
+	compute_texture_layout_desc.label = "compute_texture_layout";
+	compute_texture_layout = device.CreatePipelineLayout(&compute_texture_layout_desc);
 
 	wgpu::PipelineLayoutDescriptor compute_layout_desc{};
 	compute_layout_desc.bindGroupLayoutCount = 2;
 	compute_layout_desc.bindGroupLayouts = compute_bind_group_layouts;
-	compute_layout = device.createPipelineLayout(compute_layout_desc);
+	compute_texture_layout_desc.label = "compute_layout";
+	compute_layout = device.CreatePipelineLayout(&compute_layout_desc);
 
-	compute_render_data_buffer = CreateBuffer(sizeof(RenderData) * MAX_BUFFER_RENDER_DATA_COUNT, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform);
+	compute_render_data_buffer = CreateBuffer("compute_render_data_buffer", sizeof(RenderData) * MAX_BUFFER_RENDER_DATA_COUNT, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform);
 	compute_render_data = operator new(sizeof(RenderData) * MAX_BUFFER_RENDER_DATA_COUNT);
-	compute_vertex_buffer = CreateBuffer(sizeof(ComputeVertex) * MAX_BUFFER_VERTEX_COUNT, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform);
+	compute_vertex_buffer = CreateBuffer("compute_vertex_buffer", sizeof(ComputeVertex) * MAX_BUFFER_VERTEX_COUNT, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform);
 	compute_vertices = operator new(sizeof(ComputeVertex) * MAX_BUFFER_VERTEX_COUNT);
 
 	wgpu::BindGroupEntry compute_render_data_bindings[2]{};
@@ -161,76 +215,25 @@ ComputeRenderer::ComputeRenderer(bool nearest_filtering) : Renderer() {
 	compute_render_data_bind_group_desc.layout = compute_render_data_bind_group_layout;
 	compute_render_data_bind_group_desc.entryCount = 2;
 	compute_render_data_bind_group_desc.entries = compute_render_data_bindings;
-	compute_render_data_bind_group = device.createBindGroup(compute_render_data_bind_group_desc);
+	compute_render_data_bind_group = device.CreateBindGroup(&compute_render_data_bind_group_desc);
 
-	compute_transitional_buffer = CreateBuffer(512 * 512 * 4, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead);
-	compute_depth_transitional_buffer = CreateBuffer(512 * 512 * 2, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead);
+	compute_transitional_buffer = CreateBuffer("compute_transitional_buffer", 512 * 512 * 4, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead);
+	compute_depth_transitional_buffer = CreateBuffer("compute_depth_transitional_buffer", 512 * 512 * 2, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead);
 
 	Resize(BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT);
 
-	compute_encoder = device.createCommandEncoder();
-	compute_pass_encoder = compute_encoder.beginComputePass();
+	compute_encoder = device.CreateCommandEncoder();
+	compute_pass_encoder = compute_encoder.BeginComputePass();
 }
 
 ComputeRenderer::~ComputeRenderer() {
-	for (int i = SCE_DISPLAY_PIXEL_RGB565; i < SCE_DISPLAY_PIXEL_RGBA8888; i++) {
-		framebuffer_conversion_pipelines[i].release();
-	}
-
-	for (auto& [_, entry] : texture_cache) {
-		entry.bind_group.release();
-		entry.texture.destroy();
-	}
-
-	for (auto& [_, entry] : clut_cache) {
-		entry.bind_group.release();
-		entry.texture.destroy();
-	}
-
 	delete[] compute_vertices;
 	delete[] compute_render_data;
-	compute_encoder.release();
-	compute_clut_bind_group_layout.release();
-	compute_texture_bind_group_layout.release();
-	compute_transitional_buffer.release();
-	compute_depth_transitional_buffer.release();
-	compute_render_data_bind_group.release();
-	compute_render_data_bind_group_layout.release();
-	if (compute_buffer_bind_group) {
-		compute_buffer_bind_group.release();
-	}
-	compute_buffer_bind_group_layout.release();
-	compute_layout.release();
-	if (compute_texture) {
-		compute_texture.release();
-	}
-	if (compute_depth_texture) {
-		compute_depth_texture.release();
-	}
-	framebuffer_conversion_texture.release();
-	framebuffer_conversion_bind_group.release();
-	framebuffer_conversion_layout.release();
-	framebuffer_conversion_bind_group_layout.release();
-	frame_width_buffer.release();
-	framebuffer_texture.release();
-	screen_sampler.release();
-	render_bind_group.release();
-	render_pipeline.release();
-	render_layout.release();
-	render_bind_group_layout.release();
-	index_buffer.release();
-	vertex_buffer.release();
-	surface.unconfigure();
-	queue.release();
-	device.release();
-	adapter.release();
-	surface.release();
-	instance.release();
 }
 
 void ComputeRenderer::Frame() {
 	wgpu::SurfaceTexture surface_texture{};
-	surface.getCurrentTexture(&surface_texture);
+	surface.GetCurrentTexture(&surface_texture);
 
 	if (surface_texture.status != wgpu::SurfaceGetCurrentTextureStatus::SuccessOptimal && surface_texture.status != wgpu::SurfaceGetCurrentTextureStatus::SuccessSuboptimal) {
 		spdlog::error("ComputeRenderer: failed obtaining surface texture");
@@ -238,28 +241,34 @@ void ComputeRenderer::Frame() {
 	}
 
 	wgpu::TextureViewDescriptor view_descriptor{};
-	view_descriptor.format = wgpuTextureGetFormat(surface_texture.texture);
-	view_descriptor.dimension = wgpu::TextureViewDimension::_2D;
+	view_descriptor.format = surface_texture.texture.GetFormat();
+	view_descriptor.dimension = wgpu::TextureViewDimension::e2D;
 	view_descriptor.mipLevelCount = 1;
 	view_descriptor.arrayLayerCount = 1;
 	view_descriptor.aspect = wgpu::TextureAspect::All;
-	wgpu::TextureView target_view = wgpuTextureCreateView(surface_texture.texture, &view_descriptor);
+	view_descriptor.label = "view_descriptor";
+	wgpu::TextureView target_view = surface_texture.texture.CreateView(&view_descriptor);
 
-	auto encoder = device.createCommandEncoder();
+	auto encoder = device.CreateCommandEncoder();
 
 	wgpu::RenderPassColorAttachment render_pass_color_attachment{};
 	render_pass_color_attachment.view = target_view;
-	render_pass_color_attachment.loadOp = WGPULoadOp_Clear;
-	render_pass_color_attachment.storeOp = WGPUStoreOp_Store;
-	render_pass_color_attachment.clearValue = WGPUColor{ 0.0, 0.0, 0.0, 0.0 };
+	render_pass_color_attachment.loadOp = wgpu::LoadOp::Clear;
+	render_pass_color_attachment.storeOp = wgpu::StoreOp::Store;
+	render_pass_color_attachment.clearValue = wgpu::Color{ 0.0, 0.0, 0.0, 0.0 };
 
 	wgpu::RenderPassDescriptor render_pass_desc{};
 	render_pass_desc.colorAttachmentCount = 1;
 	render_pass_desc.colorAttachments = &render_pass_color_attachment;
+	render_pass_desc.label = "render_pass_desc";
 
 	FlushRender();
 	if (frame_buffer) {
 		void* framebuffer = PSP::GetInstance()->VirtualToPhysical(frame_buffer);
+
+		wgpu::Extent3D texture_size{};
+		texture_size.width = std::min<uint32_t>(BASE_WIDTH, frame_width);
+		texture_size.height = BASE_HEIGHT;
 
 		if (pixel_format == SCE_DISPLAY_PIXEL_RGBA8888) {
 			wgpu::TexelCopyTextureInfo destination{};
@@ -269,7 +278,7 @@ void ComputeRenderer::Frame() {
 			data_layout.bytesPerRow = frame_width * 4;
 			data_layout.rowsPerImage = BASE_HEIGHT;
 
-			queue.writeTexture(destination, framebuffer, frame_width * BASE_HEIGHT * 4, data_layout, {std::min<uint32_t>(BASE_WIDTH, frame_width), BASE_HEIGHT, 1});
+			queue.WriteTexture(&destination, framebuffer, frame_width * BASE_HEIGHT * 4, &data_layout, &texture_size);
 		} else {
 			wgpu::TexelCopyTextureInfo destination{};
 			destination.texture = framebuffer_conversion_texture;
@@ -278,38 +287,37 @@ void ComputeRenderer::Frame() {
 			data_layout.bytesPerRow = frame_width * 2;
 			data_layout.rowsPerImage = BASE_HEIGHT;
 
-			queue.writeTexture(destination, framebuffer, frame_width * BASE_HEIGHT * 2, data_layout, { std::min<uint32_t>(BASE_WIDTH, frame_width), BASE_HEIGHT, 1 });
+			queue.WriteTexture(&destination, framebuffer, frame_width * BASE_HEIGHT * 2, &data_layout, &texture_size);
 
-			auto compute_pass = encoder.beginComputePass();
+			auto compute_pass = encoder.BeginComputePass();
 
-			compute_pass.setPipeline(framebuffer_conversion_pipelines[pixel_format]);
-			compute_pass.setBindGroup(0, framebuffer_conversion_bind_group, 0, nullptr);
+			compute_pass.SetPipeline(framebuffer_conversion_pipelines[pixel_format]);
+			compute_pass.SetBindGroup(0, framebuffer_conversion_bind_group, 0, nullptr);
 
 			uint32_t workgroup_count_x = (BASE_WIDTH + 7) / 8;
 			uint32_t workgroup_count_y = (BASE_HEIGHT + 7) / 8;
 
-			compute_pass.dispatchWorkgroups(workgroup_count_x, workgroup_count_y, 1);
+			compute_pass.DispatchWorkgroups(workgroup_count_x, workgroup_count_y, 1);
 
-			compute_pass.end();
-			compute_pass.release();
+			compute_pass.End();
 		}
 	}
 
-	auto render_pass = encoder.beginRenderPass(render_pass_desc);
+	auto render_pass = encoder.BeginRenderPass(&render_pass_desc);
 	if (frame_buffer) {
-		render_pass.setViewport(viewport_x, viewport_y, viewport_width, viewport_height, 0.0f, 0.0f);
-		render_pass.setPipeline(render_pipeline);
-		render_pass.setVertexBuffer(0, vertex_buffer, 0, sizeof(QUAD_VERTICES));
-		render_pass.setIndexBuffer(index_buffer, wgpu::IndexFormat::Uint16, 0, sizeof(QUAD_INDICES));
-		render_pass.setBindGroup(0, render_bind_group, 0, nullptr);
-		render_pass.drawIndexed(6, 1, 0, 0, 0);
+		render_pass.SetViewport(viewport_x, viewport_y, viewport_width, viewport_height, 0.0f, 0.0f);
+		render_pass.SetPipeline(render_pipeline);
+		render_pass.SetVertexBuffer(0, vertex_buffer, 0, sizeof(QUAD_VERTICES));
+		render_pass.SetIndexBuffer(index_buffer, wgpu::IndexFormat::Uint16, 0, sizeof(QUAD_INDICES));
+		render_pass.SetBindGroup(0, render_bind_group, 0, nullptr);
+		render_pass.DrawIndexed(6, 1, 0, 0, 0);
 	}
 
-	render_pass.end();
+	render_pass.End();
 
-	auto command = encoder.finish();
-	queue.submit(command);
-	surface.present();
+	auto command = encoder.Finish();
+	queue.Submit(1, &command);
+	surface.Present();
 
 	for (auto it = texture_cache.begin(); it != texture_cache.end();) {
 		it->second.unused_frames++;
@@ -320,12 +328,6 @@ void ComputeRenderer::Frame() {
 			it++;
 		}
 	}
-
-	render_pass.release();
-	encoder.release();
-	command.release();
-	target_view.release();
-	wgpuTextureRelease(surface_texture.texture);
 
 	Renderer::Frame();
 }
@@ -338,7 +340,7 @@ void ComputeRenderer::Resize(int width, int height) {
 	surface_config.device = device;
 	surface_config.format = wgpu::TextureFormat::RGBA8Unorm;
 	surface_config.presentMode = wgpu::PresentMode::Immediate;
-	surface.configure(surface_config);
+	surface.Configure(&surface_config);
 
 	float scaleX = static_cast<float>(width) / BASE_WIDTH;
 	float scaleY = static_cast<float>(height) / BASE_HEIGHT;
@@ -361,13 +363,107 @@ void ComputeRenderer::SetFrameBuffer(uint32_t frame_buffer, int frame_width, int
 		this->frame_width = frame_width;
 
 		float buffer_data = frame_width;
-		queue.writeBuffer(frame_width_buffer, 0, &buffer_data, sizeof(float));
+		queue.WriteBuffer(frame_width_buffer, 0, &buffer_data, sizeof(float));
 	}
 }
+
+void ComputeRenderer::DrawPoint(Vertex point) {
+	if (!compute_texture_valid) {
+		UpdateRenderTexture();
+	}
+
+	// Vertices are invalid, probably because it's clipped
+	if (std::isnan(point.pos.w)) {
+		return;
+	}
+
+	point.pos = glm::round(point.pos);
+
+	auto filter = GetFilter(0, 0);
+	auto pipeline = GetShader(SCEGU_PRIM_POINTS, filter);
+
+	auto vertex_offset = PushVertices({ point });
+	auto render_data_offset = PushRenderData();
+	uint32_t offsets[] = { vertex_offset, render_data_offset };
+
+	compute_pass_encoder.SetPipeline(pipeline);
+	compute_pass_encoder.SetBindGroup(0, compute_buffer_bind_group, 0, nullptr);
+	compute_pass_encoder.SetBindGroup(1, compute_render_data_bind_group, 2, offsets);
+
+	if (!clear_mode && textures_enabled) {
+		auto texture_bind_group = GetTexture();
+		compute_pass_encoder.SetBindGroup(2, texture_bind_group, 0, nullptr);
+		compute_pass_encoder.SetBindGroup(3, clut_cache[current_clut].bind_group, 0, nullptr);
+	}
+
+	compute_pass_encoder.DispatchWorkgroups(1, 1, 1);
+
+	queue_empty = false;
+}
+
+void ComputeRenderer::DrawLine(Vertex start, Vertex end) {
+	if (!compute_texture_valid) {
+		UpdateRenderTexture();
+	}
+
+	// Vertices are invalid, probably because it's clipped
+	if (std::isnan(start.pos.w) || std::isnan(end.pos.w)) {
+		return;
+	}
+
+	start.pos = glm::round(start.pos);
+	end.pos = glm::round(end.pos);
+
+	glm::vec2 size = end.pos - start.pos;
+	if (size.x == 0 && size.y == 0) {
+		return;
+	}
+
+	if (start.pos.x > end.pos.x || (start.pos.x == end.pos.x && start.pos.y > end.pos.y)) {
+		std::swap(start, end);
+		size = end.pos - start.pos;
+	}
+
+	auto filter = GetFilter((end.uv.x - start.uv.x) / size.x, (end.uv.y - start.uv.y) / size.y);
+	auto pipeline = GetShader(SCEGU_PRIM_LINES, filter);
+
+	auto vertex_offset = PushVertices({ start, end });
+	auto render_data_offset = PushRenderData();
+	uint32_t offsets[] = { vertex_offset, render_data_offset };
+
+	compute_pass_encoder.SetPipeline(pipeline);
+	compute_pass_encoder.SetBindGroup(0, compute_buffer_bind_group, 0, nullptr);
+	compute_pass_encoder.SetBindGroup(1, compute_render_data_bind_group, 2, offsets);
+
+	if (!clear_mode && textures_enabled) {
+		auto texture_bind_group = GetTexture();
+		compute_pass_encoder.SetBindGroup(2, texture_bind_group, 0, nullptr);
+		compute_pass_encoder.SetBindGroup(3, clut_cache[current_clut].bind_group, 0, nullptr);
+	}
+
+	int len = ceil(glm::length(size));
+	uint32_t workgroup_count_x = (len + 7) / 8;
+
+	compute_pass_encoder.DispatchWorkgroups(workgroup_count_x, 1, 1);
+
+	queue_empty = false;
+}
+
+void ComputeRenderer::DrawLineStrip(std::vector<Vertex> vertices) {
+	for (int i = 0; i < vertices.size() - 1; i++) {
+		DrawLine(vertices[i], vertices[i + 1]);
+	}
+}
+
 
 void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 	if (!compute_texture_valid) {
 		UpdateRenderTexture();
+	}
+
+	// Vertices are invalid, probably because it's clipped
+	if (std::isnan(start.pos.w) || std::isnan(end.pos.w)) {
+		return;
 	}
 
 	start.pos = glm::round(start.pos);
@@ -397,20 +493,20 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 	auto render_data_offset = PushRenderData();
 	uint32_t offsets[] = { vertex_offset, render_data_offset };
 
-	compute_pass_encoder.setPipeline(pipeline);
-	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
-	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 2, offsets);
+	compute_pass_encoder.SetPipeline(pipeline);
+	compute_pass_encoder.SetBindGroup(0, compute_buffer_bind_group, 0, nullptr);
+	compute_pass_encoder.SetBindGroup(1, compute_render_data_bind_group, 2, offsets);
 
 	if (!clear_mode && textures_enabled) {
 		auto texture_bind_group = GetTexture();
-		compute_pass_encoder.setBindGroup(2, texture_bind_group, 0, nullptr);
-		compute_pass_encoder.setBindGroup(3, clut_cache[current_clut].bind_group, 0, nullptr);
+		compute_pass_encoder.SetBindGroup(2, texture_bind_group, 0, nullptr);
+		compute_pass_encoder.SetBindGroup(3, clut_cache[current_clut].bind_group, 0, nullptr);
 	}
 
 	uint32_t workgroup_count_x = (width + 7) / 8;
 	uint32_t workgroup_count_y = (height + 7) / 8;
 
-	compute_pass_encoder.dispatchWorkgroups(workgroup_count_x, workgroup_count_y, 1);
+	compute_pass_encoder.DispatchWorkgroups(workgroup_count_x, workgroup_count_y, 1);
 
 	queue_empty = false;
 }
@@ -418,6 +514,11 @@ void ComputeRenderer::DrawRectangle(Vertex start, Vertex end) {
 void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	if (!compute_texture_valid) {
 		UpdateRenderTexture();
+	}
+
+	// Vertices are invalid, probably because it's clipped
+	if (std::isnan(v0.pos.w) || std::isnan(v1.pos.w) || std::isnan(v2.pos.w)) {
+		return;
 	}
 
 	v0.pos = glm::vec4(glm::round(glm::vec3(v0.pos)), v0.pos.w);
@@ -463,27 +564,31 @@ void ComputeRenderer::DrawTriangle(Vertex v0, Vertex v1, Vertex v2) {
 	auto render_data_offset = PushRenderData();
 	uint32_t offsets[] = { vertex_offset, render_data_offset };
 
-	compute_pass_encoder.setPipeline(pipeline);
-	compute_pass_encoder.setBindGroup(0, compute_buffer_bind_group, 0, nullptr);
-	compute_pass_encoder.setBindGroup(1, compute_render_data_bind_group, 2, offsets);
+	compute_pass_encoder.SetPipeline(pipeline);
+	compute_pass_encoder.SetBindGroup(0, compute_buffer_bind_group, 0, nullptr);
+	compute_pass_encoder.SetBindGroup(1, compute_render_data_bind_group, 2, offsets);
 
 	if (!clear_mode && textures_enabled) {
 		auto texture_bind_group = GetTexture();
-		compute_pass_encoder.setBindGroup(2, texture_bind_group, 0, nullptr);
-		compute_pass_encoder.setBindGroup(3, clut_cache[current_clut].bind_group, 0, nullptr);
+		compute_pass_encoder.SetBindGroup(2, texture_bind_group, 0, nullptr);
+		compute_pass_encoder.SetBindGroup(3, clut_cache[current_clut].bind_group, 0, nullptr);
 	}
 
 	uint32_t workgroup_count_x = (max_x - min_x + 7) / 8;
 	uint32_t workgroup_count_y = (max_y - min_y + 7) / 8;
 
-	compute_pass_encoder.dispatchWorkgroups(workgroup_count_x, workgroup_count_y, 1);
+	compute_pass_encoder.DispatchWorkgroups(workgroup_count_x, workgroup_count_y, 1);
 
 	queue_empty = false;
 }
 
 void ComputeRenderer::DrawTriangleStrip(std::vector<Vertex> vertices) {
-	for (int i = 2; i < vertices.size(); i++) {
-		DrawTriangle(vertices[i - 2], vertices[i - 1], vertices[i]);
+	for (int i = 0; i < vertices.size() - 2; i++) {
+		if (i % 2 == 0) {
+			DrawTriangle(vertices[i], vertices[i + 1], vertices[i + 2]);
+		} else {
+			DrawTriangle(vertices[i + 1], vertices[i], vertices[i + 2]);
+		}
 	}
 }
 
@@ -527,13 +632,13 @@ void ComputeRenderer::CLoad(uint32_t opcode) {
 	ClutCacheEntry cache{};
 
 	wgpu::TextureDescriptor texture_desc{};
-	texture_desc.dimension = wgpu::TextureDimension::_1D;
+	texture_desc.dimension = wgpu::TextureDimension::e1D;
 	texture_desc.format = wgpu::TextureFormat::RGBA8Uint;
 	texture_desc.size = { 256, 1, 1 };
 	texture_desc.sampleCount = 1;
 	texture_desc.mipLevelCount = 1;
 	texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
-	cache.texture = device.createTexture(texture_desc);
+	cache.texture = device.CreateTexture(&texture_desc);
 
 	wgpu::TexelCopyTextureInfo destination{};
 	destination.texture = cache.texture;
@@ -542,37 +647,41 @@ void ComputeRenderer::CLoad(uint32_t opcode) {
 	data_layout.bytesPerRow = 1024;
 	data_layout.rowsPerImage = 1;
 
-	queue.writeTexture(destination, clut.data(), 1024, data_layout, { 256, 1, 1 });
+	wgpu::Extent3D size{};
+	size.width = 256;
+
+	queue.WriteTexture(&destination, clut.data(), 1024, &data_layout, &size);
 
 	wgpu::BindGroupEntry texture_binding{};
 	texture_binding.binding = 0;
-	texture_binding.textureView = cache.texture.createView();
+	texture_binding.textureView = cache.texture.CreateView();
 
 	wgpu::BindGroupDescriptor texture_bind_group_desc{};
 	texture_bind_group_desc.layout = compute_clut_bind_group_layout;
 	texture_bind_group_desc.entryCount = 1;
 	texture_bind_group_desc.entries = &texture_binding;
-	cache.bind_group = device.createBindGroup(texture_bind_group_desc);
+	cache.bind_group = device.CreateBindGroup(&texture_bind_group_desc);
 
 	clut_cache[checksum] = cache;
 }
 
 wgpu::ShaderModule ComputeRenderer::CreateShaderModule(wgpu::StringView code) {
 	wgpu::ShaderSourceWGSL shader_source{};
-	shader_source.chain.sType = wgpu::SType::ShaderSourceWGSL;
+	shader_source.sType = wgpu::SType::ShaderSourceWGSL;
 	shader_source.code = code;
 
 	wgpu::ShaderModuleDescriptor shader_desc{};
 	shader_desc.nextInChain = reinterpret_cast<wgpu::ChainedStruct*>(&shader_source);
 
-	return device.createShaderModule(shader_desc);
+	return device.CreateShaderModule(&shader_desc);
 }
 
-wgpu::Buffer ComputeRenderer::CreateBuffer(uint64_t size, wgpu::BufferUsage usage) {
+wgpu::Buffer ComputeRenderer::CreateBuffer(wgpu::StringView label, uint64_t size, wgpu::BufferUsage usage) {
 	wgpu::BufferDescriptor buffer_desc{};
 	buffer_desc.size = size;
 	buffer_desc.usage = usage;
-	return device.createBuffer(buffer_desc);
+	buffer_desc.label = label;
+	return device.CreateBuffer(&buffer_desc);
 }
 
 void ComputeRenderer::SetupRenderPipeline(wgpu::ShaderModule shader_module) {
@@ -613,7 +722,7 @@ void ComputeRenderer::SetupRenderPipeline(wgpu::ShaderModule shader_module) {
 	render_binding_layouts[0].binding = 0;
 	render_binding_layouts[0].visibility = wgpu::ShaderStage::Fragment;
 	render_binding_layouts[0].texture.sampleType = wgpu::TextureSampleType::Float;
-	render_binding_layouts[0].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	render_binding_layouts[0].texture.viewDimension = wgpu::TextureViewDimension::e2D;
 
 	render_binding_layouts[1].binding = 1;
 	render_binding_layouts[1].visibility = wgpu::ShaderStage::Fragment;
@@ -627,12 +736,12 @@ void ComputeRenderer::SetupRenderPipeline(wgpu::ShaderModule shader_module) {
 	wgpu::BindGroupLayoutDescriptor render_bind_group_layout_desc{};
 	render_bind_group_layout_desc.entryCount = 3;
 	render_bind_group_layout_desc.entries = render_binding_layouts;
-	render_bind_group_layout = device.createBindGroupLayout(render_bind_group_layout_desc);
+	render_bind_group_layout = device.CreateBindGroupLayout(&render_bind_group_layout_desc);
 
 	wgpu::PipelineLayoutDescriptor render_layout_desc{};
 	render_layout_desc.bindGroupLayoutCount = 1;
-	render_layout_desc.bindGroupLayouts = reinterpret_cast<WGPUBindGroupLayout*>(&render_bind_group_layout);
-	render_layout = device.createPipelineLayout(render_layout_desc);
+	render_layout_desc.bindGroupLayouts = &render_bind_group_layout;
+	render_layout = device.CreatePipelineLayout(&render_layout_desc);
 
 	wgpu::RenderPipelineDescriptor pipeline_desc{};
 	pipeline_desc.vertex = vertex_state;
@@ -644,18 +753,18 @@ void ComputeRenderer::SetupRenderPipeline(wgpu::ShaderModule shader_module) {
 	pipeline_desc.multisample.mask = 0xFFFFFFFF;
 	pipeline_desc.layout = render_layout;
 
-	render_pipeline = device.createRenderPipeline(pipeline_desc);
+	render_pipeline = device.CreateRenderPipeline(&pipeline_desc);
 }
 
 void ComputeRenderer::SetupRenderBindGroup(bool nearest_filtering) {
 	wgpu::TextureDescriptor texture_desc{};
-	texture_desc.dimension = wgpu::TextureDimension::_2D;
+	texture_desc.dimension = wgpu::TextureDimension::e2D;
 	texture_desc.format = wgpu::TextureFormat::RGBA8Unorm;
 	texture_desc.size = { BASE_WIDTH, BASE_HEIGHT, 1 };
 	texture_desc.sampleCount = 1;
 	texture_desc.mipLevelCount = 1;
 	texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::StorageBinding;
-	framebuffer_texture = device.createTexture(texture_desc);
+	framebuffer_texture = device.CreateTexture(&texture_desc);
 
 	wgpu::SamplerDescriptor sampler_desc{};
 	sampler_desc.addressModeU = wgpu::AddressMode::Repeat;
@@ -663,13 +772,13 @@ void ComputeRenderer::SetupRenderBindGroup(bool nearest_filtering) {
 	sampler_desc.magFilter = nearest_filtering ? wgpu::FilterMode::Nearest : wgpu::FilterMode::Linear;
 	sampler_desc.minFilter = nearest_filtering ? wgpu::FilterMode::Nearest : wgpu::FilterMode::Linear;
 	sampler_desc.maxAnisotropy = 1;
-	screen_sampler = device.createSampler(sampler_desc);
+	screen_sampler = device.CreateSampler(&sampler_desc);
 
-	frame_width_buffer = CreateBuffer(sizeof(float), wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform);
+	frame_width_buffer = CreateBuffer("frame_width_buffer", sizeof(float), wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform);
 
 	wgpu::BindGroupEntry render_bindings[3]{};
 	render_bindings[0].binding = 0;
-	render_bindings[0].textureView = framebuffer_texture.createView();
+	render_bindings[0].textureView = framebuffer_texture.CreateView();
 
 	render_bindings[1].binding = 1;
 	render_bindings[1].sampler = screen_sampler;
@@ -682,7 +791,7 @@ void ComputeRenderer::SetupRenderBindGroup(bool nearest_filtering) {
 	bind_group_desc.layout = render_bind_group_layout;
 	bind_group_desc.entryCount = 3;
 	bind_group_desc.entries = render_bindings;
-	render_bind_group = device.createBindGroup(bind_group_desc);
+	render_bind_group = device.CreateBindGroup(&bind_group_desc);
 }
 
 void ComputeRenderer::SetupFramebufferConversion(wgpu::ShaderModule shader_module) {
@@ -690,18 +799,18 @@ void ComputeRenderer::SetupFramebufferConversion(wgpu::ShaderModule shader_modul
 	framebuffer_conversion_binding_layouts[0].binding = 0;
 	framebuffer_conversion_binding_layouts[0].visibility = wgpu::ShaderStage::Compute;
 	framebuffer_conversion_binding_layouts[0].texture.sampleType = wgpu::TextureSampleType::Uint;
-	framebuffer_conversion_binding_layouts[0].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	framebuffer_conversion_binding_layouts[0].texture.viewDimension = wgpu::TextureViewDimension::e2D;
 
 	framebuffer_conversion_binding_layouts[1].binding = 1;
 	framebuffer_conversion_binding_layouts[1].visibility = wgpu::ShaderStage::Compute;
 	framebuffer_conversion_binding_layouts[1].storageTexture.access = wgpu::StorageTextureAccess::WriteOnly;
 	framebuffer_conversion_binding_layouts[1].storageTexture.format = wgpu::TextureFormat::RGBA8Unorm;
-	framebuffer_conversion_binding_layouts[1].storageTexture.viewDimension = wgpu::TextureViewDimension::_2D;
+	framebuffer_conversion_binding_layouts[1].storageTexture.viewDimension = wgpu::TextureViewDimension::e2D;
 
 	wgpu::BindGroupLayoutDescriptor framebuffer_conversion_bind_group_layout_desc{};
 	framebuffer_conversion_bind_group_layout_desc.entryCount = 2;
 	framebuffer_conversion_bind_group_layout_desc.entries = framebuffer_conversion_binding_layouts;
-	framebuffer_conversion_bind_group_layout = device.createBindGroupLayout(framebuffer_conversion_bind_group_layout_desc);
+	framebuffer_conversion_bind_group_layout = device.CreateBindGroupLayout(&framebuffer_conversion_bind_group_layout_desc);
 
 	const char* compute_entrypoints[] = {
 		"rgb565",
@@ -711,38 +820,38 @@ void ComputeRenderer::SetupFramebufferConversion(wgpu::ShaderModule shader_modul
 
 	wgpu::PipelineLayoutDescriptor framebuffer_conversion_layout_desc{};
 	framebuffer_conversion_layout_desc.bindGroupLayoutCount = 1;
-	framebuffer_conversion_layout_desc.bindGroupLayouts = reinterpret_cast<WGPUBindGroupLayout*>(&framebuffer_conversion_bind_group_layout);
-	framebuffer_conversion_layout = device.createPipelineLayout(framebuffer_conversion_layout_desc);
+	framebuffer_conversion_layout_desc.bindGroupLayouts = &framebuffer_conversion_bind_group_layout;
+	framebuffer_conversion_layout = device.CreatePipelineLayout(&framebuffer_conversion_layout_desc);
 
 	for (int i = SCE_DISPLAY_PIXEL_RGB565; i < SCE_DISPLAY_PIXEL_RGBA8888; i++) {
 		wgpu::ComputePipelineDescriptor compute_pipeline_desc{};
 		compute_pipeline_desc.compute.entryPoint = wgpu::StringView(compute_entrypoints[i]);
 		compute_pipeline_desc.compute.module = shader_module;
 		compute_pipeline_desc.layout = framebuffer_conversion_layout;
-		framebuffer_conversion_pipelines[i] = device.createComputePipeline(compute_pipeline_desc);
+		framebuffer_conversion_pipelines[i] = device.CreateComputePipeline(&compute_pipeline_desc);
 	}
 
 	wgpu::TextureDescriptor framebuffer_conversion_texture_desc{};
-	framebuffer_conversion_texture_desc.dimension = wgpu::TextureDimension::_2D;
+	framebuffer_conversion_texture_desc.dimension = wgpu::TextureDimension::e2D;
 	framebuffer_conversion_texture_desc.format = wgpu::TextureFormat::R16Uint;
 	framebuffer_conversion_texture_desc.size = { BASE_WIDTH, BASE_HEIGHT, 1 };
 	framebuffer_conversion_texture_desc.sampleCount = 1;
 	framebuffer_conversion_texture_desc.mipLevelCount = 1;
 	framebuffer_conversion_texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
-	framebuffer_conversion_texture = device.createTexture(framebuffer_conversion_texture_desc);
+	framebuffer_conversion_texture = device.CreateTexture(&framebuffer_conversion_texture_desc);
 
 	wgpu::BindGroupEntry framebuffer_conversion_bindings[2]{};
 	framebuffer_conversion_bindings[0].binding = 0;
-	framebuffer_conversion_bindings[0].textureView = framebuffer_conversion_texture.createView();
+	framebuffer_conversion_bindings[0].textureView = framebuffer_conversion_texture.CreateView();
 
 	framebuffer_conversion_bindings[1].binding = 1;
-	framebuffer_conversion_bindings[1].textureView = framebuffer_texture.createView();
+	framebuffer_conversion_bindings[1].textureView = framebuffer_texture.CreateView();
 
 	wgpu::BindGroupDescriptor framebuffer_conversion_bind_group_desc{};
 	framebuffer_conversion_bind_group_desc.layout = framebuffer_conversion_bind_group_layout;
 	framebuffer_conversion_bind_group_desc.entryCount = 2;
 	framebuffer_conversion_bind_group_desc.entries = framebuffer_conversion_bindings;
-	framebuffer_conversion_bind_group = device.createBindGroup(framebuffer_conversion_bind_group_desc);
+	framebuffer_conversion_bind_group = device.CreateBindGroup(&framebuffer_conversion_bind_group_desc);
 }
 
 wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t filter) {
@@ -792,24 +901,23 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 		return compute_pipelines[id.full];
 	}
 
-	WGPUConstantEntry constants[] {
-		{ .key = wgpu::StringView("FRAMEBUFFER_FORMAT"), .value = static_cast<double>(fpf) },
-		{ .key = wgpu::StringView("TEXTURE_FORMAT"), .value = id.textures_enabled ? texture_format : 100.0f },
-		{ .key = wgpu::StringView("BILINEAR"), .value = id.bilinear ? 1.0f : 0.0f },
-		{ .key = wgpu::StringView("U_CLAMP"), .value = id.u_clamp ? 1.0f : 0.0f },
-		{ .key = wgpu::StringView("V_CLAMP"), .value = id.v_clamp ? 1.0f : 0.0f },
-		{ .key = wgpu::StringView("CLUT_FORMAT"), .value = static_cast<double>(clut_format) },
-		{ .key = wgpu::StringView("BLEND_OPERATION"), .value = id.blend_enabled ? blend_operation : 100.0f },
-		{ .key = wgpu::StringView("BLEND_SOURCE"), .value = static_cast<double>(blend_source) },
-		{ .key = wgpu::StringView("BLEND_DESTINATION"), .value = static_cast<double>(blend_destination) },
-		{ .key = wgpu::StringView("ALPHA_FUNC"), .value = id.alpha_test ? alpha_test_func : 100.0f },
-		{ .key = wgpu::StringView("USE_TEXTURE_ALPHA"), .value = id.texture_alpha ? 1.0f : 0.0f },
-		{ .key = wgpu::StringView("FRAGMENT_DOUBLE"), .value = id.fragment_double ? 1.0f : 0.0f },
-		{ .key = wgpu::StringView("TEXTURE_FUNCTION"), .value = static_cast<double>(texture_function) },
-		{ .key = wgpu::StringView("DEPTH_FUNC"), .value = id.depth_test ? depth_test_func : 100.0f },
-		{ .key = wgpu::StringView("DEPTH_WRITE"), .value = id.depth_write ? 1.0f : 0.0f },
-		{ .key = wgpu::StringView("GOURAUD_SHADING"), .value = id.gouraud_shading ? 1.0f : 0.0f },
-
+	wgpu::ConstantEntry constants[] {
+		{ .key = "FRAMEBUFFER_FORMAT", .value = static_cast<double>(fpf) },
+		{ .key = "TEXTURE_FORMAT", .value = id.textures_enabled ? texture_format : 100.0f },
+		{ .key = "BILINEAR", .value = id.bilinear ? 1.0f : 0.0f },
+		{ .key = "U_CLAMP", .value = id.u_clamp ? 1.0f : 0.0f },
+		{ .key = "V_CLAMP", .value = id.v_clamp ? 1.0f : 0.0f },
+		{ .key = "CLUT_FORMAT", .value = static_cast<double>(clut_format) },
+		{ .key = "BLEND_OPERATION", .value = id.blend_enabled ? blend_operation : 100.0f },
+		{ .key = "BLEND_SOURCE", .value = static_cast<double>(blend_source) },
+		{ .key = "BLEND_DESTINATION", .value = static_cast<double>(blend_destination) },
+		{ .key = "ALPHA_FUNC", .value = id.alpha_test ? alpha_test_func : 100.0f },
+		{ .key = "USE_TEXTURE_ALPHA", .value = id.texture_alpha ? 1.0f : 0.0f },
+		{ .key = "FRAGMENT_DOUBLE", .value = id.fragment_double ? 1.0f : 0.0f },
+		{ .key = "TEXTURE_FUNCTION", .value = static_cast<double>(texture_function) },
+		{ .key = "DEPTH_FUNC", .value = id.depth_test ? depth_test_func : 100.0f },
+		{ .key = "DEPTH_WRITE", .value = id.depth_write ? 1.0f : 0.0f },
+		{ .key = "GOURAUD_SHADING", .value = id.gouraud_shading ? 1.0f : 0.0f },
 	};
 
 	std::string code = common_shader;
@@ -822,6 +930,12 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 	code += pixel_shader;
 
 	switch (primitive_type) {
+	case SCEGU_PRIM_POINTS:
+		code += point_shader;
+		break;
+	case SCEGU_PRIM_LINES:
+		code += line_shader;
+		break;
 	case SCEGU_PRIM_TRIANGLES:
 		code += triangle_shader;
 		break;
@@ -838,8 +952,7 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 	compute_pipeline_desc.compute.constants = constants;
 	compute_pipeline_desc.compute.constantCount = 15;
 	compute_pipeline_desc.layout = id.textures_enabled ? compute_texture_layout : compute_layout;
-	auto compute_pipeline = device.createComputePipeline(compute_pipeline_desc);
-	shader_module.release();
+	auto compute_pipeline = device.CreateComputePipeline(&compute_pipeline_desc);
 
 	compute_pipelines[id.full] = compute_pipeline;
 
@@ -847,82 +960,95 @@ wgpu::ComputePipeline ComputeRenderer::GetShader(uint8_t primitive_type, uint8_t
 }
 
 void ComputeRenderer::UpdateRenderTexture() {
-	uint32_t width = fpf == SCE_DISPLAY_PIXEL_RGBA8888 ? fbw : fbw / 2;
-
 	bool create_texture = true;
-	if (compute_texture && compute_depth_texture) {
+	if (compute_texture && compute_16bit_texture && compute_depth_texture) {
 		FlushRender();
 
-		if (compute_texture.getWidth() == width
-			&& compute_depth_texture.getWidth() == zbw) {
+		if (compute_texture.GetWidth() == fbw && compute_16bit_texture.GetWidth() == fbw
+			&& (compute_depth_texture.GetWidth() == zbw || zbw == 0)) {
 			create_texture = false;
-		} else {
-			compute_texture.release();
-			compute_depth_texture.release();
 		}
 	}
-
-	current_fbp = fbp;
-	current_zbp = zbp;
+	
+	current_fpf = fpf;
+	current_fbp = GetFrameBufferAddress();
+	current_zbp = GetDepthBufferAddress();
 	if (create_texture) {
 		wgpu::TextureDescriptor texture_desc{};
-		texture_desc.dimension = wgpu::TextureDimension::_2D;
+		texture_desc.dimension = wgpu::TextureDimension::e2D;
 		texture_desc.format = wgpu::TextureFormat::RGBA8Uint;
-		texture_desc.size = { width, 512, 1 };
+		texture_desc.size = { fbw, 512, 1 };
 		texture_desc.sampleCount = 1;
 		texture_desc.mipLevelCount = 1;
 		texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::StorageBinding;
-		compute_texture = device.createTexture(texture_desc);
+		compute_texture = device.CreateTexture(&texture_desc);
+
+		wgpu::TextureDescriptor texture_16bit_desc{};
+		texture_16bit_desc.dimension = wgpu::TextureDimension::e2D;
+		texture_16bit_desc.format = wgpu::TextureFormat::R16Uint;
+		texture_16bit_desc.size = { fbw, 512, 1 };
+		texture_16bit_desc.sampleCount = 1;
+		texture_16bit_desc.mipLevelCount = 1;
+		texture_16bit_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::StorageBinding;
+		compute_16bit_texture = device.CreateTexture(&texture_16bit_desc);
 
 		wgpu::TextureDescriptor depth_buffer_texture_desc{};
-		depth_buffer_texture_desc.dimension = wgpu::TextureDimension::_2D;
+		depth_buffer_texture_desc.dimension = wgpu::TextureDimension::e2D;
 		depth_buffer_texture_desc.format = wgpu::TextureFormat::R16Uint;
-		depth_buffer_texture_desc.size = { zbw, 512, 1 };
+		depth_buffer_texture_desc.size = { std::max<uint32_t>(zbw, 1), 512, 1 };
 		depth_buffer_texture_desc.sampleCount = 1;
 		depth_buffer_texture_desc.mipLevelCount = 1;
 		depth_buffer_texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::StorageBinding;
-		compute_depth_texture = device.createTexture(depth_buffer_texture_desc);
+		compute_depth_texture = device.CreateTexture(&depth_buffer_texture_desc);
 
-		if (compute_buffer_bind_group) {
-			compute_buffer_bind_group.release();
-		}
-
-		wgpu::BindGroupEntry compute_buffer_bindings[2]{};
+		wgpu::BindGroupEntry compute_buffer_bindings[3]{};
 		compute_buffer_bindings[0].binding = 0;
-		compute_buffer_bindings[0].textureView = compute_texture.createView();
+		compute_buffer_bindings[0].textureView = compute_texture.CreateView();
 
 		compute_buffer_bindings[1].binding = 1;
-		compute_buffer_bindings[1].textureView = compute_depth_texture.createView();
+		compute_buffer_bindings[1].textureView = compute_16bit_texture.CreateView();
+
+		compute_buffer_bindings[2].binding = 2;
+		compute_buffer_bindings[2].textureView = compute_depth_texture.CreateView();
 
 		wgpu::BindGroupDescriptor compute_bind_group_desc{};
 		compute_bind_group_desc.layout = compute_buffer_bind_group_layout;
-		compute_bind_group_desc.entryCount = 2;
+		compute_bind_group_desc.entryCount = 3;
 		compute_bind_group_desc.entries = compute_buffer_bindings;
-		compute_buffer_bind_group = device.createBindGroup(compute_bind_group_desc);
+		compute_buffer_bind_group = device.CreateBindGroup(&compute_bind_group_desc);
 	}
 
-	int bpp = fpf == SCE_DISPLAY_PIXEL_RGBA8888 ? 4 : 2;
-
+	int bpp = current_fpf == SCE_DISPLAY_PIXEL_RGBA8888 ? 4 : 2;
 	wgpu::TexelCopyTextureInfo destination{};
-	destination.texture = compute_texture;
+	destination.texture = current_fpf == SCE_DISPLAY_PIXEL_RGBA8888 ? compute_texture : compute_16bit_texture;
 
 	wgpu::TexelCopyBufferLayout data_layout{};
 	data_layout.bytesPerRow = fbw * bpp;
 	data_layout.rowsPerImage = 512;
 
-	auto framebuffer = PSP::GetInstance()->VirtualToPhysical(GetFrameBufferAddress());
+	wgpu::Extent3D framebuffer_size{};
+	framebuffer_size.width = fbw;
+	framebuffer_size.height = 512;
 
-	queue.writeTexture(destination, framebuffer, fbw * 512 * bpp, data_layout, { width, 512, 1 });
+	auto framebuffer = PSP::GetInstance()->VirtualToPhysical(current_fbp);
 
-	wgpu::TexelCopyTextureInfo depth_destination{};
-	depth_destination.texture = compute_depth_texture;
+	queue.WriteTexture(&destination, framebuffer, fbw * 512 * bpp, &data_layout, &framebuffer_size);
 
-	wgpu::TexelCopyBufferLayout depth_data_layout{};
-	depth_data_layout.bytesPerRow = zbw * 2;
-	depth_data_layout.rowsPerImage = 512;
+	if (zbw != 0) {
+		wgpu::TexelCopyTextureInfo depth_destination{};
+		depth_destination.texture = compute_depth_texture;
 
-	auto depth_buffer = PSP::GetInstance()->VirtualToPhysical(GetDepthBufferAddress());
-	queue.writeTexture(depth_destination, depth_buffer, zbw * 512 * 2, depth_data_layout, { zbw, 512, 1 });
+		wgpu::TexelCopyBufferLayout depth_data_layout{};
+		depth_data_layout.bytesPerRow = zbw * 2;
+		depth_data_layout.rowsPerImage = 512;
+
+		wgpu::Extent3D depth_size{};
+		depth_size.width = zbw;
+		depth_size.height = 512;
+
+		auto depth_buffer = PSP::GetInstance()->VirtualToPhysical(current_zbp);
+		queue.WriteTexture(&depth_destination, depth_buffer, zbw * 512 * 2, &depth_data_layout, &depth_size);
+	}
 
 	compute_texture_valid = true;
 }
@@ -952,82 +1078,89 @@ void ComputeRenderer::FlushRender() {
 		return;
 	}
 
-	compute_pass_encoder.end();
-	compute_pass_encoder.release();
+	compute_pass_encoder.End();
 
-	auto framebuffer_width = compute_texture.getWidth();
-	int bpp = compute_texture.getFormat() == wgpu::TextureFormat::RGBA8Uint ? 4 : 2;
+	auto framebuffer_width = compute_texture.GetWidth();
+	int bpp = current_fpf = fpf == SCE_DISPLAY_PIXEL_RGBA8888 ? 4 : 2;
 	auto framebuffer_size = 512 * framebuffer_width * bpp;
 
 	wgpu::TexelCopyTextureInfo source{};
-	source.texture = compute_texture;
+	source.texture = fpf == SCE_DISPLAY_PIXEL_RGBA8888 ? compute_texture : compute_16bit_texture;
 
 	wgpu::TexelCopyBufferInfo destination{};
 	destination.buffer = compute_transitional_buffer;
 	destination.layout.bytesPerRow = framebuffer_width * bpp;
 	destination.layout.rowsPerImage = 512;
 
-	compute_encoder.copyTextureToBuffer(source, destination, { framebuffer_width, 512, 1 });
+	wgpu::Extent3D framebuffer_texture_size{};
+	framebuffer_texture_size.width = framebuffer_width;
+	framebuffer_texture_size.height = 512;
 
-	auto depth_buffer_width = compute_depth_texture.getWidth();
+	compute_encoder.CopyTextureToBuffer(&source, &destination, &framebuffer_texture_size);
+
+	auto depth_buffer_width = compute_depth_texture.GetWidth();
 	auto depth_buffer_size = 512 * depth_buffer_width * 2;
 
-	wgpu::TexelCopyTextureInfo depth_buffer_source{};
-	depth_buffer_source.texture = compute_depth_texture;
+	if (zbw != 0) {
+		wgpu::TexelCopyTextureInfo depth_buffer_source{};
+		depth_buffer_source.texture = compute_depth_texture;
 
-	wgpu::TexelCopyBufferInfo depth_buffer_destination{};
-	depth_buffer_destination.buffer = compute_depth_transitional_buffer;
-	depth_buffer_destination.layout.bytesPerRow = depth_buffer_width * 2;
-	depth_buffer_destination.layout.rowsPerImage = 512;
+		wgpu::TexelCopyBufferInfo depth_buffer_destination{};
+		depth_buffer_destination.buffer = compute_depth_transitional_buffer;
+		depth_buffer_destination.layout.bytesPerRow = depth_buffer_width * 2;
+		depth_buffer_destination.layout.rowsPerImage = 512;
 
-	compute_encoder.copyTextureToBuffer(depth_buffer_source, depth_buffer_destination, { depth_buffer_width, 512, 1 });
+		wgpu::Extent3D depth_buffer_texture_size{};
+		depth_buffer_texture_size.width = depth_buffer_width;
+		depth_buffer_texture_size.height = 512;
 
-	auto command = compute_encoder.finish();
-	compute_encoder.release();
+		compute_encoder.CopyTextureToBuffer(&depth_buffer_source, &depth_buffer_destination, &depth_buffer_texture_size);
+	}
 
-	queue.writeBuffer(compute_render_data_buffer, 0, compute_render_data, compute_render_data_offset);
-	queue.writeBuffer(compute_vertex_buffer, 0, compute_vertices, compute_vertex_buffer_offset);
-	queue.submit(command);
+	auto command = compute_encoder.Finish();
 
-	compute_encoder = device.createCommandEncoder();
-	compute_pass_encoder = compute_encoder.beginComputePass();
+	queue.WriteBuffer(compute_render_data_buffer, 0, compute_render_data, compute_render_data_offset);
+	queue.WriteBuffer(compute_vertex_buffer, 0, compute_vertices, compute_vertex_buffer_offset);
+	queue.Submit(1, &command);
 
-	bool framebuffer_done = false;
-	bool depth_buffer_done = false;
+	compute_encoder = device.CreateCommandEncoder();
+	compute_pass_encoder = compute_encoder.BeginComputePass();
 
-	wgpu::BufferMapCallbackInfo map_callback_info{};
-	map_callback_info.mode = wgpu::CallbackMode::AllowProcessEvents;
-	map_callback_info.callback = [](WGPUMapAsyncStatus status, WGPUStringView message, void* done, void* _) {
-		if (status == wgpu::MapAsyncStatus::Success) {
-			*reinterpret_cast<bool*>(done) = true;
+	auto callback = [](wgpu::MapAsyncStatus status, wgpu::StringView message) {
+		if (status != wgpu::MapAsyncStatus::Success) {
+			spdlog::error("ComputeRenderer: {}", std::string(message));
 		}
 	};
 
-	map_callback_info.userdata1 = &framebuffer_done;
-	compute_transitional_buffer.mapAsync(wgpu::MapMode::Read, 0, framebuffer_size, map_callback_info);
 
-	map_callback_info.userdata1 = &depth_buffer_done;
-	compute_depth_transitional_buffer.mapAsync(wgpu::MapMode::Read, 0, depth_buffer_size, map_callback_info);
+	auto framebuffer_future = compute_transitional_buffer.MapAsync(wgpu::MapMode::Read, 0, framebuffer_size, wgpu::CallbackMode::WaitAnyOnly, callback);
 
-	while (!framebuffer_done || !depth_buffer_done) {
-		queue.submit(0, nullptr);
+	std::vector<wgpu::FutureWaitInfo> futures{ { framebuffer_future } };
+	if (zbw != 0) {
+		auto depth_buffer_future = compute_depth_transitional_buffer.MapAsync(wgpu::MapMode::Read, 0, depth_buffer_size, wgpu::CallbackMode::WaitAnyOnly, callback);
+		futures.push_back({ depth_buffer_future });
+	}
+	
+	if (instance.WaitAny(futures.size(), futures.data(), UINT64_MAX) != wgpu::WaitStatus::Success) {
+		spdlog::error("ComputeRenderer: failed mapping buffers");
 	}
 
-	auto framebuffer = PSP::GetInstance()->VirtualToPhysical(0x44000000 | (current_fbp & 0x1FFFF0));
-	memcpy(framebuffer, compute_transitional_buffer.getMappedRange(0, framebuffer_size), framebuffer_size);
-	compute_transitional_buffer.unmap();
+	auto framebuffer = PSP::GetInstance()->VirtualToPhysical(current_fbp);
+	memcpy(framebuffer, compute_transitional_buffer.GetConstMappedRange(0, framebuffer_size), framebuffer_size);
+	compute_transitional_buffer.Unmap();
 
-	auto depth_buffer = PSP::GetInstance()->VirtualToPhysical(0x44600000 | (zbp & 0x1FFFF0));
-	memcpy(depth_buffer, compute_depth_transitional_buffer.getMappedRange(0, depth_buffer_size), depth_buffer_size);
-	compute_depth_transitional_buffer.unmap();
+	if (zbw != 0) {
+		auto depth_buffer = PSP::GetInstance()->VirtualToPhysical(current_zbp);
+		memcpy(depth_buffer, compute_depth_transitional_buffer.GetConstMappedRange(0, depth_buffer_size), depth_buffer_size);
+		compute_depth_transitional_buffer.Unmap();
+	}
 
 	queue_empty = true;
 	compute_vertex_buffer_offset = 0;
 	compute_render_data_offset = 0;
 
 	for (auto& entry : deleted_textures) {
-		entry.bind_group.release();
-		entry.texture.destroy();
+		entry.texture.Destroy();
 	}
 	deleted_textures.clear();
 }
@@ -1052,6 +1185,7 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 	auto psp = PSP::GetInstance();
 	float bpp{};
 
+
 	switch (texture_format) {
 	case SCEGU_PFIDX4:
 		bpp = 0.5;
@@ -1059,9 +1193,14 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 	case SCEGU_PFIDX8:
 		bpp = 1.0;
 		break;
+	case SCEGU_PFDXT1:
+	case SCEGU_PF5650:
+	case SCEGU_PF5551:
 	case SCEGU_PF4444:
 		bpp = 2.0;
 		break;
+	case SCEGU_PFDXT3:
+	case SCEGU_PFDXT5:
 	case SCEGU_PFIDX32:
 	case SCEGU_PF8888:
 		bpp = 4.0;
@@ -1073,6 +1212,9 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 
 	uint32_t clamped_width = std::min(texture.width, 512u) * bpp;
 	uint32_t clamped_height = std::min(texture.height, 512u);
+	if (texture_format >= SCEGU_PFDXT1) {
+		clamped_height /= 4;
+	}
 
 	bool recreate_texture = true;
 	TextureCacheEntry cache{};
@@ -1084,7 +1226,7 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 			return cache.bind_group;
 		}
 
-		if (cache.texture.getWidth() == clamped_width && cache.texture.getHeight() == clamped_height) {
+		if (cache.texture.GetWidth() == clamped_width && cache.texture.GetHeight() == clamped_height) {
 			recreate_texture = false;
 		} else {
 			deleted_textures.push_back(cache);
@@ -1097,30 +1239,30 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 	if (recreate_texture) {
 		// textures larger than 512x512 will have issues with UV interpolation, let's just hope this doesn't happen
 		wgpu::TextureDescriptor texture_desc{};
-		texture_desc.dimension = wgpu::TextureDimension::_2D;
+		texture_desc.dimension = wgpu::TextureDimension::e2D;
 		texture_desc.format = wgpu::TextureFormat::R8Uint;
 		texture_desc.size = { clamped_width, clamped_height, 1 };
 		texture_desc.sampleCount = 1;
 		texture_desc.mipLevelCount = 1;
 		texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
-		cache.texture = device.createTexture(texture_desc);
+		cache.texture = device.CreateTexture(&texture_desc);
 
 		wgpu::BindGroupEntry texture_binding{};
 		texture_binding.binding = 0;
-		texture_binding.textureView = cache.texture.createView();
+		texture_binding.textureView = cache.texture.CreateView();
 
 		wgpu::BindGroupDescriptor texture_bind_group_desc{};
 		texture_bind_group_desc.layout = compute_texture_bind_group_layout;
 		texture_bind_group_desc.entryCount = 1;
 		texture_bind_group_desc.entries = &texture_binding;
-		cache.bind_group = device.createBindGroup(texture_bind_group_desc);
+		cache.bind_group = device.CreateBindGroup(&texture_bind_group_desc);
 	}
 
 	uint32_t* buffer = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(texture.buffer));
 
 	std::vector<uint32_t> unswizzled_texture{};
 	if (texture_swizzling) {
-		unswizzled_texture.resize(cache.size);
+		unswizzled_texture.resize(texture.width * texture.height);
 
 		// Shamelessly stolen from ppsspp
 		int bxc = pitch / 16;
@@ -1150,7 +1292,11 @@ wgpu::BindGroup ComputeRenderer::GetTexture() {
 	data_layout.bytesPerRow = pitch;
 	data_layout.rowsPerImage = texture.height;
 
-	queue.writeTexture(destination, buffer, cache.size, data_layout, { std::min(pitch, clamped_width), clamped_height, 1 });
+	wgpu::Extent3D texture_size{};
+	texture_size.width = std::min(pitch, clamped_width);
+	texture_size.height = clamped_height;
+
+	queue.WriteTexture(&destination, buffer, cache.size, &data_layout, &texture_size);
 
 	texture_cache[texture.buffer] = cache;
 

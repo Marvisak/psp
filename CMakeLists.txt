@@ -7,7 +7,12 @@ add_subdirectory(vendors/SDL)
 add_subdirectory(vendors/ELFIO)
 add_subdirectory(vendors/sockpp)
 add_subdirectory(vendors/glm)
-add_subdirectory(vendors/WebGPU-distribution)
+
+set(DAWN_FETCH_DEPENDENCIES ON)
+set(DAWN_FORCE_SYSTEM_COMPONENT_LOAD ON)
+set(DAWN_BUILD_MONOLITHIC_LIBRARY SHARED)
+add_subdirectory(vendors/dawn)
+
 add_subdirectory(vendors/sdl3webgpu)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -32,6 +37,7 @@ list(APPEND sources
 	src/kernel/memory_block.cpp
 	src/kernel/semaphore.cpp
 	src/kernel/mutex.cpp
+	src/kernel/eventflag.cpp
 
 	src/kernel/filesystem/directory/directoryfs.cpp
 	src/kernel/filesystem/directory/directoryfile.cpp
@@ -55,11 +61,12 @@ list(APPEND sources
 	src/hle/utilsforuser.cpp
 	src/hle/sceaudio.cpp
 	src/hle/scepower.cpp
-	src/hle/sceatrac3plus.cpp
 	src/hle/sceumduser.cpp
 	src/hle/scertc.cpp
 	src/hle/scesuspendforuser.cpp
 	src/hle/interruptmanager.cpp
+	src/hle/scesascore.cpp
+	src/hle/sceimpose.cpp
 
 	vendors/libkirk/kirk_engine.c
 	vendors/libkirk/SHA1.c
@@ -70,8 +77,10 @@ list(APPEND sources
 	vendors/lib9660/lib9660.c
 )
 
+add_library(webgpu ALIAS dawn_headers)
+
 add_executable(psp ${sources})
-target_link_libraries(psp PRIVATE Sockpp::sockpp elfio::elfio spdlog::spdlog CLI11::CLI11 SDL3::SDL3 glm::glm sdl3webgpu webgpu)
-target_include_directories(psp PRIVATE include)
+target_link_libraries(psp PRIVATE Sockpp::sockpp elfio::elfio spdlog::spdlog CLI11::CLI11 SDL3::SDL3 glm::glm dawn_headers dawn::webgpu_dawn sdl3webgpu)
+set_property(TARGET psp PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 add_custom_command(TARGET psp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:psp> $<TARGET_FILE_DIR:psp> COMMAND_EXPAND_LISTS)

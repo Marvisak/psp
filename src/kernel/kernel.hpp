@@ -10,14 +10,13 @@
 #include "../hle/defs.hpp"
 #include "memory.hpp"
 
-#undef CALLBACK
-
 constexpr auto UID_COUNT = 4096;
 
 enum class KernelObjectType {
 	INVALID = 0,
 	THREAD = 1,
 	SEMAPHORE = 2,
+	EVENT_FLAG = 3,
 	CALLBACK = 8,
 	MUTEX = 12,
 	MODULE = 0x1000,
@@ -93,6 +92,7 @@ public:
 
 	int CreateSemaphore(std::string name, uint32_t attr, int init_count, int max_count);
 	int CreateMutex(std::string name, uint32_t attr, int init_count);
+	int CreateEventFlag(std::string name, uint32_t attr, uint32_t init_pattern);
 
 	void Mount(std::string mount_point, std::shared_ptr<FileSystem> file_system);
 	bool DoesDriveExist(std::string mount_point) { return drives.contains(mount_point); }
@@ -111,6 +111,12 @@ public:
 	void ExecHLEFunction(int import_index);
 	void SkipDeadbeef() { skip_deadbeef = true; }
 
+	bool IsDispatchEnabled() const { return dispatch_enabled && interrupts_enabled; }
+	bool GetDispatchStatus() const { return dispatch_enabled; }
+	void SetDispatchEnabled(bool dispatch_enabled) { this->dispatch_enabled = dispatch_enabled; }
+	bool IsInInterrupt() const { return in_interrupt; }
+	void SetInInterrupt(bool in_interrupt) { this->in_interrupt = in_interrupt; }
+	void HLETriggerInterrupts() { interrupt = true; }
 	void SetInterruptsEnabled(bool interrupts_enabled) { this->interrupts_enabled = interrupts_enabled; }
 	bool InterruptsEnabled() const { return interrupts_enabled; }
 
@@ -127,6 +133,9 @@ private:
 	bool skip_deadbeef = false;
 	int sdk_version = 0;
 	bool interrupts_enabled = true;
+	bool interrupt = false;
+	bool in_interrupt = false;
+	bool dispatch_enabled = true;
 
 	std::unordered_map<std::string, std::shared_ptr<FileSystem>> drives;
 	std::unique_ptr<MemoryAllocator> user_memory;

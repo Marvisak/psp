@@ -10,13 +10,15 @@ std::vector<ImportData> hle_imports{
 	{"FakeSyscalls", 0x0},
 	{"FakeSyscalls", 0x1},
 	{"FakeSyscalls", 0x2},
+	{"FakeSyscalls", 0x3},
 };
 
 void RegisterHLE() {
 	hle_modules["FakeSyscalls"] = {
 		{0x0, ReturnFromModule},
 		{0x1, ReturnFromThread},
-		{0x2, ReturnFromCallback}
+		{0x2, ReturnFromCallback},
+		{0x3, ReturnFromInterrupt}
 	};
 
 	hle_modules["ModuleMgrForUser"] = RegisterModuleMgrForUser();
@@ -35,12 +37,13 @@ void RegisterHLE() {
 	hle_modules["UtilsForUser"] = RegisterUtilsForUser();
 	hle_modules["sceAudio"] = RegisterSceAudio();
 	hle_modules["scePower"] = RegisterScePower();
-	hle_modules["sceAtrac3plus"] = RegisterSceAtrac3Plus();
 	hle_modules["sceUmdUser"] = RegisterSceUmdUser();
 	hle_modules["sceRtc"] = RegisterSceRtc();
 	hle_modules["sceSuspendForUser"] = RegisterSceSuspendForUser();
 	hle_modules["InterruptManager"] = RegisterInterruptManager();
 	hle_modules["sceVaudio"] = RegisterSceVAudio();
+	hle_modules["sceSasCore"] = RegisterSceSasCore();
+	hle_modules["sceImpose"] = RegisterSceImpose();
 }
 
 int GetHLEIndex(std::string module, uint32_t nid) {
@@ -92,9 +95,9 @@ void HLEDelay(int usec) {
 
 	int thid = kernel->GetCurrentThread();
 	auto wait = kernel->WaitCurrentThread(WaitReason::HLE_DELAY, false);
-	auto func = [wait, thid](uint64_t _) {
+	auto func = [=](uint64_t _) {
 		wait->ended = true;
-		PSP::GetInstance()->GetKernel()->WakeUpThread(thid);
+		kernel->WakeUpThread(thid);
 	};
 	psp->Schedule(US_TO_CYCLES(usec), func);
 }

@@ -1,7 +1,8 @@
 #pragma once
 
+#include <bit>
 #include <array>
-#include <limits>
+#include <algorithm>
 #include <cstdint>
 #include <glm/glm.hpp>
 
@@ -12,16 +13,20 @@
 #define IMM5(opcode) (opcode >> 6 & 0x1F)
 #define MSBD(opcode) (opcode >> 11 & 0x1F)
 #define RT(opcode) (opcode >> 16 & 0x1F)
-#define RD(opcode) (opcode >> 11 & 0x1F)
 #define RS(opcode) (opcode >> 21 & 0x1F)
+#define RD(opcode) (opcode >> 11 & 0x1F)
 #define FT(opcode) (opcode >> 16 & 0x1F)
 #define FS(opcode) (opcode >> 11 & 0x1F)
 #define FD(opcode) (opcode >> 6 & 0x1F)
+#define VT(opcode) (opcode >> 16 & 0x7F)
+#define VS(opcode) (opcode >> 8 & 0x7F)
+#define VD(opcode) (opcode & 0x7F)
 
 struct CPUState {
 	std::array<uint32_t, 32> regs{ 0xDEADBEEF };
 	std::array<float, 32> fpu_regs{};
-	std::array<glm::mat4x4, 8> vfpu_regs{};
+	std::array<float, 128> vfpu_regs{};
+	std::array<uint32_t, 16> vfpu_ctrl{};
 
 	uint32_t pc = 0xdeadbeef;
 	uint32_t hi = 0xdeadbeef;
@@ -33,6 +38,8 @@ struct CPUState {
 
 class CPU {
 public:
+	CPU();
+
 	bool RunInstruction();
 
 	uint32_t GetPC() const { return state.pc; }
@@ -154,6 +161,207 @@ private:
 	void TRUNCWS(uint32_t opcode);
 	void BranchFPU(uint32_t opcode);
 
+	void MFVC(uint32_t opcode);
+	void LVL(uint32_t opcode);
+	void LVS(uint32_t opcode);
+	void LVQ(uint32_t opcode);
+	void SVS(uint32_t opcode);
+	void SVQ(uint32_t opcode);
+	void VADD(uint32_t opcode);
+	void VCOS(uint32_t opcode);
+	void VCST(uint32_t opcode);
+	void VDIV(uint32_t opcode);
+	void VFIM(uint32_t opcode);
+	void VFLUSH(uint32_t opcode);
+	void VIIM(uint32_t opcode);
+	void VMOV(uint32_t opcode);
+	void VMUL(uint32_t opcode);
+	void VMZERO(uint32_t opcode);
+	void VONE(uint32_t opcode);
+	void VSCL(uint32_t opcode);
+	void VSIN(uint32_t opcode);
+	void VPFXT(uint32_t opcode);
+	void VPFXS(uint32_t opcode);
+	void VPFXD(uint32_t opcode);
+	void VZERO(uint32_t opcode);
+
+	template<typename T>
+	T ReadVectorVFPU(int reg) {
+		if constexpr (sizeof(T) == 4) {
+			return state.vfpu_regs[vfpu_lut[reg]];
+		} else {
+			bool transpose = (reg >> 5) & 1;
+			int mtx = ((reg << 2) & 0x70);
+			int col = reg & 3;
+
+			int row = sizeof(T) == 12 ? (reg >> 6) & 1 : (reg >> 5) & 2;
+
+			T vec{};
+			if (transpose) {
+				for (int i = 0; i < sizeof(T) / 4; i++) {
+					vec[i] = state.vfpu_regs[mtx + col + ((row + i) & 3) * 4];
+				}
+			} else {
+				for (int i = 0; i < sizeof(T) / 4; i++) {
+					vec[i] = state.vfpu_regs[mtx + col * 4 + ((row + i) & 3)];
+				}
+			}
+			return vec;
+		}
+	}
+
+	template<typename T>
+	void WriteVectorVFPU(int reg, T vec) {
+		if constexpr (sizeof(T) == 4) {
+			state.vfpu_regs[vfpu_lut[reg]] = vec;
+			return;
+		} else {
+			bool transpose = (reg >> 5) & 1;
+			int mtx = ((reg << 2) & 0x70);
+			int col = reg & 3;
+
+			int row = sizeof(T) == 12 ? (reg >> 6) & 1 : (reg >> 5) & 2;
+
+			if (transpose) {
+				if (((state.vfpu_ctrl[VFPU_CTRL_DPREFIX] >> 8) & 0xF) == 0) {
+					for (int i = 0; i < sizeof(T) / 4; i++) {
+						state.vfpu_regs[mtx + col + ((row + i) & 3) * 4] = vec[i];
+					}
+				}
+				else {
+					for (int i = 0; i < sizeof(T) / 4; i++) {
+						if (((state.vfpu_ctrl[VFPU_CTRL_DPREFIX] >> (8 + i)) & 0x1) == 0) {
+							state.vfpu_regs[mtx + col + ((row + i) & 3) * 4] = vec[i];
+						}
+					}
+				}
+			}
+			else {
+				if (((state.vfpu_ctrl[VFPU_CTRL_DPREFIX] >> 8) & 0xF) == 0) {
+					for (int i = 0; i < sizeof(T) / 4; i++) {
+						state.vfpu_regs[mtx + col * 4 + ((row + i) & 3)] = vec[i];
+					}
+				}
+				else {
+					for (int i = 0; i < sizeof(T) / 4; i++) {
+						if (((state.vfpu_ctrl[VFPU_CTRL_DPREFIX] >> (8 + i)) & 0x1) == 0) {
+							state.vfpu_regs[mtx + col * 4 + ((row + i) & 3)] = vec[i];
+						}
+					}
+				}
+			}
+		}
+	}
+
+	template<typename T>
+	void ApplyPrefixST(uint32_t prefix, T& vec, float invalid = 0.0f) {
+		if (prefix == 0xE4) {
+			return;
+		}
+
+		static const float CONSTANTS[8] = { 0.f, 1.f, 2.f, 0.5f, 3.f, 1.f / 3.f, 0.25f, 1.f / 6.f };
+
+		glm::vec4 orig{invalid};
+		if constexpr (sizeof(T) == 4) {
+			orig[0] = vec;
+		} else {
+			for (int i = 0; i < sizeof(T) / 4; i++) {
+				orig[i] = vec[i];
+			}
+		}
+
+		for (int i = 0; i < sizeof(T) / 4; i++) {
+			int regnum = (prefix >> (i * 2)) & 3;
+			bool abs = (prefix >> (8 + i)) & 1;
+			bool negate = (prefix >> (16 + i)) & 1;
+			bool constants = (prefix >> (12 + i)) & 1;
+			if (!constants) {
+				if constexpr (sizeof(T) == 4) {
+					vec = orig[regnum];
+					if (abs) {
+						vec = std::bit_cast<float>(std::bit_cast<uint32_t>(vec) & 0x7FFFFFFF);
+					}
+				} else {
+					vec[i] = orig[regnum];
+					if (abs) {
+						vec[i] = std::bit_cast<float>(std::bit_cast<uint32_t>(vec[i]) & 0x7FFFFFFF);
+					}
+				}
+
+			} else {
+				if constexpr (sizeof(T) == 4) {
+					vec = CONSTANTS[regnum + (abs << 2)];
+				} else {
+					vec[i] = CONSTANTS[regnum + (abs << 2)];
+				}
+			}
+
+			if (negate) {
+				if constexpr (sizeof(T) == 4) {
+					vec = std::bit_cast<float>(std::bit_cast<uint32_t>(vec) ^ 0x80000000);
+				} else {
+					vec[i] = std::bit_cast<float>(std::bit_cast<uint32_t>(vec[i]) ^ 0x80000000);
+				}
+			}
+		}
+	}
+
+	template<typename T>
+	void ApplyPrefixD(T& vec) {
+		if (state.vfpu_ctrl[VFPU_CTRL_DPREFIX] == 0) {
+			return;
+		}
+
+		for (int i = 0; i < sizeof(T) / 4; i++) {
+			int sat = (state.vfpu_ctrl[VFPU_CTRL_DPREFIX] >> (i * 2)) & 3;
+			if (sat == 1) {
+				if constexpr (sizeof(T) == 4) {
+					vec = std::clamp(vec, 0.0f, 1.0f);
+				} else {
+					vec[i] = std::clamp(vec[i], 0.0f, 1.0f);
+				}
+			} else if (sat == 3) {
+				if constexpr (sizeof(T) == 4) {
+					vec = std::clamp(vec, -1.0f, 1.0f);
+				} else {
+					vec[i] = std::clamp(vec[i], -1.0f, 1.0f);
+				}
+			}
+		}
+	}
+
+	float Float16ToFloat(uint16_t num) {
+		int s = (num >> 15) & 0x1;
+		int e = (num >> 10) & 0x1F;
+		int f = num & 0x3FF;
+
+		if (e == 0) {
+			if (f == 0) {
+				return std::bit_cast<float>(s << 31);
+			}
+
+			while ((f & 0x00000400) == 0) {
+				f <<= 1;
+				e--;
+			}
+
+			e++;
+			f &= ~0x00000400;
+		} else if (e == 31) {
+			if (f == 0) {
+				return std::bit_cast<float>((s << 31) | 0x7F800000);
+			}
+
+			return std::bit_cast<float>((s << 31) | 0x7F800000 | f);
+		}
+
+		e = e + 112;
+		f <<= 13;
+
+		return std::bit_cast<float>((s << 31) | (e << 23) | f);
+	}
+
+	std::array<int, 128> vfpu_lut{};
 	uint32_t next_pc = 0xdeadbeef;
 	CPUState state{};
 };

@@ -6,8 +6,110 @@
 #include "defs.hpp"
 
 
-static void sceKernelPrintf(const char* format) {
-	spdlog::error("sceKernelPrinf('{}')", format);
+static int sceKernelPrintf(const char* format_str) {
+	if (!format_str) {
+		return -1;
+	}
+
+	auto psp = PSP::GetInstance();
+	auto cpu = psp->GetCPU();
+
+	char temp_str[24];
+	char temp_format[24] = { '%' };
+	std::string format = format_str;
+	std::string result{};
+	std::stringstream stream;
+
+	if (format.ends_with('\n')) {
+		format.pop_back();
+	}
+
+	int param = 1;
+	bool supported = true;
+	for (size_t i = 0, n = format.size(); supported && i < n; ) {
+		size_t next = format.find('%', i);
+		if (next == format.npos) {
+			result += format.substr(i);
+			break;
+		} else if (next != i) {
+			result += format.substr(i, next - i);
+		}
+
+		i = next + 1;
+		if (i >= n) {
+			supported = false;
+			break;
+		}
+
+		const char* s;
+		switch (format[i]) {
+		case '%':
+			result += '%';
+			++i;
+			break;
+
+		case 's':
+			s = reinterpret_cast<const char*>(psp->VirtualToPhysical(cpu->GetRegister(MIPS_REG_A0 + param++)));
+			result += s ? s : "(null)";
+			++i;
+			break;
+
+		case 'd':
+		case 'i':
+		case 'x':
+		case 'X':
+		case 'u':
+			temp_format[1] = format[i];
+			temp_format[2] = '\0';
+			snprintf(temp_str, sizeof(temp_str), temp_format, cpu->GetRegister(MIPS_REG_A0 + param++));
+			result += temp_str;
+			++i;
+			break;
+		case '0':
+			if (i + 3 > n || format[i + 1] != '8' || (format[i + 2] != 'x' && format[i + 2] != 'X')) {
+				supported = false;
+			} else {
+				temp_format[1] = format[i];
+				temp_format[2] = format[i + 1];
+				temp_format[3] = format[i + 2];
+				temp_format[4] = '\0';
+				snprintf(temp_str, sizeof(temp_str), temp_format, cpu->GetRegister(MIPS_REG_A0 + param++));
+				result += temp_str;
+				i += 3;
+			}
+			break;
+
+		case 'p':
+			snprintf(temp_str, sizeof(temp_str), "%08x", cpu->GetRegister(MIPS_REG_A0 + param++));
+			result += temp_str;
+			++i;
+			break;
+
+		case 'f':
+			stream << std::bit_cast<float>(cpu->GetRegister(MIPS_REG_A0 + param++));
+			result += stream.str();
+
+			++i;
+			stream.str(std::string());
+			break;
+
+		default:
+			supported = false;
+			break;
+		}
+
+		if (param > 6) {
+			supported = false;
+		}
+	}
+
+	if (supported) {
+		spdlog::info(result);
+	} else {
+		spdlog::error("sceKernelPrintf: unimplemented fmt {}", format);
+	}
+
+	return 0;
 }
 
 static int sceKernelTotalFreeMemSize() {

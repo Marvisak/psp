@@ -20,6 +20,7 @@ enum class WaitReason {
 	SLEEP = 1,
 	DELAY = 2,
 	SEMAPHORE = 3,
+	EVENT_FLAG = 4,
 	VBLANK = 6,
 	THREAD_END = 9,
 	AUDIO = 10,

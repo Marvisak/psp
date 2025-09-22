@@ -1,14 +1,25 @@
 #include "hle.hpp"
 
 #include <spdlog/spdlog.h>
+#include <filesystem>
 
 #include "defs.hpp"
 #include "../kernel/thread.hpp"
+#include "../kernel/callback.hpp"
 #include "../kernel/filesystem/file.hpp"
 #include "../kernel/filesystem/dirlisting.hpp"
 
-std::array<int, 64> FILE_DESCRIPTORS{};
-std::string CWD{};
+struct DeviceSize {
+	uint32_t max_clusters;
+	uint32_t free_clusters;
+	uint32_t max_sectors;
+	uint32_t sector_size;
+	uint32_t sector_count;
+};
+
+static std::vector<int> MEMSTICK_FAT_CALLBACKS{};
+static std::array<int, 64> FILE_DESCRIPTORS{};
+static std::string CWD{};
 
 static void IODelay(int usec) {
 	auto psp = PSP::GetInstance();
@@ -16,9 +27,9 @@ static void IODelay(int usec) {
 
 	int thid = kernel->GetCurrentThread();
 	auto wait = kernel->WaitCurrentThread(WaitReason::IO, false);
-	auto func = [wait, thid](uint64_t _) {
+	auto func = [=](uint64_t _) {
 		wait->ended = true;
-		PSP::GetInstance()->GetKernel()->WakeUpThread(thid);
+		kernel->WakeUpThread(thid);
 	};
 	psp->Schedule(US_TO_CYCLES(usec), func);
 }
@@ -79,6 +90,7 @@ static int sceIoClose(int fd) {
 
 static int sceIoRead(int fd, uint32_t buf_addr, uint32_t size) {
 	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
 
 	void* data = psp->VirtualToPhysical(buf_addr);
 	if (!data) {
@@ -96,6 +108,16 @@ static int sceIoRead(int fd, uint32_t buf_addr, uint32_t size) {
 		return SCE_KERNEL_ERROR_BADF;
 	}
 
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("sceIoRead: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("sceIoRead: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+	}
+
 	if ((file->GetFlags() & SCE_FREAD) == 0) {
 		return SCE_KERNEL_ERROR_BADF;
 	}
@@ -110,6 +132,7 @@ static int sceIoRead(int fd, uint32_t buf_addr, uint32_t size) {
 
 static int sceIoWrite(int fd, uint32_t buf_addr, uint32_t size) {
 	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
 
 	void* data = psp->VirtualToPhysical(buf_addr);
 	if (!data) {
@@ -140,6 +163,16 @@ static int sceIoWrite(int fd, uint32_t buf_addr, uint32_t size) {
 	auto file = psp->GetKernel()->GetKernelObject<File>(fid);
 	if (!file) {
 		return SCE_KERNEL_ERROR_BADF;
+	}
+
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("sceIoWrite: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("sceIoWrite: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
 	}
 
 	if ((file->GetFlags() & SCE_FWRITE) == 0) {
@@ -294,8 +327,61 @@ static int sceIoDevctl(const char* devname, int cmd, uint32_t arg_addr, int arg_
 		default:
 			spdlog::error("sceIoDevctl: unknown emulator command {}", cmd);
 		}
-	}
-	else {
+	} else if (!strcmp(devname, "fatms0:")) {
+		switch (cmd) {
+		case 0x02415821: {
+			if (arg_len < 4) {
+				spdlog::warn("sceIoDevctl: too small arg len {} for fatms0", arg_len);
+				return SCE_ERROR_ERRNO_EINVAL;
+			}
+
+			auto cbid = psp->ReadMemory32(arg_addr);
+			auto callback = psp->GetKernel()->GetKernelObject<Callback>(cbid);
+			if (callback && MEMSTICK_FAT_CALLBACKS.size() < 32) {
+				MEMSTICK_FAT_CALLBACKS.push_back(cbid);
+				callback->Notify(1);
+				return 0;
+			}
+
+			spdlog::warn("sceIoDevctl: invalid callback {} or too many callbacks for fatms0", cbid);
+			return SCE_ERROR_ERRNO_EINVAL;
+		}
+		case 0x02415822: {
+			if (arg_len < 4) {
+				spdlog::warn("sceIoDevctl: too small arg len {} for fatms0", arg_len);
+				return SCE_ERROR_ERRNO_EINVAL;
+			}
+
+			auto cbid = psp->ReadMemory32(arg_addr);
+			auto remove = std::remove(MEMSTICK_FAT_CALLBACKS.begin(), MEMSTICK_FAT_CALLBACKS.end(), cbid);
+			if (remove == MEMSTICK_FAT_CALLBACKS.end()) {
+				return SCE_ERROR_ERRNO_EINVAL;
+			}
+			MEMSTICK_FAT_CALLBACKS.erase(remove, MEMSTICK_FAT_CALLBACKS.end());
+			return 0;
+		}
+		case 0x02425818: {
+			if (arg_len < 4) {
+				spdlog::warn("sceIoDevctl: too small arg len {} for fatms0", arg_len);
+				return SCE_ERROR_ERRNO_EINVAL;
+			}
+
+			auto device_size_addr = psp->ReadMemory32(arg_addr);
+			auto device_size = reinterpret_cast<DeviceSize*>(psp->VirtualToPhysical(device_size_addr));
+			if (device_size) {
+				auto space =std::filesystem::space(psp->GetMemstickPath());
+				device_size->max_clusters = (space.capacity * 95 / 100) / (32 * 1024);
+				device_size->free_clusters = (space.available * 95 / 100) / (32 * 1024);
+				device_size->max_sectors = device_size->max_clusters;
+				device_size->sector_size = 0x200;
+				device_size->sector_count = 32 * 1024 / 0x200;
+			}
+			return 0;
+		}
+		default:
+			spdlog::error("sceIoDevctl: unknown fatms0 command {:x}", cmd);
+		}
+	} else {
 		spdlog::error("sceIoDevCtl: unknown device {}", devname);
 	}
 

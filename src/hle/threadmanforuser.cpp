@@ -6,6 +6,7 @@
 #include "../kernel/mutex.hpp"
 #include "../kernel/thread.hpp"
 #include "../kernel/callback.hpp"
+#include "../kernel/eventflag.hpp"
 #include "../kernel/semaphore.hpp"
 
 struct ThreadEnd {
@@ -15,7 +16,7 @@ struct ThreadEnd {
 	std::shared_ptr<ScheduledEvent> timeout_event;
 };
 
-std::unordered_map<int, std::vector<ThreadEnd>> WAITING_THREAD_END{};
+static std::unordered_map<int, std::vector<ThreadEnd>> WAITING_THREAD_END{};
 
 static void HandleThreadEnd(int thid, int exit_reason) {
 	auto psp = PSP::GetInstance();
@@ -51,21 +52,43 @@ static void HandleThreadEnd(int thid, int exit_reason) {
 	}
 }
 
-static void SleepThread(bool allow_callbacks) {
+static int SleepThread(bool allow_callbacks) {
 	auto kernel = PSP::GetInstance()->GetKernel();
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("SleepThread: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("SleepThread: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+	}
+
 	auto thread = kernel->GetKernelObject<Thread>(kernel->GetCurrentThread());
 	if (thread->GetWakeupCount() > 0) {
 		thread->DecWakeupCount();
 	} else {
 		kernel->WaitCurrentThread(WaitReason::SLEEP, allow_callbacks);
 	}
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
-static void DelayThread(uint32_t usec, bool allow_callbacks) {
+static int DelayThread(uint32_t usec, bool allow_callbacks) {
 	auto psp = PSP::GetInstance();
 	auto kernel = psp->GetKernel();
-	psp->EatCycles(2000);
 
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("DelayThread: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("DelayThread: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+	}
+
+	psp->EatCycles(2000);
 	if (usec < 200) {
 		usec = 210;
 	} else if (usec > 0x8000000000000000ULL) {
@@ -74,12 +97,14 @@ static void DelayThread(uint32_t usec, bool allow_callbacks) {
 
 	int thid = kernel->GetCurrentThread();
 	auto wait = kernel->WaitCurrentThread(WaitReason::DELAY, allow_callbacks);
-	auto func = [wait, thid](uint64_t _) {
+	auto func = [=](uint64_t _) {
 		wait->ended = true;
-		PSP::GetInstance()->GetKernel()->WakeUpThread(thid);
+		kernel->WakeUpThread(thid);
 	};
 
 	psp->Schedule(US_TO_CYCLES(usec), func);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int WaitThreadEnd(int thid, uint32_t timeout_addr, bool allow_callbacks) {
@@ -90,6 +115,16 @@ static int WaitThreadEnd(int thid, uint32_t timeout_addr, bool allow_callbacks) 
 	if (thid == 0 || thid == current_thread) {
 		spdlog::warn("sceKernelWaitThreadEnd: trying to resume current thread");
 		return SCE_KERNEL_ERROR_ILLEGAL_THID;
+	}
+
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("WaitThreadEnd: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("WaitThreadEnd: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
 	}
 
 	auto thread = kernel->GetKernelObject<Thread>(thid);
@@ -112,10 +147,7 @@ static int WaitThreadEnd(int thid, uint32_t timeout_addr, bool allow_callbacks) 
 	thread_end.wait = wait;
 	if (timeout_addr) {
 		uint32_t timeout = psp->ReadMemory32(timeout_addr);
-		auto func = [wait, timeout_addr, thid, current_thread](uint64_t _) {
-			auto psp = PSP::GetInstance();
-			auto kernel = psp->GetKernel();
-
+		auto func = [=](uint64_t _) {
 			psp->WriteMemory32(timeout_addr, 0);
 			wait->ended = true;
 			if (kernel->WakeUpThread(current_thread)) {
@@ -124,10 +156,10 @@ static int WaitThreadEnd(int thid, uint32_t timeout_addr, bool allow_callbacks) 
 			}
 
 			auto& map = WAITING_THREAD_END[thid];
-			map.erase(std::remove_if(map.begin(), map.end(), [timeout_addr, current_thread](ThreadEnd data) {
+			map.erase(std::remove_if(map.begin(), map.end(), [=](ThreadEnd data) {
 				return data.thid == current_thread && data.timeout_addr == timeout_addr;
-				}));
-			};
+			}));
+		};
 		thread_end.timeout_event = psp->Schedule(US_TO_CYCLES(timeout), func);
 	}
 	WAITING_THREAD_END[thid].push_back(thread_end);
@@ -138,6 +170,16 @@ static int WaitThreadEnd(int thid, uint32_t timeout_addr, bool allow_callbacks) 
 static int WaitSema(int semid, int need_count, uint32_t timeout_addr, bool allow_callbacks) {
 	auto psp = PSP::GetInstance();
 	auto kernel = PSP::GetInstance()->GetKernel();
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("WaitSema: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("WaitSema: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+	}
+
 	auto semaphore = kernel->GetKernelObject<Semaphore>(semid);
 
 	psp->EatCycles(900);
@@ -160,9 +202,51 @@ static int WaitSema(int semid, int need_count, uint32_t timeout_addr, bool allow
 	return SCE_KERNEL_ERROR_OK;
 }
 
+static int WaitEventFlag(int evfid, uint32_t bit_pattern, int wait_mode, uint32_t result_pat_addr, uint32_t timeout_addr, bool allow_callbacks) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	if (!bit_pattern) {
+		spdlog::warn("WaitEventFlag: invalid bit pattern {:x}", bit_pattern);
+		return SCE_KERNEL_ERROR_EVF_ILPAT;
+	}
+
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("WaitEventFlag: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (wait_mode & 0xFFFFFFCE || (wait_mode & (SCE_KERNEL_EW_CLEAR_ALL | SCE_KERNEL_EW_CLEAR_PAT)) == (SCE_KERNEL_EW_CLEAR_ALL | SCE_KERNEL_EW_CLEAR_PAT)) {
+		spdlog::warn("WaitEventFlag: invalid wait mode {:x}", wait_mode);
+		return SCE_KERNEL_ERROR_ILLEGAL_MODE;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("WaitEventFlag: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+	}
+
+	auto event_flag = kernel->GetKernelObject<EventFlag>(evfid);
+	if (!event_flag) {
+		spdlog::warn("WaitEventFlag: invalid event flag {}", evfid);
+		return SCE_KERNEL_ERROR_UNKNOWN_EVFID;
+	}
+
+	return event_flag->Wait(bit_pattern, wait_mode, allow_callbacks, timeout_addr, result_pat_addr);;
+}
+
 static int LockMutex(int mtxid, int lock_count, uint32_t timeout_addr, bool allow_callbacks) {
 	auto psp = PSP::GetInstance();
 	auto kernel = PSP::GetInstance()->GetKernel();
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("LockMutex: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("LockMutex: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+	}
 
 	auto mutex = kernel->GetKernelObject<Mutex>(mtxid);
 	if (!mutex) {
@@ -255,6 +339,7 @@ static int sceKernelCreateThread(const char* name, uint32_t entry, int init_prio
 
 	int thid = kernel->CreateThread(name, entry, init_priority, stack_size, attr);
 
+	kernel->SetDispatchEnabled(true);
 	psp->EatCycles(32000);
 	kernel->HLEReschedule();
 
@@ -289,6 +374,11 @@ static int sceKernelDeleteThread(int thid) {
 static int sceKernelStartThread(int thid, int arg_size, uint32_t arg_block_addr) {
 	auto psp = PSP::GetInstance();
 	auto kernel = psp->GetKernel();
+
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("sceKernelStartThread: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
 
 	if (thid == 0) {
 		spdlog::warn("sceKernelStartThread: trying to start 0");
@@ -347,6 +437,11 @@ static int sceKernelExitDeleteThread(int exit_status) {
 
 static int sceKernelTerminateThread(int thid) {
 	auto kernel = PSP::GetInstance()->GetKernel();
+
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("sceKernelTerminateThread: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
 
 	if (thid == 0 || thid == kernel->GetCurrentThread()) {
 		spdlog::warn("sceKernelTerminateThread: trying to terminate current thread");
@@ -461,7 +556,13 @@ static int sceKernelChangeCurrentThreadAttr(uint32_t clear_attr, uint32_t set_at
 }
 
 static int sceKernelGetThreadId() {
-	return PSP::GetInstance()->GetKernel()->GetCurrentThread();
+	auto kernel = PSP::GetInstance()->GetKernel();
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("sceKernelGetThreadId: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	return kernel->GetCurrentThread();
 }
 
 static int sceKernelReferThreadStatus(int thid, uint32_t info_addr) {
@@ -690,23 +791,19 @@ static int sceKernelCheckCallback() {
 }
 
 static int sceKernelSleepThread() {
-	SleepThread(false);
-	return SCE_KERNEL_ERROR_OK;
+	return SleepThread(false);
 }
 
 static int sceKernelSleepThreadCB() {
-	SleepThread(true);
-	return SCE_KERNEL_ERROR_OK;
+	return SleepThread(true);
 }
 
 static int sceKernelDelayThread(uint32_t usec) {
-	DelayThread(usec, false);
-	return SCE_KERNEL_ERROR_OK;
+	return DelayThread(usec, false);
 }
 
 static int sceKernelDelayThreadCB(uint32_t usec) {
-	DelayThread(usec, true);
-	return SCE_KERNEL_ERROR_OK;
+	return DelayThread(usec, false);
 }
 
 static int sceKernelSuspendThread(int thid) {
@@ -827,6 +924,46 @@ static int sceKernelWakeupThread(int thid) {
 	}
 
 	return SCE_KERNEL_ERROR_OK;
+}
+
+static int sceKernelSuspendDispatchThread() {
+	auto psp = PSP::GetInstance();
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("sceKernelSuspendDispatchThread: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->InterruptsEnabled()) {
+		spdlog::warn("sceKernelSuspendDispatchThread: interrupts disabled");
+		return SCE_KERNEL_ERROR_CPUDI;
+	}
+
+	psp->EatCycles(940);
+	bool old_dispatch_enabled = kernel->GetDispatchStatus();
+	kernel->SetDispatchEnabled(false);
+	return old_dispatch_enabled;
+}
+
+static int sceKernelResumeDispatchThread(int enabled) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("sceKernelResumeDispatchThread: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->InterruptsEnabled()) {
+		spdlog::warn("sceKernelResumeDispatchThread: interrupts disabled");
+		return SCE_KERNEL_ERROR_CPUDI;
+	}
+
+	psp->EatCycles(940);
+	kernel->SetDispatchEnabled(enabled != 0);
+	kernel->HLEReschedule();
+	return 0;
 }
 
 static int sceKernelCreateSema(const char* name, uint32_t attr, int init_count, int max_count, uint32_t opt_param_addr) {
@@ -1146,7 +1283,7 @@ static int sceKernelReferMutexStatus(int mtxid, uint32_t info_addr) {
 
 	auto mutex = kernel->GetKernelObject<Mutex>(mtxid);
 	if (!mutex) {
-		spdlog::warn("sceKernelReferMutexStatus: invalid semaphore {}", mtxid);
+		spdlog::warn("sceKernelReferMutexStatus: invalid mutex {}", mtxid);
 		return SCE_KERNEL_ERROR_UNKNOWN_MUTEXID;
 	}
 
@@ -1176,24 +1313,157 @@ static int sceKernelDeleteLwMutex(uint32_t work_addr) {
 }
 
 static int sceKernelCreateEventFlag(const char* name, uint32_t attr, uint32_t init_pattern, uint32_t opt_param_addr) {
-	spdlog::error("sceKernelCreateEventFlag('{}', {:x}, {:x}, {:x})", name, attr, init_pattern, opt_param_addr);
-	return 0;
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	if (!name) {
+		spdlog::warn("sceKernelCreateEventFlag: name is NULL");
+		return SCE_KERNEL_ERROR_ERROR;
+	}
+
+	if (attr & 0xFFFFFD00) {
+		spdlog::warn("sceKernelCreateEventFlag: invalid attr {:x}", attr);
+		return SCE_KERNEL_ERROR_ILLEGAL_ATTR;
+	}
+
+	return kernel->CreateEventFlag(name, attr, init_pattern);
 }
 
 static int sceKernelDeleteEventFlag(int evfid) {
-	spdlog::error("sceKernelDeleteEventFlag({})", evfid);
-	return 0;
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	auto event_flag = kernel->GetKernelObject<EventFlag>(evfid);
+	if (!event_flag) {
+		spdlog::warn("sceKernelDeleteEventFlag: invalid event flag {}", evfid);
+		return SCE_KERNEL_ERROR_UNKNOWN_EVFID;
+	}
+
+	kernel->RemoveKernelObject(evfid);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelSetEventFlag(int evfid, uint32_t bit_pattern) {
-	spdlog::error("sceKernelSetEventFlag({}, {})", evfid, bit_pattern);
-	return 0;
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	auto event_flag = kernel->GetKernelObject<EventFlag>(evfid);
+	if (!event_flag) {
+		spdlog::warn("sceKernelSetEventFlag: invalid event flag {}", evfid);
+		return SCE_KERNEL_ERROR_UNKNOWN_EVFID;
+	}
+	
+	event_flag->Set(bit_pattern);
+
+	return SCE_KERNEL_ERROR_OK;
+}
+
+static int sceKernelClearEventFlag(int evfid, uint32_t bit_pattern) {
+	auto kernel = PSP::GetInstance()->GetKernel();
+
+	auto event_flag = kernel->GetKernelObject<EventFlag>(evfid);
+	if (!event_flag) {
+		spdlog::warn("sceKernelClearEventFlag: invalid event flag {}", evfid);
+		return SCE_KERNEL_ERROR_UNKNOWN_EVFID;
+	}
+
+	event_flag->Clear(bit_pattern);
+
+	return SCE_KERNEL_ERROR_OK;
+}
+
+static int sceKernelCancelEventFlag(int evfid, int set_pattern, uint32_t num_wait_threads_addr) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+	auto event_flag = kernel->GetKernelObject<EventFlag>(evfid);
+	if (!event_flag) {
+		spdlog::warn("sceKernelCancelEventFlag: invalid event flag {}", evfid);
+		return SCE_KERNEL_ERROR_UNKNOWN_EVFID;
+	}
+
+	int num_wait_threads = event_flag->Cancel(set_pattern);
+	if (num_wait_threads_addr) {
+		psp->WriteMemory32(num_wait_threads_addr, num_wait_threads);
+	}
+
+	return SCE_KERNEL_ERROR_OK;
+}
+
+static int sceKernelWaitEventFlag(int evfid, uint32_t bit_pattern, int wait_mode, uint32_t result_pat_addr, uint32_t timeout_addr) {
+	return WaitEventFlag(evfid, bit_pattern, wait_mode, result_pat_addr, timeout_addr, false);
+}
+
+static int sceKernelWaitEventFlagCB(int evfid, uint32_t bit_pattern, int wait_mode, uint32_t result_pat_addr, uint32_t timeout_addr) {
+	return WaitEventFlag(evfid, bit_pattern, wait_mode, result_pat_addr, timeout_addr, true);
+}
+
+static int sceKernelPollEventFlag(int evfid, uint32_t bit_pattern, int wait_mode, uint32_t result_pat_addr) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	if (wait_mode & 0xFFFFFFCE || (wait_mode & (SCE_KERNEL_EW_CLEAR_ALL | SCE_KERNEL_EW_CLEAR_PAT)) == (SCE_KERNEL_EW_CLEAR_ALL | SCE_KERNEL_EW_CLEAR_PAT)) {
+		spdlog::warn("sceKernelPollEventFlag: invalid wait mode {:x}", wait_mode);
+		return SCE_KERNEL_ERROR_ILLEGAL_MODE;
+	}
+
+	if (!bit_pattern) {
+		spdlog::warn("sceKernelPollEventFlag: invalid bit pattern {:x}", bit_pattern);
+		return SCE_KERNEL_ERROR_EVF_ILPAT;
+	}
+
+	auto event_flag = kernel->GetKernelObject<EventFlag>(evfid);
+	if (!event_flag) {
+		spdlog::warn("sceKernelPollEventFlag: invalid event flag {}", evfid);
+		return SCE_KERNEL_ERROR_UNKNOWN_EVFID;
+	}
+
+	if ((event_flag->GetAttr() & SCE_KERNEL_EA_MULTI) == 0 && event_flag->GetNumWaitThreads() != 0) {
+		return SCE_KERNEL_ERROR_EVF_MULTI;
+	}
+
+	if (result_pat_addr) {
+		psp->WriteMemory32(result_pat_addr, event_flag->GetCurrentPattern());
+	}
+
+	if (!event_flag->Poll(bit_pattern, wait_mode)) {
+		return SCE_KERNEL_ERROR_EVF_COND;
+	}
+
+	return SCE_KERNEL_ERROR_OK;
+}
+
+static int sceKernelReferEventFlagStatus(int evfid, uint32_t info_addr) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	auto info = reinterpret_cast<SceKernelEventFlagInfo*>(psp->VirtualToPhysical(info_addr));
+	if (!info) {
+		spdlog::warn("sceKernelReferEventFlagStatus: invalid info pointer {:x}", info_addr);
+		return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
+	}
+
+	auto event_flag = kernel->GetKernelObject<EventFlag>(evfid);
+	if (!event_flag) {
+		spdlog::warn("sceKernelReferEventFlagStatus: invalid event flag {}", evfid);
+		return SCE_KERNEL_ERROR_UNKNOWN_EVFID;
+	}
+
+	SceKernelEventFlagInfo new_info{};
+	new_info.size = sizeof(new_info);
+	SDL_strlcpy(new_info.name, event_flag->GetName().data(), SceUID_NAME_MAX + 1);
+	new_info.attr = event_flag->GetAttr();
+	new_info.init_pattern = event_flag->GetInitPattern();
+	new_info.current_pattern = event_flag->GetCurrentPattern();
+	new_info.num_wait_threads = event_flag->GetNumWaitThreads();
+
+	auto wanted_size = std::min<size_t>(new_info.size, info->size);
+	memcpy(info, &new_info, wanted_size);
+
+	return SCE_KERNEL_ERROR_OK;
 }
 
 static int sceKernelGetSystemTime(uint32_t clock_addr) {
 	auto psp = PSP::GetInstance();
 	uint64_t time = CYCLES_TO_US(psp->GetCycles());
-	if (!psp->VirtualToPhysical(clock_addr)) {
+	if (psp->VirtualToPhysical(clock_addr)) {
 		psp->WriteMemory64(clock_addr, time);
 	}
 
@@ -1262,6 +1532,8 @@ FuncMap RegisterThreadManForUser() {
 	funcs[0x278C0DF5] = HLEWrap(sceKernelWaitThreadEnd);
 	funcs[0x840E8133] = HLEWrap(sceKernelWaitThreadEndCB);
 	funcs[0xD59EAD2F] = HLEWrap(sceKernelWakeupThread);
+	funcs[0x3AD58B8C] = HLEWrap(sceKernelSuspendDispatchThread);
+	funcs[0x27E22EC2] = HLEWrap(sceKernelResumeDispatchThread);
 	funcs[0x52089CA1] = HLEWrap(sceKernelGetThreadStackFreeSize);
 	funcs[0xD13BDE95] = HLEWrap(sceKernelCheckThreadStack);
 	funcs[0x912354A7] = HLEWrap(sceKernelRotateThreadReadyQueue);
@@ -1294,6 +1566,12 @@ FuncMap RegisterThreadManForUser() {
 	funcs[0x55C20A00] = HLEWrap(sceKernelCreateEventFlag);
 	funcs[0xEF9E4C70] = HLEWrap(sceKernelDeleteEventFlag);
 	funcs[0x1FB15A32] = HLEWrap(sceKernelSetEventFlag);
+	funcs[0x812346E4] = HLEWrap(sceKernelClearEventFlag);
+	funcs[0xCD203292] = HLEWrap(sceKernelCancelEventFlag);
+	funcs[0x402FCF22] = HLEWrap(sceKernelWaitEventFlag);
+	funcs[0x328C546A] = HLEWrap(sceKernelWaitEventFlagCB);
+	funcs[0x30FD48F0] = HLEWrap(sceKernelPollEventFlag);
+	funcs[0xA66B0120] = HLEWrap(sceKernelReferEventFlagStatus);
 	funcs[0xAA73C935] = HLEWrap(sceKernelExitThread);
 	funcs[0x809CE29B] = HLEWrap(sceKernelExitDeleteThread);
 	funcs[0xDB738F35] = HLEWrap(sceKernelGetSystemTime);

@@ -43,6 +43,9 @@ bool Module::Load() {
 		data.resize(data_size);
 		file->Seek(data_psp_offset, SCE_SEEK_SET);
 		file->Read(data.data(), data_size);
+
+		std::ofstream file2("data.bin", std::ios::binary);
+		file2.write(data.c_str(), data.size());
 	} else {
 		spdlog::error("Module: unknown file magic");
 		return false;
@@ -91,7 +94,7 @@ bool Module::LoadELF(std::istringstream ss) {
 	std::string mod_name = "ELF/";
 	mod_name += module_info->name;
 
-	uint32_t start = 0xFFFFFFFF;
+	start = 0xFFFFFFFF;
 	uint32_t end = 0;
 
 	for (int i = 0; i < elfio.segments.size(); i++) {
@@ -108,9 +111,10 @@ bool Module::LoadELF(std::istringstream ss) {
 		}
 	}
 
-	uint32_t size = end - start;
+	size = end - start;
 	if (relocatable) {
 		offset = memory->Alloc(size, mod_name);
+		start += offset;
 	} else {
 		// A cleanup would be nice sometimes, but idc rn
 		memory->AllocAt(start, size, mod_name);

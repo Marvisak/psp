@@ -3,10 +3,34 @@
 #include <format>
 #include <thread>
 #include <spdlog/spdlog.h>
-#include <glm/packing.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include "../psp.hpp"
 #include "../kernel/thread.hpp"
+
+struct CmdRange {
+	uint8_t start;
+	uint8_t end;
+};
+
+static const std::vector<CmdRange> CONTEXT_CMD_RANGES = {
+	{0x00, 0x02},
+	{0x10, 0x10},
+	{0x12, 0x28},
+	{0x2c, 0x33},
+	{0x36, 0x38},
+	{0x42, 0x4D},
+	{0x50, 0x51},
+	{0x53, 0x58},
+	{0x5B, 0xB5},
+	{0xB8, 0xC3},
+	{0xC5, 0xD0},
+	{0xD2, 0xE9},
+	{0xEB, 0xEC},
+	{0xEE, 0xEE},
+	{0xF0, 0xF6},
+	{0xF8, 0xF9},
+};
 
 static void WakeUpRenderer(uint64_t cycles_late) {
 	PSP::GetInstance()->GetRenderer()->Run();
@@ -16,6 +40,10 @@ Renderer::Renderer() {
 	window = SDL_CreateWindow("PSP", BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT, SDL_WINDOW_RESIZABLE);
 	SDL_SetWindowMinimumSize(window, BASE_WIDTH, BASE_HEIGHT);
 	second_timer = std::chrono::steady_clock::now();
+
+	for (int i = 0; i < cmds.size(); i++) {
+		cmds[i] = i << 24;
+	}
 }
 
 Renderer::~Renderer() {
@@ -59,9 +87,9 @@ void Renderer::Frame() {
 		flips = 0;
 	}
 
-	auto frame_time = now - last_frame_time;
-	if (frame_time < FRAME_DURATION && frame_limiter) {
-		while ((std::chrono::steady_clock::now() - last_frame_time) < FRAME_DURATION) {
+	if ((now - last_frame_time) < FRAME_DURATION && frame_limiter) {
+		auto actual_frame_time = last_frame_time + FRAME_DURATION;
+		while (std::chrono::steady_clock::now() < actual_frame_time) {
 			std::this_thread::yield();
 		}
 	}
@@ -81,122 +109,21 @@ void Renderer::Run() {
 		spdlog::error("Renderer: top display list isn't valid");
 		return;
 	}
+	current_dl.state = SCE_GE_LIST_DRAWING;
+	offset = current_dl.offset_addr;
 
 	while (true) {
-		if (!current_dl.valid || current_dl.stall_addr == current_dl.current_addr) {
+		if (!current_dl.valid || current_dl.state == SCE_GE_LIST_PAUSED) {
+			break;
+		}
+
+		if (current_dl.current_addr == current_dl.stall_addr) {
+			current_dl.state = SCE_GE_LIST_STALLING;
 			break;
 		}
 
 		uint32_t command = psp->ReadMemory32(current_dl.current_addr);
-		cmds[command >> 24] = command;
-
-		switch (command >> 24) {
-		case CMD_NOP: break;
-		case CMD_VADR: vaddr = command & 0xFFFFFF; break;
-		case CMD_PRIM: Prim(command); break;
-		case CMD_BBOX: BBox(current_dl, command); break;
-		case CMD_JUMP: Jump(current_dl, command); break;
-		case CMD_BJUMP: BJump(current_dl, command); break;
-		case CMD_CALL: spdlog::warn("CALL"); psp->Exit(); break;
-		case CMD_RET: spdlog::warn("RET"); psp->Exit(); break;
-		case CMD_END: End(current_dl, command); break;
-		case CMD_SIGNAL: spdlog::warn("SIGNAL"); psp->Exit(); break;
-		case CMD_FINISH: break;
-		case CMD_BASE: base = command; break;
-		case CMD_VTYPE: VType(command); break;
-		case CMD_OFFSET: offset = command << 8; break;
-		case CMD_REGION1: min_draw_area = glm::ivec2(command & 0x1FF, command >> 10 & 0x1FF); break;
-		case CMD_REGION2: max_draw_area = glm::ivec2(command & 0x1FF, command >> 10 & 0x1FF); break;
-		case CMD_CLE: clip_plane = command & 1; break;
-		case CMD_BCE: culling = command & 1; break;
-		case CMD_TME: textures_enabled = command & 1; break;
-		case CMD_ABE: blend = command & 1; break;
-		case CMD_ATE: alpha_test = command & 1; break;
-		case CMD_ZTE: depth_test = command & 1; break;
-		case CMD_DIVIDE: spdlog::warn("Renderer: unimplemented GE command CMD_DIVIDE"); break;
-		case CMD_WORLDN: world_matrix_num = command & 0xF; break;
-		case CMD_WORLDD: WorldD(command); break;
-		case CMD_VIEWN: view_matrix_num = command & 0xF; break;
-		case CMD_VIEWD: ViewD(command); break;
-		case CMD_PROJN: projection_matrix_num = command & 0xF; break;
-		case CMD_PROJD: ProjD(command); break;
-		case CMD_SX: viewport_scale.x = std::bit_cast<float>(command << 8); break;
-		case CMD_SY: viewport_scale.y = std::bit_cast<float>(command << 8); break;
-		case CMD_SZ: viewport_scale.z = std::bit_cast<float>(command << 8); break;
-		case CMD_TX: viewport_pos.x = std::bit_cast<float>(command << 8); break;
-		case CMD_TY: viewport_pos.y = std::bit_cast<float>(command << 8); break;
-		case CMD_TZ: viewport_pos.z = std::bit_cast<float>(command << 8); break;
-		case CMD_SU: uv_scale.x = std::bit_cast<float>(command << 8); break;
-		case CMD_SV: uv_scale.y = std::bit_cast<float>(command << 8); break;
-		case CMD_TU: uv_offset.x = std::bit_cast<float>(command << 8); break;
-		case CMD_TV: uv_offset.y = std::bit_cast<float>(command << 8); break;
-		case CMD_OFFSETX: viewport_offset.x = command & 0xFFFFFF; break;
-		case CMD_OFFSETY: viewport_offset.y = command & 0xFFFFFF; break;
-		case CMD_SHADE: gouraud_shading = command & 1; break;
-		case CMD_MATERIAL: material_update = command & 1; break;
-		case CMD_MAC: ambient_color = command & 0xFFFFFF; break;
-		case CMD_MDC: spdlog::warn("Renderer: unimplemented GE command CMD_MDC"); break;
-		case CMD_MSC: spdlog::warn("Renderer: unimplemented GE command CMD_MSC"); break;
-		case CMD_MAA: ambient_alpha = command & 0xFF; break;
-		case CMD_MK: spdlog::warn("Renderer: unimplemented GE command CMD_MK"); break;
-		case CMD_CULL: cull_type = command & 0x1; break;
-		case CMD_FBP: RenderFramebufferChange(); fbp &= 0xFF000000; fbp |= command & 0xFFFFFF; break;
-		case CMD_FBW: RenderFramebufferChange(); fbp &= 0x00FFFFFF; fbp |= (command & 0xFF0000) << 8; fbw = command & 0x07FC; break;
-		case CMD_ZBP: RenderFramebufferChange(); zbp &= 0xFF000000; zbp |= command & 0xFFFFFF; break;
-		case CMD_ZBW: RenderFramebufferChange(); zbp &= 0x00FFFFFF; zbp |= (command & 0xFF0000) << 8; zbw = command & 0x07FC; break;
-		case CMD_TBP0: textures[0].buffer &= 0xFF000000; textures[0].buffer |= command & 0xFFFFFF; break;
-		case CMD_TBW0: textures[0].buffer &= 0x00FFFFFF; textures[0].buffer |= (command & 0xFF0000) << 8; textures[0].pitch = command & 0x1FFF; break;
-		case CMD_CBP: clut_addr &= 0x0F000000; clut_addr |= command & 0xFFFFF0; break;
-		case CMD_CBW: clut_addr &= 0x00FFFFFF; clut_addr |= (command & 0xF0000) << 8; break;
-		case CMD_XBP1: transfer_source.buffer &= 0xFF000000; transfer_source.buffer |= command & 0xFFFFF0; break;
-		case CMD_XBW1: transfer_source.buffer &= 0x00FFFFFF; transfer_source.buffer |= (command & 0xFF0000) << 8; transfer_source.pitch = command & 0x07F8; break;
-		case CMD_XBP2: transfer_dest.buffer &= 0xFF000000; transfer_dest.buffer |= command & 0xFFFFF0; break;
-		case CMD_XBW2: transfer_dest.buffer &= 0x00FFFFFF; transfer_dest.buffer |= (command & 0xFF0000) << 8; transfer_dest.pitch = command & 0x07F8; break;
-		case CMD_TSIZE0:
-		case CMD_TSIZE1:
-		case CMD_TSIZE2:
-		case CMD_TSIZE3:
-		case CMD_TSIZE4:
-		case CMD_TSIZE5:
-		case CMD_TSIZE6:
-		case CMD_TSIZE7:
-			TSize(command); break;
-		case CMD_TMODE: texture_swizzling = command & 1; break;
-		case CMD_TPF: texture_format = command & 0xFFFFFF; break;
-		case CMD_CLOAD: CLoad(command); break;
-		case CMD_CLUT: CLUT(command); break;
-		case CMD_TFILTER: texture_minify_filter = command & 0x7; texture_magnify_filter = (command >> 8) & 0x7; break;
-		case CMD_TWRAP: u_clamp = (command & 1) != 0; v_clamp = (command & 0x100) != 0; break;
-		case CMD_TLEVEL: texture_level_mode = command & 0x3; texture_level_offset = static_cast<int8_t>((command >> 16) & 0xFF); break;
-		case CMD_TFUNC: TFunc(command); break;
-		case CMD_TEC: environment_texture = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;
-		case CMD_TFLUSH: break;
-		case CMD_TSYNC: break;
-		case CMD_FPF: RenderFramebufferChange(); fpf = command & 7; break;
-		case CMD_CMODE: clear_mode = (command & 1) != 0; clear_mode_depth = (command & 0x400) != 0; break;
-		case CMD_SCISSOR1: scissor_start.x = command & 0x1FF; scissor_start.y = command >> 10 & 0x1FF; break;
-		case CMD_SCISSOR2: scissor_end.x = command & 0x1FF; scissor_end.y = command >> 10 & 0x1FF; break;
-		case CMD_MINZ: min_z = command & 0xFFFF; break;
-		case CMD_MAXZ: max_z = command & 0xFFFF; break;
-		case CMD_ATEST: alpha_test_func = command & 0x7; alpha_test_ref = (command >> 8) & 0xFF; alpha_test_mask = (command >> 16) & 0xFF; break;
-		case CMD_ZTEST: depth_test_func = command & 0x7; break;
-		case CMD_BLEND: Blend(command); break;
-		case CMD_FIXA: blend_afix = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;
-		case CMD_FIXB: blend_bfix = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;
-		case CMD_DITH1: spdlog::warn("Renderer: unimplemented GE command CMD_DITH1"); break;
-		case CMD_DITH2: spdlog::warn("Renderer: unimplemented GE command CMD_DITH2"); break;
-		case CMD_DITH3: spdlog::warn("Renderer: unimplemented GE command CMD_DITH3"); break;
-		case CMD_DITH4: spdlog::warn("Renderer: unimplemented GE command CMD_DITH4"); break;
-		case CMD_ZMSK: depth_write = !(command & 1); break;
-		case CMD_PMSK2: spdlog::warn("Renderer: unimplemented GE command CMD_PMSK2"); break;
-		case CMD_XSTART: XStart(command); break;
-		case CMD_XPOS1: transfer_source.pos.x = command & 0x3FF; transfer_source.pos.y = (command >> 10) & 0x3FF; break;
-		case CMD_XPOS2: transfer_dest.pos.x = command & 0x3FF; transfer_dest.pos.y = (command >> 10) & 0x3FF; break;
-		case CMD_XSIZE: transfer_size.x = command & 0x3FF; transfer_size.y = (command >> 10) & 0x3FF; break;
-		default:
-			spdlog::error("Renderer: unknown GE command {:x}", command >> 24);
-			break;
-		}
+		ExecuteCommand(command);
 		current_dl.current_addr += 4;
 
 		HandleDrawSync();
@@ -206,28 +133,169 @@ void Renderer::Run() {
 			break;
 		}
 	}
+	current_dl.offset_addr = offset;
 }
 
-int Renderer::EnQueueList(uint32_t addr, uint32_t stall_addr) {
+void Renderer::ExecuteCommand(uint32_t command) {
+	auto psp = PSP::GetInstance();
+
+	cmds[command >> 24] = command;
+
+	switch (command >> 24) {
+	case CMD_NOP: break;
+	case CMD_VADR: vaddr = GetBaseAddress(command & 0xFFFFFF); break;
+	case CMD_IADR: iaddr = GetBaseAddress(command & 0xFFFFFF); break;
+	case CMD_PRIM: Prim(command); break;
+	case CMD_BEZIER: spdlog::warn("Renderer: unimplemented GE command CMD_BEZIER"); break;
+	case CMD_BBOX: BBox(command); break;
+	case CMD_JUMP: Jump(command); break;
+	case CMD_BJUMP: BJump(command); break;
+	case CMD_CALL: spdlog::warn("CALL"); psp->ForceExit(); break;
+	case CMD_RET: spdlog::warn("RET"); psp->ForceExit(); break;
+	case CMD_END: End(command); break;
+	case CMD_SIGNAL: break;
+	case CMD_FINISH: break;
+	case CMD_BASE: base = command; break;
+	case CMD_VTYPE: VType(command); break;
+	case CMD_OFFSET: offset = command << 8; break;
+	case CMD_ORIGIN: if (!queue.empty()) { offset = display_lists[queue.front()].current_addr; } break;
+	case CMD_REGION1: min_draw_area = glm::ivec2(command & 0x1FF, command >> 10 & 0x1FF); break;
+	case CMD_REGION2: max_draw_area = glm::ivec2(command & 0x1FF, command >> 10 & 0x1FF); break;
+	case CMD_LTE: spdlog::warn("Renderer: unimplemented GE command CMD_LTE"); break;
+	case CMD_CLE: clip_plane = command & 1; break;
+	case CMD_BCE: culling = command & 1; break;
+	case CMD_TME: textures_enabled = command & 1; break;
+	case CMD_FGE: spdlog::warn("Renderer: unimplemented GE command CMD_FGE"); break;
+	case CMD_DTE: spdlog::warn("Renderer: unimplemented GE command CMD_DTE"); break;
+	case CMD_ABE: blend = command & 1; break;
+	case CMD_ATE: alpha_test = command & 1; break;
+	case CMD_ZTE: depth_test = command & 1; break;
+	case CMD_DIVIDE: spdlog::warn("Renderer: unimplemented GE command CMD_DIVIDE"); break;
+	case CMD_WORLDN: world_matrix_num = command & 0xF; break;
+	case CMD_WORLDD: WorldD(command); break;
+	case CMD_VIEWN: view_matrix_num = command & 0xF; break;
+	case CMD_VIEWD: ViewD(command); break;
+	case CMD_PROJN: projection_matrix_num = command & 0xF; break;
+	case CMD_PROJD: ProjD(command); break;
+	case CMD_SX: viewport_scale.x = std::bit_cast<float>(command << 8); break;
+	case CMD_SY: viewport_scale.y = std::bit_cast<float>(command << 8); break;
+	case CMD_SZ: viewport_scale.z = std::bit_cast<float>(command << 8); break;
+	case CMD_TX: viewport_pos.x = std::bit_cast<float>(command << 8); break;
+	case CMD_TY: viewport_pos.y = std::bit_cast<float>(command << 8); break;
+	case CMD_TZ: viewport_pos.z = std::bit_cast<float>(command << 8); break;
+	case CMD_SU: uv_scale.x = std::bit_cast<float>(command << 8); break;
+	case CMD_SV: uv_scale.y = std::bit_cast<float>(command << 8); break;
+	case CMD_TU: uv_offset.x = std::bit_cast<float>(command << 8); break;
+	case CMD_TV: uv_offset.y = std::bit_cast<float>(command << 8); break;
+	case CMD_OFFSETX: viewport_offset.x = command & 0xFFFFFF; break;
+	case CMD_OFFSETY: viewport_offset.y = command & 0xFFFFFF; break;
+	case CMD_SHADE: gouraud_shading = command & 1; break;
+	case CMD_MATERIAL: material_update = command & 1; break;
+	case CMD_MAC: ambient_color = command & 0xFFFFFF; break;
+	case CMD_MDC: spdlog::warn("Renderer: unimplemented GE command CMD_MDC"); break;
+	case CMD_MSC: spdlog::warn("Renderer: unimplemented GE command CMD_MSC"); break;
+	case CMD_MAA: ambient_alpha = command & 0xFF; break;
+	case CMD_MK: spdlog::warn("Renderer: unimplemented GE command CMD_MK"); break;
+	case CMD_AC: spdlog::warn("Renderer: unimplemented GE command CMD_AC"); break;
+	case CMD_AA: spdlog::warn("Renderer: unimplemented GE command CMD_AA"); break;
+	case CMD_CULL: cull_type = command & 0x1; break;
+	case CMD_FBP: RenderFramebufferChange(); fbp &= 0xFF000000; fbp |= command & 0xFFFFFF; break;
+	case CMD_FBW: RenderFramebufferChange(); fbp &= 0x00FFFFFF; fbp |= (command & 0xFF0000) << 8; fbw = command & 0x07FC; break;
+	case CMD_ZBP: RenderFramebufferChange(); zbp &= 0xFF000000; zbp |= command & 0xFFFFFF; break;
+	case CMD_ZBW: RenderFramebufferChange(); zbp &= 0x00FFFFFF; zbp |= (command & 0xFF0000) << 8; zbw = command & 0x07FC; break;
+	case CMD_TBP0: textures[0].buffer &= 0xFF000000; textures[0].buffer |= command & 0xFFFFFF; break;
+	case CMD_TBW0: textures[0].buffer &= 0x00FFFFFF; textures[0].buffer |= (command & 0xFF0000) << 8; textures[0].pitch = command & 0x1FFF; break;
+	case CMD_CBP: clut_addr &= 0x0F000000; clut_addr |= command & 0xFFFFF0; break;
+	case CMD_CBW: clut_addr &= 0x00FFFFFF; clut_addr |= (command & 0xF0000) << 8; break;
+	case CMD_XBP1: transfer_source.buffer &= 0xFF000000; transfer_source.buffer |= command & 0xFFFFF0; break;
+	case CMD_XBW1: transfer_source.buffer &= 0x00FFFFFF; transfer_source.buffer |= (command & 0xFF0000) << 8; transfer_source.pitch = command & 0x07F8; break;
+	case CMD_XBP2: transfer_dest.buffer &= 0xFF000000; transfer_dest.buffer |= command & 0xFFFFF0; break;
+	case CMD_XBW2: transfer_dest.buffer &= 0x00FFFFFF; transfer_dest.buffer |= (command & 0xFF0000) << 8; transfer_dest.pitch = command & 0x07F8; break;
+	case CMD_TSIZE0:
+	case CMD_TSIZE1:
+	case CMD_TSIZE2:
+	case CMD_TSIZE3:
+	case CMD_TSIZE4:
+	case CMD_TSIZE5:
+	case CMD_TSIZE6:
+	case CMD_TSIZE7:
+		TSize(command); break;
+	case CMD_TMODE: texture_swizzling = command & 1; break;
+	case CMD_TPF: texture_format = command & 0xFFFFFF; break;
+	case CMD_CLOAD: CLoad(command); break;
+	case CMD_CLUT: CLUT(command); break;
+	case CMD_TFILTER: texture_minify_filter = command & 0x7; texture_magnify_filter = (command >> 8) & 0x7; break;
+	case CMD_TWRAP: u_clamp = (command & 1) != 0; v_clamp = (command & 0x100) != 0; break;
+	case CMD_TLEVEL: texture_level_mode = command & 0x3; texture_level_offset = static_cast<int8_t>((command >> 16) & 0xFF); break;
+	case CMD_TFUNC: TFunc(command); break;
+	case CMD_TEC: environment_texture = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;
+	case CMD_TFLUSH: break;
+	case CMD_TSYNC: break;
+	case CMD_FPF: RenderFramebufferChange(); fpf = command & 7; break;
+	case CMD_CMODE: clear_mode = (command & 1) != 0; clear_mode_depth = (command & 0x400) != 0; break;
+	case CMD_SCISSOR1: scissor_start.x = command & 0x1FF; scissor_start.y = command >> 10 & 0x1FF; break;
+	case CMD_SCISSOR2: scissor_end.x = command & 0x1FF; scissor_end.y = command >> 10 & 0x1FF; break;
+	case CMD_MINZ: min_z = command & 0xFFFF; break;
+	case CMD_MAXZ: max_z = command & 0xFFFF; break;
+	case CMD_ATEST: alpha_test_func = command & 0x7; alpha_test_ref = (command >> 8) & 0xFF; alpha_test_mask = (command >> 16) & 0xFF; break;
+	case CMD_ZTEST: depth_test_func = command & 0x7; break;
+	case CMD_BLEND: Blend(command); break;
+	case CMD_FIXA: blend_afix = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;
+	case CMD_FIXB: blend_bfix = { command & 0xFF, command >> 8 & 0xFF, command >> 16 & 0xFF, 0x00 }; break;
+	case CMD_DITH1: spdlog::warn("Renderer: unimplemented GE command CMD_DITH1"); break;
+	case CMD_DITH2: spdlog::warn("Renderer: unimplemented GE command CMD_DITH2"); break;
+	case CMD_DITH3: spdlog::warn("Renderer: unimplemented GE command CMD_DITH3"); break;
+	case CMD_DITH4: spdlog::warn("Renderer: unimplemented GE command CMD_DITH4"); break;
+	case CMD_ZMSK: depth_write = !(command & 1); break;
+	case CMD_PMSK2: spdlog::warn("Renderer: unimplemented GE command CMD_PMSK2"); break;
+	case CMD_XSTART: XStart(command); break;
+	case CMD_XPOS1: transfer_source.pos.x = command & 0x3FF; transfer_source.pos.y = (command >> 10) & 0x3FF; break;
+	case CMD_XPOS2: transfer_dest.pos.x = command & 0x3FF; transfer_dest.pos.y = (command >> 10) & 0x3FF; break;
+	case CMD_XSIZE: transfer_size.x = command & 0x3FF; transfer_size.y = (command >> 10) & 0x3FF; break;
+	default:
+		spdlog::error("Renderer: unknown GE command {:x}", command >> 24);
+		break;
+	}
+}
+
+int Renderer::EnQueueList(uint32_t addr, uint32_t stall_addr, int cbid, SceGeListOptParam* opt, bool head) {
 	DisplayList dl{};
 	dl.start_addr = addr;
 	dl.current_addr = addr & 0x0FFFFFFF;
 	dl.stall_addr = stall_addr & 0x0FFFFFFF;
+	dl.offset_addr = 0;
+	dl.cbid = cbid;
 	dl.valid = true;
+	dl.state = SCE_GE_LIST_QUEUED;
+	if (opt) {
+		if (opt->context) {
+			auto context = reinterpret_cast<uint32_t*>(PSP::GetInstance()->VirtualToPhysical(opt->context));
+			SaveContext(context);
+
+			dl.context_addr = opt->context;
+		}
+
+		if (opt->stack) {
+			dl.stack_addr = opt->stack;
+		}
+	}
 
 	for (int i = next_id; i < display_lists.size(); i++) {
 		if (!display_lists[i].valid) {
 			display_lists[i] = dl;
 			++next_id %= display_lists.size();
-			queue.push_back(i);
+			if (head) {
+				queue.push_front(i);
+			} else {
+				queue.push_back(i);
+			}
 
 			Run();
 
 			return i;
 		}
 	}
-
-	return -1;
+	return SCE_ERROR_OUT_OF_MEMORY;
 }
 
 void Renderer::DeQueueList(int id) {
@@ -244,32 +312,157 @@ void Renderer::DeQueueList(int id) {
 	Run();
 }
 
-bool Renderer::SetStallAddr(int id, uint32_t addr) {
+int Renderer::SetStallAddr(int id, uint32_t addr) {
 	if (id < 0 || id > display_lists.size()) {
-		return false;
+		return SCE_ERROR_INVALID_ID;
 	}
+
 	auto& display_list = display_lists[id];
-	if (display_list.valid) {
-		display_list.stall_addr = addr & 0x0FFFFFFF;
+	if (!display_list.valid) {
+		return SCE_ERROR_INVALID_ID;
+
 	}
 
+	display_list.stall_addr = addr & 0x0FFFFFFF;
 	Run();
-
-	return display_list.valid;
+	return 0;
 }
 
-bool Renderer::SyncThread(int id, int thid) {
-	if (id < 0 && id > display_lists.size()) {
-		return false;
+int Renderer::Break(int mode) {
+	if (queue.empty()) {
+		return SCE_ERROR_ALREADY;
 	}
+
+	if (mode == 1) {
+		queue.clear();
+		for (auto& dl : display_lists) {
+			dl.valid = false;
+		}
+		return 0;
+	}
+
+	int current_list = queue.front();
+	auto& dl = display_lists[current_list];
+	if (!dl.valid) {
+		return -1;
+	}
+
+	if (dl.state == SCE_GE_LIST_PAUSED) {
+		return SCE_ERROR_BUSY;
+	}
+
+	dl.state = SCE_GE_LIST_PAUSED;
+
+	return current_list;
+}
+
+int Renderer::Continue() {
+	if (queue.empty()) {
+		return 0;
+	}
+
+	int current_list = queue.front();
+	auto& dl = display_lists[current_list];
+
+	if (dl.state == SCE_GE_LIST_PAUSED) {
+		dl.state = SCE_GE_LIST_QUEUED;
+		dl.signal = 0;
+		Run();
+	}
+
+	return 0;
+}
+
+int Renderer::GetStack(int index, uint32_t stack_addr) {
+	if (queue.empty()) {
+		return 0;
+	}
+
+	auto& dl = display_lists[queue.front()];
+	if (dl.stack_addr <= index) {
+		return SCE_ERROR_INVALID_INDEX;
+	}
+
+	if (index >= 0) {
+		auto stack = reinterpret_cast<uint32_t*>(PSP::GetInstance()->VirtualToPhysical(stack_addr));
+		if (stack) {
+			auto entry = dl.stack[index];
+			stack[0] = 0;
+			stack[1] = entry.addr;
+			stack[2] = entry.offset_addr;
+			stack[7] = entry.base_addr;
+		}
+	}
+
+	return dl.stack_addr;
+}
+
+bool Renderer::IsBusy() {
+	auto status = GetStatus();
+	if (status == SCE_GE_LIST_DRAWING || status == SCE_GE_LIST_STALLING) {
+		return !queue.empty() && display_lists[queue.front()].state != SCE_GE_LIST_PAUSED;
+	}
+	return false;
+}
+
+int Renderer::GetStatus(int id) {
+	if (id < 0 || id >= display_lists.size()) {
+		return SCE_ERROR_INVALID_ID;
+	}
+
 	auto& display_list = display_lists[id];
-	if (display_list.valid) {
-		SyncWaitingThread thread{};
-		thread.thid = thid;
-		thread.wait = PSP::GetInstance()->GetKernel()->WaitCurrentThread(WaitReason::LIST_SYNC, false);
-		display_list.waiting_threads.push_back(thread);
+	return display_list.state;
+}
+
+int Renderer::GetStatus() {
+	if (queue.empty()) {
+		return SCE_GE_LIST_COMPLETED;
 	}
-	return display_list.valid;
+
+	auto& dl = display_lists[queue.front()];
+
+	if (dl.state == SCE_GE_LIST_COMPLETED) {
+		return SCE_GE_LIST_COMPLETED;
+	}
+
+	if (dl.current_addr == dl.stall_addr) {
+		return SCE_GE_LIST_STALLING;
+	}
+
+	return SCE_GE_LIST_DRAWING;
+}
+
+int Renderer::SyncThread(int id, int thid) {
+	if (id < 0 || id >= display_lists.size()) {
+		return SCE_ERROR_INVALID_ID;
+	}
+
+	auto kernel = PSP::GetInstance()->GetKernel();
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("Renderer: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("Renderer: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+	}
+
+	auto& display_list = display_lists[id];
+	if (!display_list.valid) {
+		if (display_list.state == SCE_GE_LIST_COMPLETED) {
+			return 0;
+		}
+
+		return SCE_ERROR_INVALID_ID;
+	}
+
+	SyncWaitingThread thread{};
+	thread.thid = thid;
+	thread.wait = kernel->WaitCurrentThread(WaitReason::LIST_SYNC, false);
+	display_list.waiting_threads.push_back(thread);
+	return 0;
+
 }
 
 void Renderer::SyncThread(int thid) {
@@ -299,16 +492,77 @@ void Renderer::HandleDrawSync() {
 	}
 }
 
-void Renderer::TransformVertex(Vertex& v) const {
+void Renderer::SaveContext(uint32_t* context) {
+	context[5] = vaddr;
+	context[6] = iaddr;
+	context[7] = offset;
+
+	auto cmds_context = context + 17;
+	for (auto& range : CONTEXT_CMD_RANGES) {
+		for (int i = range.start; i <= range.end; i++) {
+			*cmds_context++ = cmds[i];
+		}
+	}
+
+	*cmds_context++ = bone_matrix_num;
+	*cmds_context++ = world_matrix_num;
+	*cmds_context++ = view_matrix_num;
+	*cmds_context++ = projection_matrix_num;
+	*cmds_context++ = texture_matrix_num;
+
+	auto matrices = reinterpret_cast<uint8_t*>(cmds_context);
+	memcpy(matrices, glm::value_ptr(bone_matrix), sizeof(bone_matrix)); matrices += sizeof(bone_matrix);
+	memcpy(matrices, glm::value_ptr(world_matrix), sizeof(world_matrix)); matrices += sizeof(world_matrix);
+	memcpy(matrices, glm::value_ptr(view_matrix), sizeof(view_matrix)); matrices += sizeof(view_matrix);
+	memcpy(matrices, glm::value_ptr(projection_matrix), sizeof(projection_matrix)); matrices += sizeof(projection_matrix);
+	memcpy(matrices, glm::value_ptr(texture_matrix), sizeof(texture_matrix)); matrices += sizeof(texture_matrix);
+}
+
+void Renderer::RestoreContext(uint32_t* context) {
+	vaddr = context[5];
+	iaddr = context[6];
+	offset = context[7];
+
+	auto cmds_context = context + 17;
+	for (auto& range : CONTEXT_CMD_RANGES) {
+		for (int i = range.start; i <= range.end; i++) {
+			ExecuteCommand(*cmds_context++);
+		}
+	}
+
+	bone_matrix_num = *cmds_context++;
+	world_matrix_num = *cmds_context++;
+	view_matrix_num = *cmds_context++;
+	projection_matrix_num = *cmds_context++;
+	texture_matrix_num = *cmds_context++;
+
+	auto matrices = reinterpret_cast<uint8_t*>(cmds_context);
+	memcpy(glm::value_ptr(bone_matrix), matrices, sizeof(bone_matrix)); matrices += sizeof(bone_matrix);
+	memcpy(glm::value_ptr(world_matrix), matrices, sizeof(world_matrix)); matrices += sizeof(world_matrix);
+	memcpy(glm::value_ptr(view_matrix), matrices, sizeof(view_matrix)); matrices += sizeof(view_matrix);
+	memcpy(glm::value_ptr(projection_matrix), matrices, sizeof(projection_matrix)); matrices += sizeof(projection_matrix);
+	memcpy(glm::value_ptr(texture_matrix), matrices, sizeof(texture_matrix)); matrices += sizeof(texture_matrix);
+}
+
+bool Renderer::TransformVertex(Vertex& v) const {
 	glm::mat4 worldviewproj = world_matrix * view_matrix * projection_matrix;
 	glm::vec4 clip_pos = v.pos * worldviewproj;
 
 	auto translated_pos = glm::vec3(clip_pos) * viewport_scale / clip_pos.w + viewport_pos;
 
+
+	if (translated_pos.x < 0.0f || translated_pos.y < 0.0f || translated_pos.x >= 4096.0f || translated_pos.y >= 4096.0f) {
+		return false;
+	} else if (!clip_plane && (translated_pos.z < 0.0f || translated_pos.z >= 65536.0f)) {
+		return false;
+	}
+
 	v.pos.x = (translated_pos.x * 16 - (viewport_offset.x & 0xFFFF)) * (1.0f / 16.0f);
 	v.pos.y = (translated_pos.y * 16 - (viewport_offset.y & 0xFFFF)) * (1.0f / 16.0f);
 	v.pos.z = translated_pos.z;
 	v.pos.w = clip_pos.w;
+
+	return true;
 }
 
 Vertex Renderer::ParseVertex() {
@@ -320,30 +574,28 @@ Vertex Renderer::ParseVertex() {
 		spdlog::error("Renderer: index not supported");
 	}
 
-	uint32_t base_vaddr = GetBaseAddress(vaddr);
-
 	if (uv_format != FORMAT_NONE) {
 		switch (uv_format) {
 		case FORMAT_BYTE:
-			v.uv.x = psp->ReadMemory8(base_vaddr) * (1.f / 128.f);
-			v.uv.y = psp->ReadMemory8(base_vaddr + 1) * (1.f / 128.f);
-			base_vaddr += 2;
+			v.uv.x = psp->ReadMemory8(vaddr) / 128.f;
+			v.uv.y = psp->ReadMemory8(vaddr + 1) / 128.f;
+			vaddr += 2;
 			break;
 		case FORMAT_SHORT:
-			base_vaddr = ALIGN(base_vaddr, 2);
-			v.uv.x = static_cast<float>(psp->ReadMemory16(base_vaddr));
-			v.uv.y = static_cast<float>(psp->ReadMemory16(base_vaddr + 2));
+			vaddr = ALIGN(vaddr, 2);
+			v.uv.x = static_cast<float>(psp->ReadMemory16(vaddr));
+			v.uv.y = static_cast<float>(psp->ReadMemory16(vaddr + 2));
 			if (!through) {
 				v.uv *= (1.f / 32768.f) * uv_scale;
 				v.uv += uv_offset;
 			}
-			base_vaddr += 4;
+			vaddr += 4;
 			break;
 		case FORMAT_FLOAT:
-			base_vaddr = ALIGN(base_vaddr, 4);
-			v.uv.x = std::bit_cast<float>(psp->ReadMemory32(base_vaddr));
-			v.uv.y = std::bit_cast<float>(psp->ReadMemory32(base_vaddr + 4));
-			base_vaddr += 8;
+			vaddr = ALIGN(vaddr, 4);
+			v.uv.x = std::bit_cast<float>(psp->ReadMemory32(vaddr));
+			v.uv.y = std::bit_cast<float>(psp->ReadMemory32(vaddr + 4));
+			vaddr += 8;
 			break;
 		}
 
@@ -358,24 +610,24 @@ Vertex Renderer::ParseVertex() {
 		v.color = (ambient_alpha << 24) | ambient_color;
 		break;
 	case SCEGU_COLOR_PF5650:
-		base_vaddr = ALIGN(base_vaddr, 2);
-		v.color = BGR565ToABGR8888(psp->ReadMemory16(base_vaddr));
-		base_vaddr += 2;
+		vaddr = ALIGN(vaddr, 2);
+		v.color = BGR565ToABGR8888(psp->ReadMemory16(vaddr));
+		vaddr += 2;
 		break;
 	case SCEGU_COLOR_PF5551:
-		base_vaddr = ALIGN(base_vaddr, 2);
-		v.color = ABGR1555ToABGR8888(psp->ReadMemory16(base_vaddr));
-		base_vaddr += 2;
+		vaddr = ALIGN(vaddr, 2);
+		v.color = ABGR1555ToABGR8888(psp->ReadMemory16(vaddr));
+		vaddr += 2;
 		break;
 	case SCEGU_COLOR_PF4444:
-		base_vaddr = ALIGN(base_vaddr, 2);
-		v.color = ABGR4444ToABGR8888(psp->ReadMemory16(base_vaddr));
-		base_vaddr += 2;
+		vaddr = ALIGN(vaddr, 2);
+		v.color = ABGR4444ToABGR8888(psp->ReadMemory16(vaddr));
+		vaddr += 2;
 		break;
 	case SCEGU_COLOR_PF8888:
-		base_vaddr = ALIGN(base_vaddr, 4);
-		v.color.abgr = psp->ReadMemory32(base_vaddr);
-		base_vaddr += 4;
+		vaddr = ALIGN(vaddr, 4);
+		v.color.abgr = psp->ReadMemory32(vaddr);
+		vaddr += 4;
 		break;
 	}
 
@@ -385,43 +637,42 @@ Vertex Renderer::ParseVertex() {
 
 	switch (position_format) {
 	case FORMAT_BYTE:
-		base_vaddr = ALIGN(base_vaddr, 1);
+		vaddr = ALIGN(vaddr, 1);
 		if (through) {
 			v.pos = glm::vec4(0);
 		} else {
-			v.pos.x = static_cast<int8_t>(psp->ReadMemory8(base_vaddr));
-			v.pos.y = static_cast<int8_t>(psp->ReadMemory8(base_vaddr + 1));
-			v.pos.z = static_cast<int8_t>(psp->ReadMemory8(base_vaddr + 2));
+			v.pos.x = static_cast<int8_t>(psp->ReadMemory8(vaddr));
+			v.pos.y = static_cast<int8_t>(psp->ReadMemory8(vaddr + 1));
+			v.pos.z = static_cast<int8_t>(psp->ReadMemory8(vaddr + 2));
 			v.pos *= 1.0f / 128.0f;
 		}
-		base_vaddr += 3;
+		vaddr += 3;
 		break;
 	case FORMAT_SHORT:
-		base_vaddr = ALIGN(base_vaddr, 2);
-		v.pos.x = static_cast<int16_t>(psp->ReadMemory16(base_vaddr));
-		v.pos.y = static_cast<int16_t>(psp->ReadMemory16(base_vaddr + 2));
-		v.pos.z = static_cast<uint16_t>(psp->ReadMemory16(base_vaddr + 4));
+		vaddr = ALIGN(vaddr, 2);
+		v.pos.x = static_cast<int16_t>(psp->ReadMemory16(vaddr));
+		v.pos.y = static_cast<int16_t>(psp->ReadMemory16(vaddr + 2));
+		v.pos.z = static_cast<uint16_t>(psp->ReadMemory16(vaddr + 4));
 		if (!through) {
 			v.pos *= 1.0f / 32768.0f;
 		}
-		base_vaddr += 6;
+		vaddr += 6;
 		break;
 	case FORMAT_FLOAT:
-		base_vaddr = ALIGN(base_vaddr, 4);
-		v.pos.x = std::bit_cast<float>(psp->ReadMemory32(base_vaddr));
-		v.pos.y = std::bit_cast<float>(psp->ReadMemory32(base_vaddr + 4));
-		v.pos.z = std::bit_cast<float>(psp->ReadMemory32(base_vaddr + 8));
-		base_vaddr += 12;
+		vaddr = ALIGN(vaddr, 4);
+		v.pos.x = std::bit_cast<float>(psp->ReadMemory32(vaddr));
+		v.pos.y = std::bit_cast<float>(psp->ReadMemory32(vaddr + 4));
+		v.pos.z = std::bit_cast<float>(psp->ReadMemory32(vaddr + 8));
+		vaddr += 12;
 		break;
 	}
 
 	v.pos.w = 1.0;
 	if (!through) {
-		TransformVertex(v);
+		if (!TransformVertex(v)) {
+			v.pos.w = std::numeric_limits<double>::quiet_NaN();
+		}
 	}
-
-	uint32_t size = base_vaddr - GetBaseAddress(vaddr);
-	vaddr += size;
 
 	return v;
 }
@@ -501,6 +752,21 @@ void Renderer::Prim(uint32_t opcode) {
 	executed_cycles = count * 40;
 
 	switch (primitive_type) {
+	case SCEGU_PRIM_POINTS:
+		for (auto& vertex : vertices) {
+			DrawPoint(vertex);
+		}
+		break;
+	case SCEGU_PRIM_LINES:
+		for (int i = 0; i < vertices.size() - 1; i += 2) {
+			DrawLine(vertices[i], vertices[i + 1]);
+		}
+		break;
+	case SCEGU_PRIM_LINE_STRIP:
+		if (count >= 2) {
+			DrawLineStrip(vertices);
+		}
+		break;
 	case SCEGU_PRIM_TRIANGLES:
 		if (count >= 3) {
 			for (int i = 0; i < vertices.size() - 2; i += 3) {
@@ -508,12 +774,11 @@ void Renderer::Prim(uint32_t opcode) {
 			}
 		}
 		break;
-	case SCEGU_PRIM_TRIANGLE_STRIP: {
+	case SCEGU_PRIM_TRIANGLE_STRIP:
 		if (count >= 3) {
 			DrawTriangleStrip(vertices);
 		}
 		break;
-	}
 	case SCEGU_PRIM_TRIANGLE_FAN: 
 		if (count >= 3) {
 			DrawTriangleFan(vertices);
@@ -529,7 +794,9 @@ void Renderer::Prim(uint32_t opcode) {
 	}
 }
 
-void Renderer::BBox(DisplayList& dl, uint32_t opcode) {
+void Renderer::BBox(uint32_t opcode) {
+	auto& dl = display_lists[queue.front()];
+
 	uint16_t count = opcode & 0xFFFF;
 
 	executed_cycles += count * 22;
@@ -609,21 +876,75 @@ void Renderer::BBox(DisplayList& dl, uint32_t opcode) {
 	through = through_before;
 }
 
-void Renderer::End(DisplayList& dl, uint32_t opcode) {
-	executed_cycles += 60;
-	dl.valid = false;
-	queue.pop_front();
-	HandleListSync(dl);
-	FlushRender();
+void Renderer::End(uint32_t opcode) {
+	auto& dl = display_lists[queue.front()];
+
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+	auto cpu = psp->GetCPU();
+
+	uint32_t prev = psp->ReadMemory32(dl.current_addr - 4);
+	switch (prev >> 24) {
+	case CMD_SIGNAL: {
+		bool trigger_interrupt = true;
+		uint32_t signal = (prev >> 16) & 0xFF;
+		dl.signal = signal;
+		switch (signal) {
+		case SCE_GE_SIGNAL_SIGNAL_PAUSE:
+			trigger_interrupt = false;
+			break;
+		default:
+			trigger_interrupt = false;
+			spdlog::error("Renderer: unknown signal {}", signal);
+			break;
+		}
+
+		if (trigger_interrupt && dl.cbid != 0) {
+			TriggerInterrupt(PSP_GE_INTR, (dl.cbid << 1) | 1, prev & 0xFFFF);
+		}
+		break;
+	}
+	case CMD_FINISH:
+		switch (dl.signal) {
+		case SCE_GE_SIGNAL_SIGNAL_PAUSE:
+			dl.state = SCE_GE_LIST_PAUSED;
+			if (dl.cbid != 0) {
+				TriggerInterrupt(PSP_GE_INTR, (dl.cbid << 1) | 1, prev & 0xFFFF);
+			}
+			break;
+		default:
+			if (dl.context_addr) {
+				auto context = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(dl.context_addr));
+				RestoreContext(context);
+			}
+
+			dl.state = SCE_GE_LIST_COMPLETED;
+			dl.valid = false;
+			queue.pop_front();
+			HandleListSync(dl);
+			FlushRender();
+
+			if (dl.cbid != 0) {
+				TriggerInterrupt(PSP_GE_INTR, (dl.cbid << 1), prev & 0xFFFF);
+			}
+			break;
+		}
+		break;
+	default:
+		spdlog::warn("Renderer: End called with unknown previous command");
+		break;
+	}
 }
 
-void Renderer::Jump(DisplayList& dl, uint32_t opcode) {
+void Renderer::Jump(uint32_t opcode) {
+	auto& dl = display_lists[queue.front()];
 	uint32_t current = dl.current_addr;
 	dl.current_addr = GetBaseAddress(opcode & 0xFFFFFC) - 4;
 	executed_cycles += (dl.current_addr - current) / 2;
 }
 
-void Renderer::BJump(DisplayList& dl, uint32_t opcode) {
+void Renderer::BJump(uint32_t opcode) {
+	auto& dl = display_lists[queue.front()];
 	if (!dl.bounding_box_check) {
 		uint32_t current = dl.current_addr;
 		dl.current_addr = GetBaseAddress(opcode & 0xFFFFFC) - 4;

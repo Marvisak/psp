@@ -13,18 +13,18 @@ struct Frame {
 	int format;
 };
 
-Frame CURRENT_FRAME{};
-Frame LATCHED_FRAME{};
-bool FRAME_LATCHED = false;
+static Frame CURRENT_FRAME{};
+static Frame LATCHED_FRAME{};
+static bool FRAME_LATCHED = false;
 
-int VBLANK_COUNT = 0;
+static int VBLANK_COUNT = 0;
 
 struct VBlankThread {
 	int thid;
 	std::shared_ptr<WaitObject> wait;
 };
 
-std::vector<VBlankThread> VBLANK_THREADS{};
+static std::vector<VBlankThread> VBLANK_THREADS{};
 
 static void VBlankEndHandler(uint64_t cycles_late) {
 	PSP::GetInstance()->SetVBlank(false);
@@ -54,16 +54,29 @@ static void VBlankHandler(uint64_t cycles_late) {
 	uint64_t cycles = frame_cycles - cycles_late;
 	psp->Schedule(cycles, VBlankHandler);
 	psp->Schedule(MS_TO_CYCLES(0.7315), VBlankEndHandler);
+
+	TriggerInterrupt(PSP_VBLANK_INTR);
 }
 
-static void VBlankWait(bool allow_callbacks) {
+static int VBlankWait(bool allow_callbacks) {
 	auto kernel = PSP::GetInstance()->GetKernel();
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("VBlankWait: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("VBlankWait: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+	}
 
 	VBlankThread thread{};
 	thread.thid = kernel->GetCurrentThread();
 	thread.wait = kernel->WaitCurrentThread(WaitReason::VBLANK, allow_callbacks);
 
 	VBLANK_THREADS.push_back(thread);
+
+	return 0;
 }
 
 static int sceDisplaySetMode(int mode, int display_width, int display_height) {
@@ -155,17 +168,18 @@ static int sceDisplaySetFrameBuf(uint32_t frame_buffer_address, int frame_width,
 }
 
 static int sceDisplayWaitVblankStart() {
-	VBlankWait(false);
-	return 0;
+	return VBlankWait(false);
+}
+
+static int sceDisplayWaitVblankStartCB() {
+	return VBlankWait(false);
 }
 
 static int sceDisplayWaitVblank() {
 	auto psp = PSP::GetInstance();
 	if (!psp->IsVBlank()) {
-		VBlankWait(false);
-		return 0;
-	}
-	else {
+		return VBlankWait(false);
+	} else {
 		psp->EatCycles(1110);
 		psp->GetKernel()->HLEReschedule();
 		return 1;
@@ -175,10 +189,8 @@ static int sceDisplayWaitVblank() {
 static int sceDisplayWaitVblankCB() {
 	auto psp = PSP::GetInstance();
 	if (!psp->IsVBlank()) {
-		VBlankWait(true);
-		return 0;
-	}
-	else {
+		return VBlankWait(true);;
+	} else {
 		psp->EatCycles(1110);
 		psp->GetKernel()->HLEReschedule();
 		return 1;
@@ -211,6 +223,7 @@ FuncMap RegisterSceDisplay() {
 	funcs[0x36CDFADE] = HLEWrap(sceDisplayWaitVblank);
 	funcs[0x8EB9EC49] = HLEWrap(sceDisplayWaitVblankCB);
 	funcs[0x984C27E7] = HLEWrap(sceDisplayWaitVblankStart);
+	funcs[0x46F186C3] = HLEWrap(sceDisplayWaitVblankStartCB);
 	funcs[0x4D4E10EC] = HLEWrap(sceDisplayIsVblank);
 	funcs[0xDBA6C4C4] = HLEWrap(sceDisplayGetFramePerSec);
 	funcs[0x9C6EAAD7] = HLEWrap(sceDisplayGetVcount);

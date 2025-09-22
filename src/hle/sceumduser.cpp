@@ -10,10 +10,12 @@ struct UmdThread {
 	std::shared_ptr<WaitObject> wait;
 };
 
-int UMD_CBID = 0;
-bool UMD_ACTIVATED = false;
-std::shared_ptr<ScheduledEvent> UMD_ACTIVATE_SCHEDULE;
-std::unordered_map<int, UmdThread> WAITING_THREADS{};
+static int UMD_CBID = 0;
+static bool UMD_ACTIVATED = false;
+static std::shared_ptr<ScheduledEvent> UMD_ACTIVATE_SCHEDULE;
+static std::unordered_map<int, UmdThread> WAITING_THREADS{};
+
+constexpr uint32_t UMD_STAT_ALLOW_WAIT = SCE_UMD_MEDIA_OUT | SCE_UMD_MEDIA_IN | SCE_UMD_MEDIA_CHG | SCE_UMD_READY | SCE_UMD_READABLE;
 
 static uint32_t GetUmdState() {
 	uint32_t state = SCE_UMD_MEDIA_IN | SCE_UMD_READY;
@@ -42,10 +44,8 @@ static void UmdWaitWithTimeout(uint32_t state, int timer, bool allow_callbacks) 
 
 	UmdThread thread{};
 	thread.state = state;
-	thread.timeout = psp->Schedule(US_TO_CYCLES(timer), [thid](uint64_t _) {
-		auto kernel = PSP::GetInstance()->GetKernel();
-
-		auto& thread = WAITING_THREADS[thid];
+	thread.wait = kernel->WaitCurrentThread(WaitReason::UMD, allow_callbacks);
+	thread.timeout = psp->Schedule(US_TO_CYCLES(timer), [=](uint64_t _) {
 		thread.wait->ended = true;
 		if (kernel->WakeUpThread(thid)) {
 			auto waiting_thread = kernel->GetKernelObject<Thread>(thid);
@@ -54,7 +54,6 @@ static void UmdWaitWithTimeout(uint32_t state, int timer, bool allow_callbacks) 
 
 		WAITING_THREADS.erase(thid);
 	});
-	thread.wait = kernel->WaitCurrentThread(WaitReason::UMD, allow_callbacks);
 
 	WAITING_THREADS[thid] = thread;
 }
@@ -146,6 +145,20 @@ static int sceUmdWaitDriveStat(uint32_t state) {
 	auto psp = PSP::GetInstance();
 	auto kernel = psp->GetKernel();
 
+	if ((state & UMD_STAT_ALLOW_WAIT) == 0) {
+		return SCE_ERROR_ERRNO_EINVAL;
+	}
+
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("sceUmdWaitDriveStat: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("sceUmdWaitDriveStat: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+	}
+
 	psp->EatCycles(520);
 	if ((GetUmdState() & state) == 0) {
 		int thid = kernel->GetCurrentThread();
@@ -162,6 +175,22 @@ static int sceUmdWaitDriveStat(uint32_t state) {
 
 static int sceUmdWaitDriveStatWithTimer(uint32_t state, int timer) {
 	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	if ((state & UMD_STAT_ALLOW_WAIT) == 0) {
+		return SCE_ERROR_ERRNO_EINVAL;
+	}
+
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("sceUmdWaitDriveStatWithTimer: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("sceUmdWaitDriveStatWithTimer: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+	}
+
 	psp->EatCycles(520);
 	if ((GetUmdState() & state) == 0) {
 		UmdWaitWithTimeout(state, timer, false);
@@ -174,8 +203,22 @@ static int sceUmdWaitDriveStatWithTimer(uint32_t state, int timer) {
 static int sceUmdWaitDriveStatCB(uint32_t state, int timer) {
 	auto psp = PSP::GetInstance();
 	auto kernel = psp->GetKernel();
-	int thid = kernel->GetCurrentThread();
 
+	if ((state & UMD_STAT_ALLOW_WAIT) == 0) {
+		return SCE_ERROR_ERRNO_EINVAL;
+	}
+
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("sceUmdWaitDriveStatCB: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("sceUmdWaitDriveStatCB: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+	}
+
+	int thid = kernel->GetCurrentThread();
 	psp->EatCycles(520);
 	kernel->CheckCallbacksOnThread(thid);
 

@@ -13,7 +13,7 @@ struct ControllerThread {
 	bool negative;
 };
 
-const std::map<SDL_Scancode, uint32_t> KEYBOARD_BUTTONS {
+static const std::map<SDL_Scancode, uint32_t> KEYBOARD_BUTTONS {
 	{SDL_SCANCODE_V, SCE_CTRL_SELECT},
 	{SDL_SCANCODE_SPACE, SCE_CTRL_START},
 	{SDL_SCANCODE_UP, SCE_CTRL_UP},
@@ -29,7 +29,7 @@ const std::map<SDL_Scancode, uint32_t> KEYBOARD_BUTTONS {
 };
 
 
-const std::map<SDL_GamepadButton, uint32_t> CONTROLLER_BUTTONS {
+static const std::map<SDL_GamepadButton, uint32_t> CONTROLLER_BUTTONS {
 	{SDL_GAMEPAD_BUTTON_BACK, SCE_CTRL_SELECT},
 	{SDL_GAMEPAD_BUTTON_START, SCE_CTRL_START},
 	{SDL_GAMEPAD_BUTTON_DPAD_UP, SCE_CTRL_UP},
@@ -44,17 +44,17 @@ const std::map<SDL_GamepadButton, uint32_t> CONTROLLER_BUTTONS {
 	{SDL_GAMEPAD_BUTTON_WEST, SCE_CTRL_SQUARE},
 };
 
-std::deque<ControllerThread> WAITING_THREADS{};
-std::vector<SceCtrlData> CTRL_BUFFER{};
+static std::deque<ControllerThread> WAITING_THREADS{};
+static std::vector<SceCtrlData> CTRL_BUFFER{};
 
-std::shared_ptr<ScheduledEvent> SAMPLE_EVENT{};
+static std::shared_ptr<ScheduledEvent> SAMPLE_EVENT{};
 
-uint32_t CTRL_MODE = SCE_CTRL_MODE_DIGITALONLY;
-uint32_t CTRL_CYCLE = 0;
-uint32_t PREVIOUS_BUTTONS = 0;
+static uint32_t CTRL_MODE = SCE_CTRL_MODE_DIGITALONLY;
+static uint32_t CTRL_CYCLE = 0;
+static uint32_t PREVIOUS_BUTTONS = 0;
 
-int LATCH_COUNT = 0;
-SceCtrlLatch LATCH{};
+static int LATCH_COUNT = 0;
+static SceCtrlLatch LATCH{};
 
 static uint32_t GetButtons() {
 	uint32_t buttons = 0;
@@ -171,6 +171,16 @@ static int sceCtrlReadBufferPositive(uint32_t data_addr, int bufs) {
 
 	auto psp = PSP::GetInstance();
 	auto kernel = psp->GetKernel();
+
+	if (kernel->IsInInterrupt()) {
+		spdlog::warn("sceCtrlReadBufferPositive: in interrupt");
+		return SCE_KERNEL_ERROR_ILLEGAL_CONTEXT;
+	}
+
+	if (!kernel->IsDispatchEnabled()) {
+		spdlog::warn("sceCtrlReadBufferPositive: dispatch disabled");
+		return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+	}
 
 	psp->EatCycles(330);
 	if (CTRL_BUFFER.empty()) {

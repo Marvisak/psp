@@ -9,6 +9,7 @@
 #include "module.hpp"
 #include "thread.hpp"
 #include "callback.hpp"
+#include "eventflag.hpp"
 #include "semaphore.hpp"
 #include "filesystem/filesystem.hpp"
 
@@ -93,13 +94,18 @@ bool Kernel::ExecModule(int uid) {
 
 // TODO: Maybe add some cycle counting to this?
 int Kernel::Reschedule() {
+	auto psp = PSP::GetInstance();
+	if (in_interrupt || !IsDispatchEnabled()) {
+		return -1;
+	}
+
 	CheckCallbacks();
 
 	auto current_thread_obj = GetKernelObject<Thread>(current_thread);
 	bool current_thread_valid = !force_reschedule && current_thread_obj && current_thread_obj->GetState() == ThreadState::RUN;
 	reschedule = false;
 	force_reschedule = false;
-	for (int priority = 0; priority < thread_ready_queue.size(); priority++) {
+	for (int priority = 8; priority < thread_ready_queue.size(); priority++) {
 		auto& ready_threads = thread_ready_queue[priority];
 		if (ready_threads.empty()) {
 			continue;
@@ -145,11 +151,9 @@ int Kernel::Reschedule() {
 
 		current_thread = -1;
 
-		auto psp = PSP::GetInstance();
-
 		// At this point there is no CPU activity happening
 		// We could either wait for something to happen, or just jump through scheduled events until the thread is changed
-		while (current_thread == -1 && !psp->IsClosed()) {
+		while (current_thread == -1 && !psp->IsClosed() && !in_interrupt) {
 			psp->JumpToNextEvent();
 		}
 	} else if (current_thread_obj->HasPendingCallback()) {
@@ -198,10 +202,14 @@ int Kernel::CreateThread(std::string name, uint32_t entry, int init_priority, ui
 
 void Kernel::StartThread(int thid, int arg_size, uint32_t arg_block_addr) {
 	auto thread = GetKernelObject<Thread>(thid);
-
 	thread->Start(arg_size, arg_block_addr);
 	thread->SetState(ThreadState::READY);
 	AddThreadToQueue(thid);
+
+	auto current_thread = GetKernelObject<Thread>(GetCurrentThread());
+	if (current_thread && current_thread->GetPriority() <= thread->GetPriority()) {
+		dispatch_enabled = true;
+	}
 }
 
 int Kernel::CreateCallback(std::string name, uint32_t entry, uint32_t common) {
@@ -264,6 +272,12 @@ int Kernel::CreateMutex(std::string name, uint32_t attr, int init_count) {
 	auto mutex = std::make_unique<Mutex>(name, attr, init_count);
 	return AddKernelObject(std::move(mutex));
 }
+
+int Kernel::CreateEventFlag(std::string name, uint32_t attr, uint32_t init_pattern) {
+	auto event_flag = std::make_unique<EventFlag>(name, attr, init_pattern);
+	return AddKernelObject(std::move(event_flag));
+}
+
 
 void Kernel::Mount(std::string mount_point, std::shared_ptr<FileSystem> file_system) {
 	drives[mount_point] = file_system;
@@ -478,7 +492,11 @@ void Kernel::ExecHLEFunction(int import_index) {
 	}
 	skip_deadbeef = false;
 
-	if (reschedule) {
+
+	if (interrupt && interrupts_enabled) {
+		HandleInterrupts();
+		interrupt = false;
+	} else if (reschedule) {
 		psp->ExecuteEvents();
 		Reschedule();
 	}

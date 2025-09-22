@@ -781,7 +781,7 @@ TextureCacheEntry SoftwareRenderer::DecodeTexture() {
 	default:
 		spdlog::error("SoftwareRenderer: unknown texture format {}", texture_format);
 	}
-	texture_cache[texture.buffer] = cache;
+	//texture_cache[texture.buffer] = cache;
 
 	return cache;
 }

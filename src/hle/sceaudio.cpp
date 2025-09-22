@@ -19,8 +19,8 @@ struct AudioChannel {
 	std::deque<int16_t> samples{};
 };
 
-std::vector<AudioThread> WAITING_THREADS{};
-std::array<AudioChannel, 9> CHANNELS{};
+static std::vector<AudioThread> WAITING_THREADS{};
+static std::array<AudioChannel, 9> CHANNELS{};
 
 static void AudioUpdate(uint64_t cycles_late) {
 	auto psp = PSP::GetInstance();
@@ -39,23 +39,32 @@ static void AudioUpdate(uint64_t cycles_late) {
 		}
 	}
 
+	int count = 0;
 	for (auto& channel : CHANNELS) {
 		if (!channel.reserved || channel.samples.empty()) {
 			continue;
 		}
 
 		if (channel.samples.size() < 128) {
-			spdlog::error("AudioUpdate: not enough samples in queue");
 			continue;
 		}
 
+		count++;
 		for (int i = 0; i < 128; i++) {
 			buffer[i] += channel.samples.front();
 			channel.samples.pop_front();
 		}
 	}
 
-	SDL_PutAudioStreamData(psp->GetAudioStream(), buffer, 256);
+	if (count) {
+		for (int i = 0; i < 128; i++) {
+			buffer[i] /= count;
+		}
+
+	}
+
+	auto stream = psp->GetAudioStream();
+	SDL_PutAudioStreamData(stream, buffer, 256);
 
 	psp->Schedule((US_TO_CYCLES(1000000ULL) * 64 / 44100) - cycles_late, AudioUpdate);
 }
@@ -72,11 +81,17 @@ static int PushAudio(int channel, int left_vol, int right_vol, uint32_t buf_addr
 
 	if (!ch.samples.empty()) {
 		if (blocking) {
-			AudioThread thread{};
-			thread.thid = kernel->GetCurrentThread();
-			thread.wait = kernel->WaitCurrentThread(WaitReason::AUDIO, false);
-			thread.samples = ch.samples.size() / 2;
-			WAITING_THREADS.push_back(thread);
+			if (kernel->IsDispatchEnabled()) {
+				AudioThread thread{};
+				thread.thid = kernel->GetCurrentThread();
+				thread.wait = kernel->WaitCurrentThread(WaitReason::AUDIO, false);
+				thread.samples = ch.samples.size() / 2;
+				WAITING_THREADS.push_back(thread);
+			} else {
+				spdlog::warn("PushAudio: dispatch disabled");
+				return SCE_KERNEL_ERROR_CAN_NOT_WAIT;
+			}
+
 		} else {
 			return SCE_AUDIO_ERROR_OUTPUT_BUSY;
 		}
@@ -89,18 +104,21 @@ static int PushAudio(int channel, int left_vol, int right_vol, uint32_t buf_addr
 	if (right_vol != 0) {
 		ch.left_vol = right_vol;
 	}
-
-	if (!ch.stereo) {
-		spdlog::error("PushAudio: mono unimplemented");
-		return 0;
-	}
 	
 	if (buf_addr != 0) {
 		int16_t* buf = reinterpret_cast<int16_t*>(psp->VirtualToPhysical(buf_addr));
-		for (int i = 0; i < ch.sample_count * 2; i++) {
-			int vol = i % 2 == 0 ? left_vol : right_vol;
-			ch.samples.push_back((buf[i] * vol) >> 15);
+		if (ch.stereo) {
+			for (int i = 0; i < ch.sample_count * 2; i += 2) {
+				ch.samples.push_back((buf[i] * left_vol) >> 15);
+				ch.samples.push_back((buf[i + 1] * right_vol) >> 15);
+			}
+		} else {
+			for (int i = 0; i < ch.sample_count; i++) {
+				ch.samples.push_back((buf[i] * left_vol) >> 15);
+				ch.samples.push_back((buf[i] * right_vol) >> 15);
+			}
 		}
+
 	} else if (channel == 8) {
 		return 0;
 	}
@@ -385,6 +403,9 @@ static int sceAudioSRCChReserve(int sample_count, int freq, int format) {
 	}
 
 	channel.reserved = true;
+	channel.stereo = true;
+	channel.sample_count = sample_count;
+
 	return 0;
 }
 
@@ -406,7 +427,8 @@ static int sceAudioSRCChRelease() {
 }
 
 FuncMap RegisterSceAudio() {
-	PSP::GetInstance()->Schedule(US_TO_CYCLES(1000000ULL) * 64 / 44100, AudioUpdate);
+	auto psp = PSP::GetInstance();
+	psp->Schedule(US_TO_CYCLES(1000000ULL) * 64 / 44100, AudioUpdate);
 
 	FuncMap funcs;
 	funcs[0x8C1009B2] = HLEWrap(sceAudioOutput);

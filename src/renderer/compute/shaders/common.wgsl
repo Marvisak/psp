@@ -36,6 +36,7 @@ override DEPTH_WRITE: u32 = 0;
 override GOURAUD_SHADING: u32 = 0;
 
 @group(0) @binding(0) var framebuffer: texture_storage_2d<rgba8uint, read_write>;
-@group(0) @binding(1) var depthBuffer: texture_storage_2d<r16uint, read_write>;
+@group(0) @binding(1) var framebuffer16: texture_storage_2d<r16uint, read_write>;
+@group(0) @binding(2) var depthBuffer: texture_storage_2d<r16uint, read_write>;
 @group(1) @binding(0) var<uniform> renderData: RenderData; 
 )"

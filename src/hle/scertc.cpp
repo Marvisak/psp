@@ -8,7 +8,7 @@ constexpr auto RTC_OFFSET = 62135596800000000;
 static SceKernelTimeval BASE_TIME{};
 static uint64_t BASE_TICKS{};
 
-#ifdef WIN32
+#ifdef _WIN32
 #define timegm _mkgmtime
 #endif
 

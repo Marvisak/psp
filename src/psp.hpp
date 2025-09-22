@@ -3,6 +3,9 @@
 #include <string>
 #include <cstdint>
 #include <functional>
+#include <filesystem>
+
+#undef CALLBACK
 
 #include "cpu.hpp"
 #include "renderer/renderer.hpp"
@@ -12,6 +15,7 @@ constexpr auto FASTMEM = true;
 
 constexpr auto PAGE_SIZE = 0x100000;
 constexpr auto RAM_SIZE = 0x4000000;
+constexpr auto VRAM_SIZE = 0x200000;
 constexpr auto KERNEL_MEMORY_START = 0x08000000;
 constexpr auto USER_MEMORY_START = 0x08800000;
 constexpr auto USER_MEMORY_END = KERNEL_MEMORY_START + RAM_SIZE;
@@ -87,6 +91,8 @@ public:
 		*reinterpret_cast<uint64_t*>(VirtualToPhysical(addr)) = value;
 	}
 
+	std::filesystem::path GetMemstickPath() const { return memstick_path; }
+
 	std::shared_ptr<ScheduledEvent> Schedule(uint64_t cycles, SchedulerFunc func);
 	void Unschedule(std::shared_ptr<ScheduledEvent> event);
 	void GetEarliestEvent();
@@ -105,6 +111,8 @@ private:
 	std::unique_ptr<Kernel> kernel;
 	std::unique_ptr<CPU> cpu;
 
+	std::filesystem::path memstick_path{};
+
 	SDL_Gamepad* controller{};
 	SDL_AudioStream* audio_stream{};
 
@@ -112,12 +120,14 @@ private:
 	bool vblank = false;
 	bool close = false;
 
+
 	uint64_t earliest_event_cycles = -1;
 	uint64_t cycles = 0;
 	std::vector<std::shared_ptr<ScheduledEvent>> events;
 	std::unique_ptr<uint8_t[]> ram;
 	std::unique_ptr<uint8_t[]> vram;
 	std::unique_ptr<uintptr_t[]> page_table;
+	uintptr_t virtual_mem_start{};
 };
 
 void UnixTimestampToDateTime(tm* time, ScePspDateTime* out);

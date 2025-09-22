@@ -22,11 +22,17 @@ extern std::vector<ImportData> hle_imports;
 void ReturnFromModule(CPU* _);
 void ReturnFromThread(CPU* cpu);
 void ReturnFromCallback(CPU* cpu);
+void ReturnFromInterrupt(CPU* cpu);
 
 void RegisterHLE();
 int GetHLEIndex(std::string module, uint32_t nid);
 
 void HLEDelay(int usec);
+
+void TriggerInterrupt(int intr_number, int subintr_number = -1, int ge_arg = -1);
+bool HandleInterrupts();
+int RegisterSubIntrHandler(int intr_number, int subintr_number, uint32_t handler, uint32_t arg, bool enabled = false);
+int ReleaseSubIntr(int intr_number, int subintr_number);
 
 FuncMap RegisterModuleMgrForUser();
 FuncMap RegisterSysMemUserForUser();
@@ -44,12 +50,13 @@ FuncMap RegisterSceDmac();
 FuncMap RegisterUtilsForUser();
 FuncMap RegisterSceAudio();
 FuncMap RegisterScePower();
-FuncMap RegisterSceAtrac3Plus();
 FuncMap RegisterSceUmdUser();
 FuncMap RegisterSceRtc();
 FuncMap RegisterSceSuspendForUser();
 FuncMap RegisterInterruptManager();
 FuncMap RegisterSceVAudio();
+FuncMap RegisterSceSasCore();
+FuncMap RegisterSceImpose();
 
 struct ArgReader {
 	CPU* cpu;
@@ -61,6 +68,7 @@ struct ArgReader {
 		if constexpr (std::is_same_v<T, int> || std::is_same_v<T, uint32_t>) {
 			return value;
 		} else if constexpr (std::is_same_v<T, int64_t>) {
+			value = cpu->GetRegister(MIPS_REG_A0 + index++);
 			uint32_t value2 = cpu->GetRegister(MIPS_REG_A0 + index++);
 			return static_cast<T>(value) | (static_cast<T>(value2) << 32);
 		} else if constexpr (std::is_same_v<T, const char*>) {
@@ -83,6 +91,7 @@ WrapperFunc HLEWrap(Ret(*func)(Args...)) {
 			Ret value = std::apply(func, args);
 			if constexpr (std::is_same_v<Ret, int> || std::is_same_v<Ret, uint32_t> || std::is_same_v<Ret, bool>) {
 				cpu->SetRegister(MIPS_REG_V0, value);
+				cpu->SetRegister(MIPS_REG_V1, 0);
 			} else if constexpr (std::is_same_v<Ret, int64_t> || std::is_same_v<Ret, uint64_t>) {
 				cpu->SetRegister(MIPS_REG_V0, value & 0xFFFFFFFF);
 				cpu->SetRegister(MIPS_REG_V1, value >> 32);

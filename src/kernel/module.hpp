@@ -55,6 +55,8 @@ public:
 	bool Load();
 	bool LoadELF(std::istringstream ss);
 
+	uint32_t GetStart() const { return start; }
+	uint32_t GetSize() const { return size; }
 	uint32_t GetOffset() const { return offset; }
 	uint32_t GetEntrypoint() const { return entrypoint; }
 	uint32_t GetGP() const { return gp; }
@@ -68,6 +70,8 @@ private:
 	std::string name;
 	ELFIO::elfio elfio;
 
+	uint32_t start = 0;
+	uint32_t size = 0;
 	uint32_t offset = 0;
 	uint32_t gp = 0;
 	uint32_t entrypoint = 0;

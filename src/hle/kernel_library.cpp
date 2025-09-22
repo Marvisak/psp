@@ -50,13 +50,37 @@ static uint32_t sceKernelMemcpy(uint32_t dest, uint32_t src, uint32_t size) {
 }
 
 static int sceKernelCpuSuspendIntr() {
-	spdlog::error("sceKernelCpuSuspendIntr()");
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	psp->EatCycles(15);
+	if (kernel->InterruptsEnabled()) {
+		kernel->SetInterruptsEnabled(false);
+		return 1;
+	}
 	return 0;
 }
 
-static int sceKernelCpuResumeIntr() {
-	spdlog::error("sceKernelCpuResumeIntr()");
-	return 0;
+static void sceKernelCpuResumeIntr(int enable) {
+	auto psp = PSP::GetInstance();
+	auto kernel = psp->GetKernel();
+
+	psp->EatCycles(15);
+	if (enable) {
+		kernel->SetInterruptsEnabled(true);
+		kernel->HLETriggerInterrupts();
+		kernel->HLEReschedule();
+	} else {
+		kernel->SetInterruptsEnabled(true);
+	}
+}
+
+static int sceKernelIsCpuIntrEnable() {
+	return PSP::GetInstance()->GetKernel()->InterruptsEnabled();
+}
+
+static int sceKernelIsCpuIntrSuspended(int flag) {
+	return flag == 0 ? 1 : 0;
 }
 
 FuncMap RegisterKernelLibrary() {
@@ -67,5 +91,7 @@ FuncMap RegisterKernelLibrary() {
 	funcs[0x1839852A] = HLEWrap(sceKernelMemcpy);
 	funcs[0x092968F4] = HLEWrap(sceKernelCpuSuspendIntr);
 	funcs[0x5F10D406] = HLEWrap(sceKernelCpuResumeIntr);
+	funcs[0xB55249D2] = HLEWrap(sceKernelIsCpuIntrEnable);
+	funcs[0x47A0B729] = HLEWrap(sceKernelIsCpuIntrSuspended);
 	return funcs;
 }

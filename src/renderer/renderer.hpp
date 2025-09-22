@@ -10,6 +10,8 @@
 #include <glm/vec3.hpp>
 #include <glm/mat4x4.hpp>
 
+#include "..\hle\defs.hpp"
+
 constexpr auto TEXTURE_CACHE_CLEAR_FRAMES = 120;
 
 enum class RendererType {
@@ -49,7 +51,7 @@ constexpr auto BASE_HEIGHT = 272;
 constexpr auto BASE_WINDOW_WIDTH = BASE_WIDTH * 2;
 constexpr auto BASE_WINDOW_HEIGHT = BASE_HEIGHT * 2;
 constexpr auto REFRESH_RATE = 59.9400599f;
-constexpr auto FRAME_DURATION = std::chrono::duration<double, std::milli>(1000 / REFRESH_RATE);
+constexpr auto FRAME_DURATION = std::chrono::duration<double, std::milli>(1000.f / REFRESH_RATE);
 
 struct WaitObject;
 struct SyncWaitingThread {
@@ -57,13 +59,27 @@ struct SyncWaitingThread {
 	std::shared_ptr<WaitObject> wait;
 };
 
+struct DisplayListStackEntry {
+	uint32_t addr;
+	uint32_t offset_addr;
+	uint32_t base_addr;
+};
+
 struct DisplayList {
 	uint32_t start_addr;
 	uint32_t current_addr;
+	uint32_t context_addr;
+	uint32_t stack_addr;
+	uint32_t offset_addr;
+
+	DisplayListStackEntry stack[32];
 	uint32_t stall_addr;
 
 	bool bounding_box_check;
 
+	int cbid;
+	int signal;
+	int state;
 	bool valid;
 	std::vector<SyncWaitingThread> waiting_threads;
 };
@@ -89,6 +105,9 @@ public:
 	virtual void SetFrameBuffer(uint32_t frame_buffer, int frame_width, int pixel_format) { flips++; }
 	virtual void Resize(int width, int height) = 0;
 	virtual void RenderFramebufferChange() = 0;
+	virtual void DrawPoint(Vertex point) = 0;
+	virtual void DrawLine(Vertex start, Vertex end) = 0;
+	virtual void DrawLineStrip(std::vector<Vertex> vertices) = 0;
 	virtual void DrawRectangle(Vertex start, Vertex end) = 0;
 	virtual void DrawTriangle(Vertex v0, Vertex v1, Vertex v2) = 0;
 	virtual void DrawTriangleStrip(std::vector<Vertex> vertices) = 0;
@@ -98,15 +117,25 @@ public:
 	virtual void FlushRender() = 0;
 
 	void Run();
-	int EnQueueList(uint32_t addr, uint32_t stall_addr);
+	void ExecuteCommand(uint32_t command);
+	int EnQueueList(uint32_t addr, uint32_t stall_addr, int cbid, SceGeListOptParam* opt, bool head);
 	void DeQueueList(int id);
-	bool SetStallAddr(int id, uint32_t stall_addr);
+	int SetStallAddr(int id, uint32_t stall_addr);
+	int Break(int mode);
+	int Continue();
+	int GetStack(int index, uint32_t stack_addr);
 	uint32_t Get(int cmd) { return cmds[cmd]; }
 
-	bool SyncThread(int id, int thid);
+	bool IsBusy();
+	int GetStatus(int id);
+	int GetStatus();
+	int SyncThread(int id, int thid);
 	void SyncThread(int thid);
 	void HandleListSync(DisplayList& dl);
 	void HandleDrawSync();
+
+	void SaveContext(uint32_t* context);
+	void RestoreContext(uint32_t* context);
 
 	uint32_t GetBaseAddress(uint32_t addr) const {
 		uint32_t base_addr = ((base & 0xF0000) << 8) | addr;
@@ -141,7 +170,7 @@ public:
 	}
 
 	Vertex ParseVertex();
-	void TransformVertex(Vertex& v) const;
+	bool TransformVertex(Vertex& v) const;
 
 	uint8_t GetFilter(float du, float dv);
 
@@ -150,10 +179,10 @@ public:
 	Color BGR565ToABGR8888(uint16_t color);
 
 	void Prim(uint32_t opcode);
-	void BBox(DisplayList& dl, uint32_t opcode);
-	void Jump(DisplayList& dl, uint32_t opcode);
-	void BJump(DisplayList& dl, uint32_t opcode);
-	void End(DisplayList& dl, uint32_t opcode);
+	void BBox(uint32_t opcode);
+	void Jump(uint32_t opcode);
+	void BJump(uint32_t opcode);
+	void End(uint32_t opcode);
 	void VType(uint32_t opcode);
 	void WorldD(uint32_t opcode);
 	void ViewD(uint32_t opcode);
@@ -167,11 +196,12 @@ public:
 protected:
 	Renderer();
 
-	std::unordered_map<int, uint32_t> cmds{};
+	std::array<uint32_t, 512> cmds{};
 
 	uint32_t offset = 0x0;
 	uint32_t base = 0x0;
 	uint32_t vaddr = 0x0;
+	uint32_t iaddr = 0x0;
 
 	int world_matrix_num = 0;
 	glm::mat4 world_matrix{
@@ -189,6 +219,20 @@ protected:
 	};
 	int projection_matrix_num = 0;
 	glm::mat4 projection_matrix{};
+	int bone_matrix_num = 0;
+	glm::mat4 bone_matrix{
+		{0.0, 0.0, 0.0, 0.0},
+		{0.0, 0.0, 0.0, 0.0},
+		{0.0, 0.0, 0.0, 0.0},
+		{0.0, 0.0, 0.0, 1.0}
+	};
+	int texture_matrix_num = 0;
+	glm::mat4 texture_matrix{
+		{0.0, 0.0, 0.0, 0.0},
+		{0.0, 0.0, 0.0, 0.0},
+		{0.0, 0.0, 0.0, 0.0},
+		{0.0, 0.0, 0.0, 1.0}
+	};
 
 	glm::ivec2 min_draw_area{};
 	glm::ivec2 max_draw_area{};
@@ -289,8 +333,8 @@ protected:
 	bool frame_limiter = true;
 	int frames = 0;
 	int flips = 0;
-	std::chrono::steady_clock::time_point last_frame_time{};
 	std::chrono::steady_clock::time_point second_timer{};
+	std::chrono::steady_clock::time_point last_frame_time{};
 };
 
 enum GECommand {
@@ -311,6 +355,7 @@ enum GECommand {
 	CMD_BASE = 0x10,
 	CMD_VTYPE = 0x12,
 	CMD_OFFSET = 0x13,
+	CMD_ORIGIN = 0x14,
 	CMD_REGION1 = 0x15,
 	CMD_REGION2 = 0x16,
 	CMD_LTE = 0x17,
@@ -367,6 +412,8 @@ enum GECommand {
 	CMD_MSC = 0x57,
 	CMD_MAA = 0x58,
 	CMD_MK = 0x5B,
+	CMD_AC = 0x5C,
+	CMD_AA = 0x5D,
 	CMD_CULL = 0x9B,
 	CMD_FBP = 0x9C,
 	CMD_FBW = 0x9D,

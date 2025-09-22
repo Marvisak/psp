@@ -2,7 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
-uint64_t DMAC_FINISH = 0;
+static uint64_t DMAC_FINISH = 0;
 
 static int sceDmacMemcpy(uint32_t dst_addr, uint32_t src_addr, uint32_t size) {
 	if (size == 0) {

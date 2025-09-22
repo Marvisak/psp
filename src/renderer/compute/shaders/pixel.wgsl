@@ -70,14 +70,102 @@ fn test(func: u32, src: u32, dst: u32) -> bool {
     }
 }
 
+fn loadPixel(pos: vec2i) -> vec4u {
+    switch (FRAMEBUFFER_FORMAT) {
+    case 0u: {
+        let pixel = textureLoad(framebuffer16, pos).r;
+        let r = extractBits(pixel, 0u, 5u);
+        let g = extractBits(pixel, 5u, 6u);
+        let b = extractBits(pixel, 11u, 5u);
+
+        return vec4u(
+            (r << 3) | (r >> 2),
+            (g << 2) | (g >> 4),
+            (b << 3) | (b >> 2),
+            0x00
+        );
+    }
+    case 1u: {
+        let pixel = textureLoad(framebuffer16, pos).r;
+        let r = extractBits(pixel, 0u, 5u);
+        let g = extractBits(pixel, 5u, 5u);
+        let b = extractBits(pixel, 10u, 5u);
+        let a = extractBits(pixel, 15u, 1u);
+
+        return vec4u(
+            (r << 3) | (r >> 2),
+            (g << 3) | (g >> 2),
+            (b << 3) | (b >> 2),
+            select(0u, 255u, a == 1)
+        );
+    }
+    case 2u: {
+        let pixel = textureLoad(framebuffer16, pos).r;
+        let r = extractBits(pixel, 0u, 4u);
+        let g = extractBits(pixel, 4u, 4u);
+        let b = extractBits(pixel, 8u, 4u);
+        let a = extractBits(pixel, 12u, 4u);
+
+        return vec4u(
+            (r << 4) | r,
+            (g << 4) | g,
+            (b << 4) | b,
+            (a << 4) | a
+        );
+    }
+    case 3u: {
+        return textureLoad(framebuffer, pos);
+    }
+    default: { break; }
+    }
+
+    return vec4u(0);
+}
+
+fn storePixel(pos: vec2i, color: vec4u) {
+    switch (FRAMEBUFFER_FORMAT) {
+    case 0u: {
+        let r = color.r >> 3;
+        let g = color.g >> 2;
+        let b = color.b >> 3;
+
+        let value = (b << 11) | (g << 5) | r;
+
+        textureStore(framebuffer16, pos, vec4u(value));
+    }
+    case 1u: {
+        let r = color.r >> 3;
+        let g = color.g >> 3;
+        let b = color.b >> 3;
+        let a = select(0u, 1u, color.a > 0);
+
+        let value = (a << 15) | (b << 10) | (g << 5) | r;
+        textureStore(framebuffer16, pos, vec4u(value));
+    }
+    case 2u: {
+        let r = color.r >> 4;
+        let g = color.g >> 4;
+        let b = color.b >> 4;
+        let a = color.a >> 4;
+
+        let value = (a << 12) | (b << 8) | (g << 4) | r;
+        textureStore(framebuffer16, pos, vec4u(value));
+    }
+    case 3u: {
+        textureStore(framebuffer, pos, color);
+    }
+    default: { break; }
+    }
+}
+
 fn drawPixel(pos: vec4i, uv: vec2f, c: vec4u) {
     if pos.x < renderData.scissorStart.x || pos.x > renderData.scissorEnd.x 
     ||  pos.y < renderData.scissorStart.y || pos.y > renderData.scissorEnd.y {
         return;
     }
 
-    let dstDepth = textureLoad(depthBuffer, pos.xy).r;
     if DEPTH_FUNC != 100 {
+        let dstDepth = textureLoad(depthBuffer, pos.xy).r;
         if !test(DEPTH_FUNC, u32(pos.z), dstDepth) {
             return;
         }
@@ -94,61 +182,15 @@ fn drawPixel(pos: vec4i, uv: vec2f, c: vec4u) {
         }
     }
 
-    var dst = textureLoad(framebuffer, pos.xy);
-    var dstColor = dst;
-    switch (FRAMEBUFFER_FORMAT) {
-    case 0u: {
-        var value = (dstColor.a << 8) | dstColor.b;
-        if pos.x % 2 != 0 {
-            value = (dstColor.g << 8) | dstColor.r;
-        }
-        let r = extractBits(value, 0u, 5u);
-        let g = extractBits(value, 5u, 6u);
-        let b = extractBits(value, 11u, 5u);
-
-        dstColor = vec4u(
-            (r << 3) | (r >> 2),
-            (g << 2) | (g >> 4),
-            (b << 3) | (b >> 2),
-            0x00
-        );
-    }
-    default: { break; }
-    }
-
+    let dst = loadPixel(pos.xy);
     if BLEND_OPERATION != 100 {
-        color = blend(vec4i(color), vec4i(dstColor));
+        color = blend(vec4i(color), vec4i(dst));
     }
-    color.a = dstColor.a;
+    color.a = dst.a;
 
-    switch (FRAMEBUFFER_FORMAT) {
-    case 0u: {
-        let r = color.r >> 3;
-        let g = color.g >> 2;
-        let b = color.b >> 3;
-
-        let value = (b << 11) | (g << 5) | r;
-
-        let lower = extractBits(value, 0u, 8u);
-        let higher = extractBits(value, 8u, 16u);
-        if pos.x % 2 == 0 {
-            dst.g = higher;
-            dst.r = lower;
-        } else {
-            dst.a = higher;
-            dst.b = lower;
-        }
-        textureStore(framebuffer, pos.xy, dst);
-    }
-    case 3u: {
-        textureStore(framebuffer, pos.xy, color);
-        break;
-    }
-    default: { break; }
-    }
-
+    storePixel(pos.xy, color);
     if DEPTH_WRITE == 1 {
-        textureStore(depthBuffer, pos.xy, vec4u(pos.z));
+        textureStore(depthBuffer, pos.xy, vec4u(u32(pos.z)));
     }
 }
 )"

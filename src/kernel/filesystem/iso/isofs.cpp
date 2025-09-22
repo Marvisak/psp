@@ -54,7 +54,7 @@ std::string ISOFileSystem::FixPath(std::string path) const {
 
 std::unique_ptr<File> ISOFileSystem::OpenFile(std::string path, int flags) {
 	auto fs_path = std::filesystem::path(FixPath(path));
-	
+
 	l9660_dir dir;
 	l9660_fs_open_root(&dir, &iso_fs.fs);
 	for (const auto& part : fs_path.parent_path()) {
@@ -67,7 +67,16 @@ std::unique_ptr<File> ISOFileSystem::OpenFile(std::string path, int flags) {
 	}
 
 	l9660_file file;
-	l9660_openat(&file, &dir, fs_path.filename().string().c_str());
+	auto status = l9660_openat(&file, &dir, fs_path.filename().string().c_str());
+	if (status != L9660_OK) {
+		spdlog::error("ISOFileSystem: couldn't open {}", path);
+		return nullptr;
+	}
+
+	// The ISO lib has a bug where it sometimes just doesn't read in the first sector
+	// This causes mountains of bugs so let's just read in right at the beginning
+	size_t tmp;
+	l9660_read(&file, &tmp, 0, &tmp);
 
 	return std::make_unique<ISOFile>(file, flags);
 }

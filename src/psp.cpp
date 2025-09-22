@@ -10,8 +10,11 @@
 #include "kernel/module.hpp"
 #include "hle/hle.hpp"
 
-#ifdef WIN32
+#ifdef _WIN32
 #include <windows.h>
+
+static HANDLE RAM_HANDLE;
+static HANDLE VRAM_HANDLE;
 #endif
 
 std::vector<std::string> MEMORY_STICK_REQUIRED_FOLDERS = {
@@ -23,23 +26,36 @@ std::vector<std::string> MEMORY_STICK_REQUIRED_FOLDERS = {
 PSP::PSP(RendererType renderer_type, bool nearest_filtering) {
 	instance = this;
 
-	if (!FASTMEM) {
+	if constexpr (!FASTMEM) {
 		ram = std::make_unique<uint8_t[]>(USER_MEMORY_END - KERNEL_MEMORY_START);
-		vram = std::make_unique<uint8_t[]>(VRAM_END - VRAM_START);
+		vram = std::make_unique<uint8_t[]>(VRAM_SIZE);
 		page_table = std::make_unique<uintptr_t[]>(0x100000000 / PAGE_SIZE);
-		int vram_page_table_count = (VRAM_END - VRAM_START) / PAGE_SIZE;
+
+		int vram_page_table_count = VRAM_SIZE / PAGE_SIZE;
+		int vram_start_page = VRAM_START / PAGE_SIZE;
 		for (int i = 0; i < vram_page_table_count; i++) {
-			page_table[i + 64] = reinterpret_cast<uintptr_t>(&vram[i * PAGE_SIZE]);
+			page_table[i + vram_start_page] = reinterpret_cast<uintptr_t>(&vram[i * PAGE_SIZE]);
+			page_table[i + vram_start_page + vram_page_table_count] = reinterpret_cast<uintptr_t>(&vram[i * PAGE_SIZE]);
+			page_table[i + vram_start_page + vram_page_table_count * 2] = reinterpret_cast<uintptr_t>(&vram[i * PAGE_SIZE]);
+			page_table[i + vram_start_page + vram_page_table_count * 3] = reinterpret_cast<uintptr_t>(&vram[i * PAGE_SIZE]);
 		}
 
 		int ram_page_table_count = (USER_MEMORY_END - KERNEL_MEMORY_START) / PAGE_SIZE;
 		for (int i = 0; i < ram_page_table_count; i++) {
-			page_table[i + 128] = reinterpret_cast<uintptr_t>(&ram[i * PAGE_SIZE]);
+			page_table[i + (KERNEL_MEMORY_START / PAGE_SIZE)] = reinterpret_cast<uintptr_t>(&ram[i * PAGE_SIZE]);
 		}
 	} else {
 #ifdef WIN32
-		VirtualAlloc(reinterpret_cast<void*>(KERNEL_MEMORY_START), USER_MEMORY_END - KERNEL_MEMORY_START, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-		VirtualAlloc(reinterpret_cast<void*>(VRAM_START), VRAM_END - VRAM_START, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+		virtual_mem_start = reinterpret_cast<uintptr_t>(VirtualAlloc2(nullptr, nullptr, 0x100000000, MEM_RESERVE | MEM_RESERVE_PLACEHOLDER, PAGE_NOACCESS, nullptr, 0));
+
+		RAM_HANDLE = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, RAM_SIZE, nullptr);
+		auto value = MapViewOfFile3(RAM_HANDLE, nullptr, reinterpret_cast<void*>(virtual_mem_start + KERNEL_MEMORY_START), 0, RAM_SIZE, MEM_REPLACE_PLACEHOLDER, PAGE_READWRITE, nullptr, 0);
+
+		VRAM_HANDLE = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, VRAM_SIZE, nullptr);
+		MapViewOfFileEx(VRAM_HANDLE, FILE_MAP_ALL_ACCESS, 0, 0, VRAM_SIZE, reinterpret_cast<void*>(virtual_mem_start + VRAM_START));
+		MapViewOfFileEx(VRAM_HANDLE, FILE_MAP_ALL_ACCESS, 0, 0, VRAM_SIZE, reinterpret_cast<void*>(virtual_mem_start + VRAM_START + VRAM_SIZE));
+		MapViewOfFileEx(VRAM_HANDLE, FILE_MAP_ALL_ACCESS, 0, 0, VRAM_SIZE, reinterpret_cast<void*>(virtual_mem_start + VRAM_START + VRAM_SIZE * 2));
+		MapViewOfFileEx(VRAM_HANDLE, FILE_MAP_ALL_ACCESS, 0, 0, VRAM_SIZE, reinterpret_cast<void*>(virtual_mem_start + VRAM_START + VRAM_SIZE * 3));
 #else
 #error "TODO: Implement fastmem on POSIX"
 #endif
@@ -94,9 +110,12 @@ PSP::~PSP() {
 		SDL_DestroyAudioStream(audio_stream);
 	}
 
-	if (FASTMEM) {
-		VirtualFree(reinterpret_cast<void*>(KERNEL_MEMORY_START), 0, MEM_RELEASE);
-		VirtualFree(reinterpret_cast<void*>(VRAM_START), 0, MEM_RELEASE);
+	if constexpr (FASTMEM) {
+#ifdef _WIN32
+		CloseHandle(RAM_HANDLE);
+		CloseHandle(VRAM_HANDLE);
+		VirtualFree(reinterpret_cast<void*>(virtual_mem_start), 0, MEM_RELEASE);
+#endif
 	}
 }
 
@@ -167,32 +186,32 @@ bool PSP::LoadExec(std::string path) {
 }
 
 bool PSP::LoadMemStick(std::string path) {
-	std::filesystem::path fs_path{ path };
-	if (std::filesystem::is_regular_file(fs_path)) {
+	memstick_path = path;
+	if (std::filesystem::is_regular_file(memstick_path)) {
 		spdlog::error("Kernel: memory stick path is a file");
 		return false;
 	}
 
-	if (!std::filesystem::is_directory(fs_path)) {
-		std::filesystem::create_directory(fs_path);
+	if (!std::filesystem::is_directory(memstick_path)) {
+		std::filesystem::create_directory(memstick_path);
 	}
 
 	for (const auto& dir_path : MEMORY_STICK_REQUIRED_FOLDERS) {
-		auto dir_path_fs = fs_path / dir_path;
+		auto dir_path_fs = memstick_path / dir_path;
 		if (!std::filesystem::is_directory(dir_path_fs)) {
 			std::filesystem::create_directory(dir_path_fs);
 		}
 	}
 
-	auto file_system = std::make_shared<DirectoryFileSystem>(fs_path);
+	auto file_system = std::make_shared<DirectoryFileSystem>(memstick_path);
 	kernel->Mount("ms0:", file_system);
 	return true;
 }
 
 void* PSP::VirtualToPhysical(uint32_t addr) {
 	addr &= 0x0FFFFFFF;
-	if (FASTMEM) {
-		return reinterpret_cast<void*>(addr);
+	if constexpr (FASTMEM) {
+		return reinterpret_cast<void*>(virtual_mem_start + addr);
 	}
 
 	auto page = page_table[addr >> 20];
@@ -223,7 +242,7 @@ void PSP::Exit() {
 			ForceExit();
 		} else {
 			callback->Notify(0);
-			Schedule(MS_TO_CYCLES(1000), [this](uint64_t _) {
+			Schedule(MS_TO_CYCLES(1000), [=](uint64_t _) {
 				ForceExit();
 			});
 		}
