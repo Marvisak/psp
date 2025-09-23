@@ -46,10 +46,11 @@ PSP::PSP(RendererType renderer_type, bool nearest_filtering) {
 		}
 	} else {
 #ifdef WIN32
-		virtual_mem_start = reinterpret_cast<uintptr_t>(VirtualAlloc2(nullptr, nullptr, 0x100000000, MEM_RESERVE | MEM_RESERVE_PLACEHOLDER, PAGE_NOACCESS, nullptr, 0));
+		virtual_mem_start = reinterpret_cast<uintptr_t>(VirtualAlloc(nullptr, 0x100000000, MEM_RESERVE, PAGE_NOACCESS));
+		VirtualFree(reinterpret_cast<void*>(virtual_mem_start), 0, MEM_RELEASE);
 
 		RAM_HANDLE = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, RAM_SIZE, nullptr);
-		auto value = MapViewOfFile3(RAM_HANDLE, nullptr, reinterpret_cast<void*>(virtual_mem_start + KERNEL_MEMORY_START), 0, RAM_SIZE, MEM_REPLACE_PLACEHOLDER, PAGE_READWRITE, nullptr, 0);
+		MapViewOfFileEx(RAM_HANDLE, FILE_MAP_ALL_ACCESS, 0, 0, RAM_SIZE, reinterpret_cast<void*>(virtual_mem_start + KERNEL_MEMORY_START));
 
 		VRAM_HANDLE = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, VRAM_SIZE, nullptr);
 		MapViewOfFileEx(VRAM_HANDLE, FILE_MAP_ALL_ACCESS, 0, 0, VRAM_SIZE, reinterpret_cast<void*>(virtual_mem_start + VRAM_START));

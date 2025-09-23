@@ -14,14 +14,16 @@ static int EnQueue(uint32_t maddr, uint32_t saddr, int cbid, uint32_t opt_addr, 
 		return SCE_ERROR_INVALID_POINTER;
 	}
 
-	auto opt = reinterpret_cast<SceGeListOptParam*>(psp->VirtualToPhysical(opt_addr));
-	if (opt && opt->size >= 16 && (opt->stack_depth < 0 || opt->stack_depth >= 256)) {
-		spdlog::error("EnQueue: invalid stack depth {}", opt->stack_depth);
-		return SCE_ERROR_INVALID_SIZE;
+	if (opt_addr) {
+		auto opt = reinterpret_cast<SceGeListOptParam*>(psp->VirtualToPhysical(opt_addr));
+		if (opt && opt->size >= 16 && (opt->stack_depth < 0 || opt->stack_depth >= 256)) {
+			spdlog::error("EnQueue: invalid stack depth {}", opt->stack_depth);
+			return SCE_ERROR_INVALID_SIZE;
+		}
 	}
 
 	psp->EatCycles(head ? 480 : 490);
-	return psp->GetRenderer()->EnQueueList(maddr, saddr, cbid, opt, head);
+	return psp->GetRenderer()->EnQueueList(maddr, saddr, cbid, opt_addr, head);
 }
 
 static uint32_t sceGeEdramGetAddr() {

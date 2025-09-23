@@ -118,7 +118,7 @@ public:
 
 	void Run();
 	void ExecuteCommand(uint32_t command);
-	int EnQueueList(uint32_t addr, uint32_t stall_addr, int cbid, SceGeListOptParam* opt, bool head);
+	int EnQueueList(uint32_t addr, uint32_t stall_addr, int cbid, uint32_t opt, bool head);
 	void DeQueueList(int id);
 	int SetStallAddr(int id, uint32_t stall_addr);
 	int Break(int mode);

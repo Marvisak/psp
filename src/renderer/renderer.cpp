@@ -258,7 +258,9 @@ void Renderer::ExecuteCommand(uint32_t command) {
 	}
 }
 
-int Renderer::EnQueueList(uint32_t addr, uint32_t stall_addr, int cbid, SceGeListOptParam* opt, bool head) {
+int Renderer::EnQueueList(uint32_t addr, uint32_t stall_addr, int cbid, uint32_t opt_addr, bool head) {
+	auto psp = PSP::GetInstance();
+
 	DisplayList dl{};
 	dl.start_addr = addr;
 	dl.current_addr = addr & 0x0FFFFFFF;
@@ -267,9 +269,10 @@ int Renderer::EnQueueList(uint32_t addr, uint32_t stall_addr, int cbid, SceGeLis
 	dl.cbid = cbid;
 	dl.valid = true;
 	dl.state = SCE_GE_LIST_QUEUED;
-	if (opt) {
+	if (opt_addr) {
+		auto opt = reinterpret_cast<SceGeListOptParam*>(psp->VirtualToPhysical(opt_addr));
 		if (opt->context) {
-			auto context = reinterpret_cast<uint32_t*>(PSP::GetInstance()->VirtualToPhysical(opt->context));
+			auto context = reinterpret_cast<uint32_t*>(psp->VirtualToPhysical(opt->context));
 			SaveContext(context);
 
 			dl.context_addr = opt->context;
