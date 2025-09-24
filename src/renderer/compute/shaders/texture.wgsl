@@ -253,6 +253,7 @@ fn blendTexture(texel: vec4i, color: vec4i) -> vec4u {
 fn filterTexture(uv: vec2f, color: vec4u) -> vec4u {
     var dims = vec2f(textureDimensions(texture));
     switch TEXTURE_FORMAT {
+        case 0u: { dims.x /= 2; break; }
         case 2u: { dims.x /= 2; break; }
         case 3u: { dims.x /= 4; break; }
         case 4u: { dims.x *= 2; break; }

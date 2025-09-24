@@ -150,8 +150,8 @@ void Renderer::ExecuteCommand(uint32_t command) {
 	case CMD_BBOX: BBox(command); break;
 	case CMD_JUMP: Jump(command); break;
 	case CMD_BJUMP: BJump(command); break;
-	case CMD_CALL: spdlog::warn("CALL"); psp->ForceExit(); break;
-	case CMD_RET: spdlog::warn("RET"); psp->ForceExit(); break;
+	case CMD_CALL: Call(command); break;
+	case CMD_RET: Ret(command); break;
 	case CMD_END: End(command); break;
 	case CMD_SIGNAL: break;
 	case CMD_FINISH: break;
@@ -277,10 +277,6 @@ int Renderer::EnQueueList(uint32_t addr, uint32_t stall_addr, int cbid, uint32_t
 
 			dl.context_addr = opt->context;
 		}
-
-		if (opt->stack) {
-			dl.stack_addr = opt->stack;
-		}
 	}
 
 	for (int i = next_id; i < display_lists.size(); i++) {
@@ -382,7 +378,7 @@ int Renderer::GetStack(int index, uint32_t stack_addr) {
 	}
 
 	auto& dl = display_lists[queue.front()];
-	if (dl.stack_addr <= index) {
+	if (dl.stack_ptr <= index) {
 		return SCE_ERROR_INVALID_INDEX;
 	}
 
@@ -397,7 +393,7 @@ int Renderer::GetStack(int index, uint32_t stack_addr) {
 		}
 	}
 
-	return dl.stack_addr;
+	return dl.stack_ptr;
 }
 
 bool Renderer::IsBusy() {
@@ -941,18 +937,32 @@ void Renderer::End(uint32_t opcode) {
 
 void Renderer::Jump(uint32_t opcode) {
 	auto& dl = display_lists[queue.front()];
-	uint32_t current = dl.current_addr;
 	dl.current_addr = GetBaseAddress(opcode & 0xFFFFFC) - 4;
-	executed_cycles += (dl.current_addr - current) / 2;
 }
 
 void Renderer::BJump(uint32_t opcode) {
 	auto& dl = display_lists[queue.front()];
 	if (!dl.bounding_box_check) {
-		uint32_t current = dl.current_addr;
 		dl.current_addr = GetBaseAddress(opcode & 0xFFFFFC) - 4;
-		executed_cycles += (dl.current_addr - current) / 2;
 	}
+}
+
+void Renderer::Call(uint32_t opcode) {
+	auto& dl = display_lists[queue.front()];
+	auto addr = GetBaseAddress(opcode & 0xFFFFFC) - 4;
+
+	auto& stack = dl.stack[dl.stack_ptr++];
+	stack.addr = dl.current_addr + 4;
+	stack.offset_addr = offset;
+
+	dl.current_addr = addr;
+}
+
+void Renderer::Ret(uint32_t opcode) {
+	auto& dl = display_lists[queue.front()];
+	auto& stack = dl.stack[--dl.stack_ptr];
+	offset = stack.offset_addr;
+	dl.current_addr = (stack.addr & 0x0FFFFFFF) - 4;
 }
 
 void Renderer::CLoad(uint32_t opcode) {

@@ -69,10 +69,11 @@ struct DisplayList {
 	uint32_t start_addr;
 	uint32_t current_addr;
 	uint32_t context_addr;
-	uint32_t stack_addr;
 	uint32_t offset_addr;
 
 	DisplayListStackEntry stack[32];
+	int stack_ptr;
+
 	uint32_t stall_addr;
 
 	bool bounding_box_check;
@@ -182,6 +183,8 @@ public:
 	void BBox(uint32_t opcode);
 	void Jump(uint32_t opcode);
 	void BJump(uint32_t opcode);
+	void Call(uint32_t opcode);
+	void Ret(uint32_t opcode);
 	void End(uint32_t opcode);
 	void VType(uint32_t opcode);
 	void WorldD(uint32_t opcode);

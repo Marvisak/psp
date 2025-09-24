@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 
 #include "../kernel/module.hpp"
+#include "../kernel/thread.hpp"
 
 static int sceKernelSelfStopUnloadModule(uint32_t exit_code, uint32_t arg_size, uint32_t arg_pointer) {
 	spdlog::error("sceKernelSelfStopUnloadModule({}, {}, {:x})", exit_code, arg_size, arg_pointer);
@@ -43,11 +44,19 @@ static int sceKernelGetModuleIdByAddress(uint32_t address) {
 	return SCE_KERNEL_ERROR_UNKNOWN_MODULE;
 }
 
+static int sceKernelGetModuleId() {
+	auto kernel = PSP::GetInstance()->GetKernel();
+	auto current_thread = kernel->GetCurrentThread();
+	auto thread = kernel->GetKernelObject<Thread>(current_thread);
+	return thread->GetModule();
+}
+
 FuncMap RegisterModuleMgrForUser() {
 	FuncMap funcs;
 	funcs[0xD675EBB8] = HLEWrap(sceKernelSelfStopUnloadModule);
 	funcs[0x977DE386] = HLEWrap(sceKernelLoadModule);
 	funcs[0x50F0C1EC] = HLEWrap(sceKernelStartModule);
 	funcs[0xD8B73127] = HLEWrap(sceKernelGetModuleIdByAddress);
+	funcs[0xF0A26395] = HLEWrap(sceKernelGetModuleId);
 	return funcs;
 }
